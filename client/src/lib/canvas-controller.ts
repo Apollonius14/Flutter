@@ -115,8 +115,8 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      // Growth factor increases with intensity - doubled effect
-      const baseGrowth = 2 + bubble.intensity * 4; // Doubled from 1.5 + intensity to 2 + intensity * 4
+      // Growth factor increases with intensity - multiplied effect by 5
+      const baseGrowth = 2 + bubble.intensity * 20; // Increased from 4 to 20 (5x)
       const growthFactor = 1 + (bubble.age / bubble.maxAge) * baseGrowth;
       bubble.radius = bubble.initialRadius * growthFactor;
 
@@ -134,15 +134,15 @@ export class CanvasController {
 
       // Set stroke color and width based on whether bubble is in active window
       if (isInActiveWindow) {
-        // More vibrant blue with slight glow effect
+        // More vibrant blue with stronger glow effect
         this.ctx.shadowColor = 'rgba(0, 150, 255, 0.5)';
-        this.ctx.shadowBlur = 5;
+        this.ctx.shadowBlur = 10; // Increased from 5 to 10
         this.ctx.strokeStyle = `rgba(0, 150, 255, ${opacity})`;
-        this.ctx.lineWidth = 1 + bubble.intensity * 4; // Doubled from 2 to 4
+        this.ctx.lineWidth = 1 + bubble.intensity * 20; // Increased from 4 to 20 (5x)
       } else {
         this.ctx.shadowBlur = 0;
-        this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.2})`; // Reduced from 0.4 to 0.2
-        this.ctx.lineWidth = 0.5; // Reduced from 1 to 0.5
+        this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.2})`;
+        this.ctx.lineWidth = 0.5;
       }
 
       this.ctx.stroke();
@@ -164,7 +164,7 @@ export class CanvasController {
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
-    this.ctx.strokeStyle = "rgba(0, 0, 0, 0.1)"; // Reduced from 0.2 to 0.1
+    this.ctx.strokeStyle = "rgba(0, 0, 0, 0.1)";
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
@@ -173,7 +173,7 @@ export class CanvasController {
     this.ctx.beginPath();
     this.ctx.moveTo(midX, 0);
     this.ctx.lineTo(midX, height);
-    this.ctx.strokeStyle = "rgba(255, 0, 0, 0.05)"; // Reduced from 0.1 to 0.05
+    this.ctx.strokeStyle = "rgba(255, 0, 0, 0.05)";
     this.ctx.stroke();
 
     // Calculate current time in ms based on progress
@@ -185,7 +185,7 @@ export class CanvasController {
     const intensity = (sincValue + 1) / 2;
 
     // Generate more bubbles when intensity is higher
-    if (Math.random() < (0.6 + intensity * 0.8)) {
+    if (Math.random() < (0.4 + intensity * 1.2)) { // Increased bubble generation rate
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
@@ -209,7 +209,7 @@ export class CanvasController {
     this.ctx.lineTo(arrowStartX + drawWidth, centerY);
 
     // Reduced arrow opacity
-    this.ctx.strokeStyle = `rgba(0, 0, 0, ${0.025 + coherence / 5 * 0.05})`; // Halved from 0.05 to 0.025
+    this.ctx.strokeStyle = `rgba(0, 0, 0, ${0.025 + coherence / 5 * 0.05})`;
     this.ctx.lineWidth = maxThickness;
     this.ctx.lineCap = "round";
     this.ctx.stroke();
@@ -226,7 +226,7 @@ export class CanvasController {
       this.ctx.lineTo(arrowTip - arrowheadLength, centerY + arrowheadWidth);
       this.ctx.closePath();
 
-      this.ctx.fillStyle = `rgba(0, 0, 0, ${0.025 + coherence / 5 * 0.05})`; // Matching reduced opacity
+      this.ctx.fillStyle = `rgba(0, 0, 0, ${0.025 + coherence / 5 * 0.05})`;
       this.ctx.fill();
     }
   }
