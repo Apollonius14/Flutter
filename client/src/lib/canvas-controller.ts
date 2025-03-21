@@ -14,6 +14,7 @@ interface Bubble {
   initialRadius: number;
   age: number;
   maxAge: number;
+  intensity: number; // Added intensity property
 }
 
 export class CanvasController {
@@ -73,44 +74,30 @@ export class CanvasController {
 
   private sinc(x: number): number {
     if (x === 0) return 1;
-    // Tighter scaling of x to concentrate the pulse
     const scaledX = x * 2;
-    // Add exponential decay to reduce side lobes
     const decay = Math.exp(-Math.abs(x));
     return (Math.sin(Math.PI * scaledX) / (Math.PI * scaledX)) * decay;
-  }
-
-  private calculateSweepSpeed(normalizedTime: number): number {
-    const { pulseIntensity, startTime, endTime } = this.params;
-
-    if (pulseIntensity === 0) return 1;
-
-    // Center of the time window
-    const midTime = (startTime + endTime) / 2;
-    const timeWindow = endTime - startTime;
-
-    // Scale time to be centered around 0 for the sinc function
-    const scaledTime = (normalizedTime * 100 - midTime) / (timeWindow / 8); // Tighter scaling
-
-    // Calculate speed using sinc function
-    const sincValue = this.sinc(scaledTime);
-    const normalizedSinc = (sincValue + 1) / 2; // Normalize to 0-1 range
-
-    // Double the intensity effect
-    return 1 + normalizedSinc * pulseIntensity * 2;
   }
 
   private generateBubble(x: number, currentTime: number): Bubble {
     const { coherence } = this.params;
     const centerY = this.canvas.height / 2;
 
-    // Base radius now increases with coherence (reversed from before)
-    const baseRadius = 4 + coherence * 4; // Now scales up with coherence
-    const radiusVariation = (5 - coherence) * 3; // Variation still decreases with coherence
+    // Calculate intensity from sinc wave at this position
+    const normalizedX = x / this.canvas.width * 100;
+    const midTime = (this.params.startTime + this.params.endTime) / 2;
+    const timeWindow = this.params.endTime - this.params.startTime;
+    const scaledTime = (normalizedX - midTime) / (timeWindow / 8);
+    const sincValue = this.sinc(scaledTime);
+    const intensity = (sincValue + 1) / 2; // Normalize to 0-1 range
+
+    // Base radius now increases with coherence
+    const baseRadius = 4 + coherence * 2;
+    const radiusVariation = (5 - coherence) * 1.5;
     const radius = baseRadius + (Math.random() - 0.5) * radiusVariation;
 
     // Position variation based on coherence
-    const yVariation = (5 - coherence) * 20; // Decreased variation for high coherence
+    const yVariation = (5 - coherence) * 20;
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
     return {
@@ -119,17 +106,18 @@ export class CanvasController {
       radius,
       initialRadius: radius,
       age: 0,
-      maxAge: 120,
+      maxAge: 80 + intensity * 40, // Longer lifetime for high intensity
+      intensity // Store intensity for later use
     };
   }
 
   private updateAndDrawBubbles() {
-    // Update existing bubbles
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      // Growth factor based on age
-      const growthFactor = 1 + (bubble.age / bubble.maxAge) * 1.5;
+      // Growth factor increases with intensity
+      const baseGrowth = 1.5 + bubble.intensity;
+      const growthFactor = 1 + (bubble.age / bubble.maxAge) * baseGrowth;
       bubble.radius = bubble.initialRadius * growthFactor;
 
       // Opacity decreases with age
@@ -140,18 +128,19 @@ export class CanvasController {
       const isInActiveWindow = normalizedX >= this.params.startTime &&
                              normalizedX <= this.params.endTime;
 
-      // Draw bubble
+      // Draw bubble with border thickness based on intensity
       this.ctx.beginPath();
       this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
 
-      // Set stroke color based on whether bubble is in active window
+      // Set stroke color and width based on whether bubble is in active window
       if (isInActiveWindow) {
         this.ctx.strokeStyle = `rgba(0, 100, 255, ${opacity})`;
+        this.ctx.lineWidth = 1 + bubble.intensity * 2; // Thicker borders for high intensity
       } else {
         this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.4})`;
+        this.ctx.lineWidth = 1;
       }
 
-      this.ctx.lineWidth = 1;
       this.ctx.stroke();
 
       return bubble.age < bubble.maxAge;
@@ -164,12 +153,10 @@ export class CanvasController {
 
     const { startTime, endTime, peakPower, coherence } = this.params;
 
-    // Adjust progress based on sweep speed
-    const sweepSpeed = this.calculateSweepSpeed(progress);
-    const adjustedProgress = progress * sweepSpeed;
+    // Use constant speed for sweep line
+    const timeX = width * progress;
 
     // Draw time indicator line
-    const timeX = width * adjustedProgress;
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
@@ -178,18 +165,23 @@ export class CanvasController {
     this.ctx.stroke();
 
     // Draw midpoint marker between start and end times
-    const midX = width * ((startTime + endTime) / 200); // Divide by 200 because we're scaling 0-100 to 0-1
+    const midX = width * ((startTime + endTime) / 200);
     this.ctx.beginPath();
     this.ctx.moveTo(midX, 0);
     this.ctx.lineTo(midX, height);
-    this.ctx.strokeStyle = "rgba(255, 0, 0, 0.1)"; // Very faint red line
+    this.ctx.strokeStyle = "rgba(255, 0, 0, 0.1)";
     this.ctx.stroke();
 
     // Calculate current time in ms based on progress
-    const currentTime = adjustedProgress * 100;
+    const currentTime = progress * 100;
 
-    // Generate new bubbles at sweep line position (increased rate)
-    if (Math.random() < 1.5) { // Increased from 0.3 to 1.5 (5x more bubbles)
+    // Generate new bubbles at sweep line position (increased rate with high intensity)
+    const scaledTime = (currentTime - ((startTime + endTime) / 2)) / ((endTime - startTime) / 8);
+    const sincValue = this.sinc(scaledTime);
+    const intensity = (sincValue + 1) / 2;
+
+    // Generate more bubbles when intensity is higher
+    if (Math.random() < (0.8 + intensity * 0.7)) {
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
@@ -199,23 +191,20 @@ export class CanvasController {
     // Only draw arrow if we've reached start time
     if (currentTime < startTime) return;
 
-    // Calculate arrow parameters
-    const arrowStartX = width * (startTime / 100); // Start position based on startTime
-    const arrowLength = width * ((endTime - startTime) / 100); // Length based on time window
+    // Draw arrow with reduced opacity
+    const arrowStartX = width * (startTime / 100);
+    const arrowLength = width * ((endTime - startTime) / 100);
     const centerY = height / 2;
     const maxThickness = height * 0.3 * (peakPower / 10);
 
-    // Only draw up to the current time line position
     const drawWidth = Math.min(timeX - arrowStartX, arrowLength);
     if (drawWidth <= 0) return;
 
-    // Draw arrow shaft with reduced opacity
     this.ctx.beginPath();
     this.ctx.moveTo(arrowStartX, centerY);
     this.ctx.lineTo(arrowStartX + drawWidth, centerY);
 
-    // Style based on coherence with reduced opacity
-    this.ctx.strokeStyle = `rgba(0, 0, 0, ${0.05 + coherence / 5 * 0.1})`; // Significantly reduced opacity
+    this.ctx.strokeStyle = `rgba(0, 0, 0, ${0.05 + coherence / 5 * 0.1})`;
     this.ctx.lineWidth = maxThickness;
     this.ctx.lineCap = "round";
     this.ctx.stroke();
@@ -232,7 +221,7 @@ export class CanvasController {
       this.ctx.lineTo(arrowTip - arrowheadLength, centerY + arrowheadWidth);
       this.ctx.closePath();
 
-      this.ctx.fillStyle = `rgba(0, 0, 0, ${0.05 + coherence / 5 * 0.1})`; // Matching reduced opacity
+      this.ctx.fillStyle = `rgba(0, 0, 0, ${0.05 + coherence / 5 * 0.1})`;
       this.ctx.fill();
     }
   }
