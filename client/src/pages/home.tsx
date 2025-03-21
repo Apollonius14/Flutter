@@ -50,15 +50,15 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-8">
-        <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
           Air Flow Visualizer
         </h1>
 
-        <Card>
+        <Card className="bg-gray-900 border-gray-800">
           <CardContent className="p-6 space-y-6">
             <div className="grid gap-6">
               <div className="space-y-2">
-                <Label>Pulse Intensity (0-1)</Label>
+                <Label className="text-gray-200">Pulse Intensity (0-1)</Label>
                 <Slider
                   value={[params.pulseIntensity]}
                   min={0}
@@ -67,11 +67,12 @@ export default function Home() {
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, pulseIntensity: value }))
                   }
+                  className="pt-2"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Turbulence (0-5)</Label>
+                <Label className="text-gray-200">Turbulence (0-5)</Label>
                 <Slider
                   value={[params.turbulence]}
                   min={0}
@@ -80,11 +81,12 @@ export default function Home() {
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, turbulence: value }))
                   }
+                  className="pt-2"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Coherence (0-5)</Label>
+                <Label className="text-gray-200">Coherence (0-5)</Label>
                 <Slider
                   value={[params.coherence]}
                   min={0}
@@ -93,11 +95,12 @@ export default function Home() {
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, coherence: value }))
                   }
+                  className="pt-2"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Start Time (0-100ms)</Label>
+                <Label className="text-gray-200">Start Time (0-100ms)</Label>
                 <Slider
                   value={[params.startTime]}
                   min={0}
@@ -106,11 +109,12 @@ export default function Home() {
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, startTime: value }))
                   }
+                  className="pt-2"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>End Time (0-100ms)</Label>
+                <Label className="text-gray-200">End Time (0-100ms)</Label>
                 <Slider
                   value={[params.endTime]}
                   min={0}
@@ -119,11 +123,12 @@ export default function Home() {
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, endTime: value }))
                   }
+                  className="pt-2"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Peak Power (1-10)</Label>
+                <Label className="text-gray-200">Peak Power (1-10)</Label>
                 <Slider
                   value={[params.peakPower]}
                   min={1}
@@ -132,6 +137,7 @@ export default function Home() {
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, peakPower: value }))
                   }
+                  className="pt-2"
                 />
               </div>
             </div>
@@ -140,7 +146,7 @@ export default function Home() {
               <Button
                 size="lg"
                 onClick={togglePlay}
-                className="w-32 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                className="w-32 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white"
               >
                 {isPlaying ? (
                   <Pause className="mr-2 h-5 w-5" />
@@ -153,13 +159,13 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gray-900 border-gray-800">
           <CardContent className="p-6">
             <canvas
               ref={canvasRef}
               width={800}
               height={200}
-              className="w-full h-[200px] border border-border rounded-md bg-white"
+              className="w-full h-[200px] border border-gray-800 rounded-md"
             />
           </CardContent>
         </Card>
