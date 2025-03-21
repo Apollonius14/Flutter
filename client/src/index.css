@@ -1,3 +1,6 @@
+@import '@fontsource/noto-sans-arabic/400.css';
+@import '@fontsource/noto-sans-arabic/700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,5 +12,10 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  .arabic {
+    font-family: "Noto Sans Arabic", sans-serif;
+    direction: rtl;
   }
 }

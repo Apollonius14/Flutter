@@ -3,13 +3,41 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Languages } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
+
+const translations = {
+  en: {
+    title: "Air Flow Visualizer",
+    pulseIntensity: "Pulse Intensity (0-1)",
+    turbulence: "Turbulence (0-5)",
+    coherence: "Coherence (0-5)",
+    startTime: "Start Time (0-100ms)",
+    endTime: "End Time (0-100ms)",
+    peakPower: "Peak Power (1-10)",
+    play: "Play",
+    pause: "Pause"
+  },
+  ar: {
+    title: "محاكاة تدفق الهواء",
+    pulseIntensity: "شدة النبض (٠-١)",
+    turbulence: "الاضطراب (٠-٥)",
+    coherence: "التماسك (٠-٥)",
+    startTime: "وقت البدء (٠-١٠٠ م.ث)",
+    endTime: "وقت النهاية (٠-١٠٠ م.ث)",
+    peakPower: "قوة الذروة (١-١٠)",
+    play: "تشغيل",
+    pause: "إيقاف"
+  }
+};
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [controller, setController] = useState<CanvasController | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [language, setLanguage] = useState<'en' | 'ar'>('en');
+  const t = translations[language];
+
   const [params, setParams] = useState({
     turbulence: 2.5,
     coherence: 2.5,
@@ -46,19 +74,32 @@ export default function Home() {
   }, [isPlaying, controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
+  const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
 
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-8">
-        <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
-          Air Flow Visualizer
-        </h1>
+        <div className="flex justify-between items-center">
+          <h1 className={`text-4xl font-bold text-center bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent flex-1 ${language === 'ar' ? 'arabic' : ''}`}>
+            {t.title}
+          </h1>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleLanguage}
+            className="bg-gray-800 hover:bg-gray-700"
+          >
+            <Languages className="h-4 w-4" />
+          </Button>
+        </div>
 
         <Card className="bg-gray-900 border-gray-800">
           <CardContent className="p-6 space-y-6">
             <div className="grid gap-6">
               <div className="space-y-2">
-                <Label className="text-gray-200">Pulse Intensity (0-1)</Label>
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.pulseIntensity}
+                </Label>
                 <Slider
                   value={[params.pulseIntensity]}
                   min={0}
@@ -72,7 +113,9 @@ export default function Home() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-200">Turbulence (0-5)</Label>
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.turbulence}
+                </Label>
                 <Slider
                   value={[params.turbulence]}
                   min={0}
@@ -86,7 +129,9 @@ export default function Home() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-200">Coherence (0-5)</Label>
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.coherence}
+                </Label>
                 <Slider
                   value={[params.coherence]}
                   min={0}
@@ -100,7 +145,9 @@ export default function Home() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-200">Start Time (0-100ms)</Label>
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.startTime}
+                </Label>
                 <Slider
                   value={[params.startTime]}
                   min={0}
@@ -114,7 +161,9 @@ export default function Home() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-200">End Time (0-100ms)</Label>
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.endTime}
+                </Label>
                 <Slider
                   value={[params.endTime]}
                   min={0}
@@ -128,7 +177,9 @@ export default function Home() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-200">Peak Power (1-10)</Label>
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.peakPower}
+                </Label>
                 <Slider
                   value={[params.peakPower]}
                   min={1}
@@ -153,7 +204,9 @@ export default function Home() {
                 ) : (
                   <Play className="mr-2 h-5 w-5" />
                 )}
-                {isPlaying ? "Pause" : "Play"}
+                <span className={language === 'ar' ? 'arabic' : ''}>
+                  {isPlaying ? t.pause : t.play}
+                </span>
               </Button>
             </div>
           </CardContent>
