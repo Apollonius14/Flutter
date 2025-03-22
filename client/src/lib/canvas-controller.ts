@@ -114,7 +114,7 @@ export class CanvasController {
 
     const topWall = Matter.Bodies.rectangle(
       midX,
-      centerY - gapSize / 2 - wallLength / 2,
+      centerY - gapSize/2 - wallLength/2,
       wallHeight,
       wallLength,
       {
@@ -125,7 +125,7 @@ export class CanvasController {
 
     const bottomWall = Matter.Bodies.rectangle(
       midX,
-      centerY + gapSize / 2 + wallLength / 2,
+      centerY + gapSize/2 + wallLength/2,
       wallHeight,
       wallLength,
       {
@@ -185,7 +185,8 @@ export class CanvasController {
             density: 0.001,
             collisionFilter: {
               category: 0x0001,
-              mask: 0x0002
+              mask: 0x0002, // Only collide with walls
+              group: -1 // Negative group means particles won't collide with each other
             },
             frictionAir: 0
           });
