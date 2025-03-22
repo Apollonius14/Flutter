@@ -73,8 +73,8 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const spreadY = height * 0.4;
-    const wallLength = height * 0.6;
+    const spreadY = height * 0.6; // Increased from 0.4 to 0.6 for wider mouth
+    const wallLength = height * 0.8; // Increased from 0.6 to 0.8
     const centerY = height * 0.5;
 
     // Create funnel walls
@@ -91,7 +91,7 @@ export class CanvasController {
       }
     };
 
-    // Top wall of funnel
+    // Top wall of funnel - gentler angle (reduced from Math.PI/12)
     const topWall = Matter.Bodies.rectangle(
       midX,
       centerY - spreadY / 2,
@@ -99,7 +99,7 @@ export class CanvasController {
       10,
       {
         ...wallOptions,
-        angle: Math.PI / 12
+        angle: Math.PI / 18 // Reduced angle for gentler slope
       }
     );
 
@@ -111,7 +111,7 @@ export class CanvasController {
       10,
       {
         ...wallOptions,
-        angle: -Math.PI / 12
+        angle: -Math.PI / 18 // Matching top angle
       }
     );
 
