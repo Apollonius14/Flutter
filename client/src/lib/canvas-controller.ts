@@ -74,11 +74,11 @@ export class CanvasController {
     const wallLength = height * 0.4;
 
     const wallOptions = {
-      isStatic: false, // Make walls dynamic
+      isStatic: false,
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 50,        // Reduced mass to allow tiny movements
+      mass: 10,        // Reduced mass to allow tiny movements
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -108,40 +108,45 @@ export class CanvasController {
     );
 
     // Add spring constraints to anchor the walls
-    const stiffness = 0.9; // Very stiff springs
-    const damping = 0.1;   // Light damping for small oscillations
+    const stiffness = 0.99; // Increased stiffness
+    const damping = 0.5;    // Increased damping
 
-    // Anchor points for top wall
+    // For each wall, create constraints to:
+    // 1. Lock Y position
+    // 2. Lock rotation
+    // 3. Allow only tiny X movement
+
+    // Top wall constraints
     Matter.World.add(this.engine.world, [
+      // Y-position and rotation lock for top wall
       Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 - wallLength },
+        pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
         bodyB: topWall,
-        pointB: { x: 0, y: -wallLength/2 },
-        stiffness,
-        damping
+        stiffness: 1, // Perfect stiffness for y-axis
+        length: 0
       }),
+      // X-axis spring for top wall
       Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 },
+        pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
         bodyB: topWall,
-        pointB: { x: 0, y: wallLength/2 },
         stiffness,
         damping
       })
     ]);
 
-    // Anchor points for bottom wall
+    // Bottom wall constraints
     Matter.World.add(this.engine.world, [
+      // Y-position and rotation lock for bottom wall
       Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 },
+        pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
         bodyB: bottomWall,
-        pointB: { x: 0, y: -wallLength/2 },
-        stiffness,
-        damping
+        stiffness: 1, // Perfect stiffness for y-axis
+        length: 0
       }),
+      // X-axis spring for bottom wall
       Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 + wallLength },
+        pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
         bodyB: bottomWall,
-        pointB: { x: 0, y: wallLength/2 },
         stiffness,
         damping
       })
