@@ -112,8 +112,7 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      // Growth factor with 20% reduced intensity
-      const baseGrowth = 2 + bubble.intensity * 16; // Reduced from 20 to 16
+      const baseGrowth = 2 + bubble.intensity * 48; 
       const growthFactor = 1 + (bubble.age / bubble.maxAge) * baseGrowth;
       bubble.radius = bubble.initialRadius * growthFactor;
 
@@ -127,14 +126,13 @@ export class CanvasController {
       this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
 
       if (isInActiveWindow) {
-        // More vibrant neon blue with stronger glow for dark theme
         this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
         this.ctx.shadowBlur = 10;
         this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-        this.ctx.lineWidth = 1 + bubble.intensity * 16; // Reduced from 20 to 16
+        this.ctx.lineWidth = 1 + bubble.intensity * 16;
       } else {
         this.ctx.shadowBlur = 0;
-        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.15})`; // Light gray for dark theme
+        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`; 
         this.ctx.lineWidth = 0.5;
       }
 
@@ -148,15 +146,13 @@ export class CanvasController {
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
 
-    // Fill with dark background
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(0, 0, width, height);
 
-    const { startTime, endTime, peakPower, coherence } = this.params;
+    const { startTime, endTime } = this.params;
 
     const timeX = width * progress;
 
-    // Draw time indicator line (lighter for dark theme)
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
@@ -164,7 +160,6 @@ export class CanvasController {
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
-    // Draw midpoint marker
     const midX = width * ((startTime + endTime) / 200);
     this.ctx.beginPath();
     this.ctx.moveTo(midX, 0);
@@ -178,46 +173,10 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    // Generate bubbles with slightly reduced rate
-    if (Math.random() < (0.4 + intensity * 0.96)) { // Reduced from 1.2 to 0.96
+    if (Math.random() < (0.4 + intensity * 0.96)) {
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
     this.updateAndDrawBubbles();
-
-    if (currentTime < startTime) return;
-
-    // Draw arrow with light color for dark theme
-    const arrowStartX = width * (startTime / 100);
-    const arrowLength = width * ((endTime - startTime) / 100);
-    const centerY = height / 2;
-    const maxThickness = height * 0.3 * (peakPower / 10);
-
-    const drawWidth = Math.min(timeX - arrowStartX, arrowLength);
-    if (drawWidth <= 0) return;
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(arrowStartX, centerY);
-    this.ctx.lineTo(arrowStartX + drawWidth, centerY);
-
-    this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.025 + coherence / 5 * 0.05})`;
-    this.ctx.lineWidth = maxThickness;
-    this.ctx.lineCap = "round";
-    this.ctx.stroke();
-
-    if (timeX >= arrowStartX + arrowLength) {
-      const arrowTip = arrowStartX + arrowLength;
-      const arrowheadLength = maxThickness;
-      const arrowheadWidth = maxThickness * 0.8;
-
-      this.ctx.beginPath();
-      this.ctx.moveTo(arrowTip, centerY);
-      this.ctx.lineTo(arrowTip - arrowheadLength, centerY - arrowheadWidth);
-      this.ctx.lineTo(arrowTip - arrowheadLength, centerY + arrowheadWidth);
-      this.ctx.closePath();
-
-      this.ctx.fillStyle = `rgba(255, 255, 255, ${0.025 + coherence / 5 * 0.05})`;
-      this.ctx.fill();
-    }
   }
 }
