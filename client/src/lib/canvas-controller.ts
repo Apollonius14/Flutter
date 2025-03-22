@@ -77,7 +77,7 @@ export class CanvasController {
       isStatic: true,
       render: { visible: true },
       friction: 0,
-      restitution: 1.0,
+      restitution: 0.7,  // Changed from 1.0
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -152,7 +152,7 @@ export class CanvasController {
 
           const body = Matter.Bodies.circle(particleX, particleY, 0.025, { // Reduced from 0.05
             friction: 0,
-            restitution: 1.0,
+            restitution: 0.7, // Changed from 1.0
             mass: 0.1,
             collisionFilter: {
               category: 0x0001,
@@ -162,7 +162,7 @@ export class CanvasController {
             frictionAir: 0
           });
 
-          const speed = 4.0;
+          const speed = 2.0; // Reduced from 4.0
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
