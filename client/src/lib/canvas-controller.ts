@@ -255,7 +255,6 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      const opacity = 1 - (bubble.age / bubble.maxAge);
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
                               normalizedX <= this.params.endTime;
@@ -266,15 +265,18 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.15, 0, Math.PI * 2); 
+          this.ctx.arc(pos.x, pos.y, 0.15, 0, Math.PI * 2);
         });
 
         if (isInActiveWindow) {
+          // Active particles: full brightness, no decay
           this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
           this.ctx.shadowBlur = 10;
-          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
+          this.ctx.strokeStyle = 'rgba(0, 200, 255, 1.0)';
           this.ctx.lineWidth = 0.5 + bubble.intensity * 16;
         } else {
+          // Inactive particles: apply opacity decay
+          const opacity = 1 - (bubble.age / bubble.maxAge);
           this.ctx.shadowBlur = 0;
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
           this.ctx.lineWidth = 0.25;
@@ -282,7 +284,8 @@ export class CanvasController {
 
         this.ctx.stroke();
       } else {
-        // Draw regular bubble when funnel is disabled
+        // Regular bubble when funnel is disabled
+        const opacity = 1 - (bubble.age / bubble.maxAge);
         this.ctx.beginPath();
         this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
 
