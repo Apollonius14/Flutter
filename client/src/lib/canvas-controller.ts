@@ -182,7 +182,7 @@ export class CanvasController {
 
         // Create particle body with smaller radius
         const body = Matter.Bodies.circle(particleX, particleY, 0.15, { 
-          friction: 0.0001, // Minimal friction
+          friction: 0.001, // Almost no friction
           restitution: 1.0, // Perfect elasticity
           mass: 0.01, 
           density: 0.001, // Reduced density
@@ -256,10 +256,9 @@ export class CanvasController {
       bubble.age++;
 
       const opacity = 1 - (bubble.age / bubble.maxAge);
-
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
-                                normalizedX <= this.params.endTime;
+                              normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
         // Draw particles
