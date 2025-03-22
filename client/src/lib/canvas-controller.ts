@@ -114,7 +114,7 @@ export class CanvasController {
 
     const topWall = Matter.Bodies.rectangle(
       midX,
-      centerY - gapSize/2 - wallLength/2,
+      centerY - gapSize / 2 - wallLength / 2,
       wallHeight,
       wallLength,
       {
@@ -125,7 +125,7 @@ export class CanvasController {
 
     const bottomWall = Matter.Bodies.rectangle(
       midX,
-      centerY + gapSize/2 + wallLength/2,
+      centerY + gapSize / 2 + wallLength / 2,
       wallHeight,
       wallLength,
       {
@@ -174,7 +174,7 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticles = 100;
+        const numParticles = 50; // Reduced from 100 to 50 for better performance
         for (let i = 0; i < numParticles; i++) {
           const angle = (i / numParticles) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
