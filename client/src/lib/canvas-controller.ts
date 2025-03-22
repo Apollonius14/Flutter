@@ -1,11 +1,9 @@
 import Matter from 'matter-js';
 
 interface AnimationParams {
-  turbulence: number;
   coherence: number;
   startTime: number;
   endTime: number;
-  peakPower: number;
   pulseIntensity: number;
 }
 
@@ -13,7 +11,7 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
-  initialSpeed: number; // Added initialSpeed property
+  initialSpeed: number;
 }
 
 interface Bubble {
@@ -35,8 +33,6 @@ export class CanvasController {
   private startTime: number | null = null;
   private bubbles: Bubble[] = [];
   private funnelEnabled: boolean = false;
-
-  // Matter.js components
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
 
@@ -46,50 +42,40 @@ export class CanvasController {
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
 
-    // Initialize Matter.js engine
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 }
     });
 
     this.params = {
-      turbulence: 2.5,
       coherence: 2.5,
       startTime: 0,
       endTime: 100,
-      peakPower: 5,
       pulseIntensity: 0,
     };
 
     this.canvas.style.backgroundColor = '#1a1a1a';
     this.setupFunnelWalls();
 
-    // Add collision handling to maintain proper reflection angles
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       event.pairs.forEach((pair) => {
         const { bodyA, bodyB } = pair;
 
-        // Only handle particle-wall collisions
         if (bodyA.collisionFilter.category === 0x0001 && bodyB.collisionFilter.category === 0x0002) {
           const particle = bodyA;
           const wall = bodyB;
 
-          // Get the wall's normal vector
           const wallAngle = wall.angle;
           const normalX = Math.sin(wallAngle);
           const normalY = -Math.cos(wallAngle);
 
-          // Calculate reflection vector
           const v = particle.velocity;
           const speed = Math.sqrt(v.x * v.x + v.y * v.y);
 
-          // Dot product
           const dot = v.x * normalX + v.y * normalY;
 
-          // Reflection formula: v' = v - 2(v·n)n
           const reflectedVx = v.x - 2 * dot * normalX;
           const reflectedVy = v.y - 2 * dot * normalY;
 
-          // Normalize and apply original speed
           const mag = Math.sqrt(reflectedVx * reflectedVx + reflectedVy * reflectedVy);
           Matter.Body.setVelocity(particle, {
             x: (reflectedVx / mag) * speed,
@@ -101,7 +87,6 @@ export class CanvasController {
   }
 
   private setupFunnelWalls() {
-    // Remove existing walls
     this.funnelWalls.forEach(wall => Matter.World.remove(this.engine.world, wall));
     this.funnelWalls = [];
 
@@ -110,16 +95,15 @@ export class CanvasController {
     const { width, height } = this.canvas;
     const midX = width * 0.5;
     const centerY = height * 0.5;
-    const gapSize = height * 0.2; // 20% of height for the gap
+    const gapSize = height * 0.2;
     const wallHeight = 10;
-    const wallLength = height * 0.4; // Length of each wall segment
+    const wallLength = height * 0.4;
 
-    // Create wall segments
     const wallOptions = {
       isStatic: true,
       render: { visible: true },
-      friction: 0, // Completely frictionless
-      restitution: 1.0, // Perfect elasticity
+      friction: 0,
+      restitution: 1.0,
       mass: 1000,
       density: 1,
       collisionFilter: {
@@ -128,7 +112,6 @@ export class CanvasController {
       }
     };
 
-    // Top wall segment - vertical
     const topWall = Matter.Bodies.rectangle(
       midX,
       centerY - gapSize/2 - wallLength/2,
@@ -136,11 +119,10 @@ export class CanvasController {
       wallLength,
       {
         ...wallOptions,
-        angle: 0 // Vertical wall
+        angle: 0
       }
     );
 
-    // Bottom wall segment - vertical
     const bottomWall = Matter.Bodies.rectangle(
       midX,
       centerY + gapSize/2 + wallLength/2,
@@ -148,12 +130,98 @@ export class CanvasController {
       wallLength,
       {
         ...wallOptions,
-        angle: 0 // Vertical wall
+        angle: 0
       }
     );
 
     this.funnelWalls = [topWall, bottomWall];
     this.funnelWalls.forEach(wall => Matter.World.add(this.engine.world, wall));
+  }
+
+  private generateBubbles(x: number): Bubble[] {
+    const { coherence } = this.params;
+    const centerY = this.canvas.height / 2;
+    const height = this.canvas.height;
+
+    const minWaves = 5;
+    const maxWaves = 10;
+    const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
+
+    const bubbles: Bubble[] = [];
+    const fixedRadius = 4;
+
+    const positions: number[] = [];
+    if (coherence === 5) {
+      const spacing = height / (numWaves + 1);
+      for (let i = 1; i <= numWaves; i++) {
+        positions.push(spacing * i);
+      }
+    } else {
+      const margin = height * 0.1;
+      for (let i = 0; i < numWaves; i++) {
+        positions.push(margin + Math.random() * (height - 2 * margin));
+      }
+      positions.sort((a, b) => a - b);
+    }
+
+    positions.forEach(y => {
+      const normalizedX = x / this.canvas.width * 100;
+      const timeWindow = this.params.endTime - this.params.startTime;
+      const midTime = (this.params.startTime + this.params.endTime) / 2;
+      const scaledTime = (normalizedX - midTime) / (timeWindow / 8);
+      const sincValue = this.sinc(scaledTime);
+      const intensity = (sincValue + 1) / 2;
+
+      const particles: Particle[] = [];
+      if (this.funnelEnabled) {
+        const numParticles = 100;
+        for (let i = 0; i < numParticles; i++) {
+          const angle = (i / numParticles) * Math.PI * 2;
+          const particleX = x + Math.cos(angle) * fixedRadius;
+          const particleY = y + Math.sin(angle) * fixedRadius;
+
+          const body = Matter.Bodies.circle(particleX, particleY, 0.05, {
+            friction: 0,
+            restitution: 1.0,
+            mass: 0.01,
+            density: 0.001,
+            collisionFilter: {
+              category: 0x0001,
+              mask: 0x0002
+            },
+            frictionAir: 0
+          });
+
+          const speed = 2.5;
+          Matter.Body.setVelocity(body, {
+            x: Math.cos(angle) * speed,
+            y: Math.sin(angle) * speed
+          });
+
+          Matter.World.add(this.engine.world, body);
+
+          particles.push({
+            body,
+            intensity,
+            age: 0,
+            initialSpeed: speed
+          });
+        }
+      }
+
+      bubbles.push({
+        x,
+        y,
+        radius: fixedRadius,
+        initialRadius: fixedRadius,
+        age: 0,
+        maxAge: 80 + intensity * 40,
+        intensity,
+        particles
+      });
+    });
+
+    return bubbles;
   }
 
   setFunnelEnabled(enabled: boolean) {
@@ -191,75 +259,6 @@ export class CanvasController {
     return (Math.sin(Math.PI * scaledX) / (Math.PI * scaledX)) * decay;
   }
 
-  private generateBubble(x: number, currentTime: number): Bubble {
-    const { coherence } = this.params;
-    const centerY = this.canvas.height / 2;
-
-    const normalizedX = x / this.canvas.width * 100;
-    const midTime = (this.params.startTime + this.params.endTime) / 2;
-    const timeWindow = this.params.endTime - this.params.startTime;
-    const scaledTime = (normalizedX - midTime) / (timeWindow / 8);
-    const sincValue = this.sinc(scaledTime);
-    const intensity = (sincValue + 1) / 2;
-
-    const baseRadius = 4 + coherence * 2;
-    const radiusVariation = (5 - coherence) * 1.5;
-    const radius = baseRadius + (Math.random() - 0.5) * radiusVariation;
-    const yVariation = (5 - coherence) * 20;
-    const y = centerY + (Math.random() - 0.5) * yVariation;
-
-    const particles: Particle[] = [];
-    const numParticles = 100; // Increased number of particles
-
-    if (this.funnelEnabled) {
-      // Create particles arranged in a circle
-      for (let i = 0; i < numParticles; i++) {
-        const angle = (i / numParticles) * Math.PI * 2;
-        const particleX = x + Math.cos(angle) * radius;
-        const particleY = y + Math.sin(angle) * radius;
-
-        // Create particle body with smaller radius
-        const body = Matter.Bodies.circle(particleX, particleY, 0.05, { // Reduced from 0.1 to 0.05
-          friction: 0, // Completely frictionless
-          restitution: 1.0, // Perfect elasticity
-          mass: 0.01,
-          density: 0.001, // Reduced density
-          collisionFilter: {
-            category: 0x0001,
-            mask: 0x0002
-          },
-          frictionAir: 0 // Disable air friction
-        });
-
-        // Add radial velocity with higher initial speed
-        const speed = 2.5; // Increased base speed
-        Matter.Body.setVelocity(body, {
-          x: Math.cos(angle) * speed,
-          y: Math.sin(angle) * speed
-        });
-
-        Matter.World.add(this.engine.world, body);
-
-        particles.push({
-          body,
-          intensity,
-          age: 0,
-          initialSpeed: speed // Store initial speed
-        });
-      }
-    }
-
-    return {
-      x,
-      y,
-      radius,
-      initialRadius: radius,
-      age: 0,
-      maxAge: 80 + intensity * 40,
-      intensity,
-      particles
-    };
-  }
 
   private drawFunnel() {
     if (!this.funnelEnabled) return;
@@ -268,7 +267,6 @@ export class CanvasController {
     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     this.ctx.lineWidth = 2;
 
-    // Draw walls as vertical lines
     this.funnelWalls.forEach(wall => {
       const vertices = wall.vertices;
       this.ctx.beginPath();
@@ -291,11 +289,10 @@ export class CanvasController {
         normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        // Maintain particle velocities
         bubble.particles.forEach(particle => {
           const velocity = particle.body.velocity;
           const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
-          if (currentSpeed !== 0) { // Avoid division by zero
+          if (currentSpeed !== 0) {
             const scaleFactor = particle.initialSpeed / currentSpeed;
             Matter.Body.setVelocity(particle.body, {
               x: velocity.x * scaleFactor,
@@ -304,22 +301,19 @@ export class CanvasController {
           }
         });
 
-        // Draw particles with matching visual size
         this.ctx.beginPath();
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.05, 0, Math.PI * 2); // Match the smaller physical size
+          this.ctx.arc(pos.x, pos.y, 0.05, 0, Math.PI * 2);
         });
 
         if (isInActiveWindow) {
-          // Active particles: full brightness, no decay
-          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.8)'; // Increased shadow opacity
-          this.ctx.shadowBlur = 8; // Adjusted blur for smaller size
+          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.8)';
+          this.ctx.shadowBlur = 8;
           this.ctx.strokeStyle = 'rgba(0, 200, 255, 1.0)';
-          this.ctx.lineWidth = 0.3 + bubble.intensity * 12; // Adjusted line width for smaller particles
+          this.ctx.lineWidth = 0.3 + bubble.intensity * 12;
         } else {
-          // Inactive particles: apply opacity decay
           const opacity = 1 - (bubble.age / bubble.maxAge);
           this.ctx.shadowBlur = 0;
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
@@ -328,7 +322,6 @@ export class CanvasController {
 
         this.ctx.stroke();
       } else {
-        // Regular bubble when funnel is disabled
         const opacity = 1 - (bubble.age / bubble.maxAge);
         this.ctx.beginPath();
         this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
@@ -348,7 +341,6 @@ export class CanvasController {
       }
 
       if (bubble.age >= bubble.maxAge) {
-        // Clean up particles
         if (bubble.particles.length > 0) {
           bubble.particles.forEach(particle => {
             Matter.World.remove(this.engine.world, particle.body);
@@ -362,8 +354,7 @@ export class CanvasController {
 
   private drawFrame(progress: number) {
     if (this.funnelEnabled) {
-      // Run physics updates at higher frequency for better collision detection
-      for (let i = 0; i < 2; i++) { // Multiple updates per frame
+      for (let i = 0; i < 2; i++) {
         Matter.Engine.update(this.engine, (1000 / 60) / 2);
       }
     }
@@ -392,14 +383,9 @@ export class CanvasController {
     this.ctx.strokeStyle = "rgba(255, 50, 50, 0.05)";
     this.ctx.stroke();
 
-    const currentTime = progress * 100;
-
-    const scaledTime = (currentTime - ((startTime + endTime) / 2)) / ((endTime - startTime) / 8);
-    const sincValue = this.sinc(scaledTime);
-    const intensity = (sincValue + 1) / 2;
-
     if (Math.random() < 0.15) {
-      this.bubbles.push(this.generateBubble(timeX, currentTime));
+      const newBubbles = this.generateBubbles(timeX);
+      this.bubbles.push(...newBubbles);
     }
 
     this.drawFunnel();

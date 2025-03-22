@@ -5,18 +5,15 @@ import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Play, Pause, Languages } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
-import { Switch } from "@/components/ui/switch"; // Import the Switch component
-
+import { Switch } from "@/components/ui/switch";
 
 const translations = {
   en: {
     title: "Air Flow Visualizer",
     pulseIntensity: "Pulse Intensity (0-1)",
-    turbulence: "Turbulence (0-5)",
     coherence: "Coherence (0-5)",
     startTime: "Start Time (0-100ms)",
     endTime: "End Time (0-100ms)",
-    peakPower: "Peak Power (1-10)",
     play: "Play",
     pause: "Pause",
     showFunnel: "Show Funnel"
@@ -24,11 +21,9 @@ const translations = {
   ar: {
     title: "محاكاة تدفق الهواء",
     pulseIntensity: "شدة النبض (٠-١)",
-    turbulence: "الاضطراب (٠-٥)",
     coherence: "التماسك (٠-٥)",
     startTime: "وقت البدء (٠-١٠٠ م.ث)",
     endTime: "وقت النهاية (٠-١٠٠ م.ث)",
-    peakPower: "قوة الذروة (١-١٠)",
     play: "تشغيل",
     pause: "إيقاف",
     showFunnel: "إظهار القمع"
@@ -42,14 +37,12 @@ export default function Home() {
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
   const t = translations[language];
   const [params, setParams] = useState({
-    turbulence: 2.5,
     coherence: 2.5,
     startTime: 0,
     endTime: 100,
-    peakPower: 5,
     pulseIntensity: 0,
   });
-  const [funnelEnabled, setFunnelEnabled] = useState(false); // Added funnelEnabled state
+  const [funnelEnabled, setFunnelEnabled] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -79,7 +72,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!controller) return;
-    controller.setFunnelEnabled(funnelEnabled); // Update funnelEnabled in controller
+    controller.setFunnelEnabled(funnelEnabled);
   }, [funnelEnabled, controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
@@ -116,22 +109,6 @@ export default function Home() {
                   step={0.01}
                   onValueChange={([value]) =>
                     setParams((p) => ({ ...p, pulseIntensity: value }))
-                  }
-                  className="pt-2"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.turbulence}
-                </Label>
-                <Slider
-                  value={[params.turbulence]}
-                  min={0}
-                  max={5}
-                  step={0.1}
-                  onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, turbulence: value }))
                   }
                   className="pt-2"
                 />
@@ -186,22 +163,6 @@ export default function Home() {
               </div>
 
               <div className="space-y-2">
-                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.peakPower}
-                </Label>
-                <Slider
-                  value={[params.peakPower]}
-                  min={1}
-                  max={10}
-                  step={0.1}
-                  onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, peakPower: value }))
-                  }
-                  className="pt-2"
-                />
-              </div>
-
-              <div className="space-y-2"> {/* Added funnel toggle */}
                 <div className="flex items-center justify-between">
                   <Label className={`text-gray-200 ${language === 'ar' ? 'arabic' : ''}`}>
                     {t.showFunnel}
@@ -212,7 +173,6 @@ export default function Home() {
                   />
                 </div>
               </div>
-
             </div>
 
             <div className="flex justify-center">
