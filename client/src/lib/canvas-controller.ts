@@ -9,6 +9,12 @@ interface AnimationParams {
   pulseIntensity: number;
 }
 
+interface Particle {
+  body: Matter.Body;
+  intensity: number;
+  age: number;
+}
+
 interface Bubble {
   x: number;
   y: number;
@@ -17,7 +23,7 @@ interface Bubble {
   age: number;
   maxAge: number;
   intensity: number;
-  body?: Matter.Body;
+  particles: Particle[];
 }
 
 export class CanvasController {
@@ -160,76 +166,51 @@ export class CanvasController {
     const yVariation = (5 - coherence) * 20;
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
-    const bubble: Bubble = {
+    const particles: Particle[] = [];
+    const numParticles = 50; // Number of particles per bubble
+
+    if (this.funnelEnabled) {
+      // Create particles arranged in a circle
+      for (let i = 0; i < numParticles; i++) {
+        const angle = (i / numParticles) * Math.PI * 2;
+        const particleX = x + Math.cos(angle) * radius;
+        const particleY = y + Math.sin(angle) * radius;
+
+        // Create particle body
+        const body = Matter.Bodies.circle(particleX, particleY, 0.5, {
+          friction: 0,
+          restitution: 0.8,
+          mass: 0.01, // 0.01g
+          density: 0.01
+        });
+
+        // Add radial velocity
+        const speed = 1;
+        Matter.Body.setVelocity(body, {
+          x: Math.cos(angle) * speed,
+          y: Math.sin(angle) * speed
+        });
+
+        Matter.World.add(this.engine.world, body);
+
+        particles.push({
+          body,
+          intensity,
+          age: 0
+        });
+      }
+    }
+
+    return {
       x,
       y,
       radius,
       initialRadius: radius,
       age: 0,
       maxAge: 80 + intensity * 40,
-      intensity
+      intensity,
+      particles
     };
-
-    if (this.funnelEnabled) {
-      // Create a circular body for the bubble
-      const body = Matter.Bodies.circle(x, y, radius, {
-        friction: 0,
-        restitution: 0.8,
-        mass: 0.01, // 0.01g
-        density: 0.01,
-        velocity: { x: 1, y: 0 }
-      });
-      Matter.World.add(this.engine.world, body);
-      bubble.body = body;
-    }
-
-    return bubble;
-  }
-
-  private updateAndDrawBubbles() {
-    this.bubbles = this.bubbles.filter(bubble => {
-      bubble.age++;
-
-      const baseGrowth = 2 + bubble.intensity * 48;
-      const growthFactor = 1 + (bubble.age / bubble.maxAge) * baseGrowth;
-      bubble.radius = bubble.initialRadius * growthFactor;
-
-      const opacity = 1 - (bubble.age / bubble.maxAge);
-
-      // Update position from physics engine if enabled
-      if (this.funnelEnabled && bubble.body) {
-        bubble.x = bubble.body.position.x;
-        bubble.y = bubble.body.position.y;
-      }
-
-      const normalizedX = bubble.x / this.canvas.width * 100;
-      const isInActiveWindow = normalizedX >= this.params.startTime &&
-                             normalizedX <= this.params.endTime;
-
-      this.ctx.beginPath();
-      this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
-
-      if (isInActiveWindow) {
-        this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
-        this.ctx.shadowBlur = 10;
-        this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-        this.ctx.lineWidth = 0.5 + bubble.intensity * 16; // Start thinner
-      } else {
-        this.ctx.shadowBlur = 0;
-        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-        this.ctx.lineWidth = 0.25; // Even thinner for inactive bubbles
-      }
-
-      this.ctx.stroke();
-
-      if (bubble.age >= bubble.maxAge) {
-        if (bubble.body) {
-          Matter.World.remove(this.engine.world, bubble.body);
-        }
-        return false;
-      }
-      return true;
-    });
   }
 
   private drawFunnel() {
@@ -260,6 +241,69 @@ export class CanvasController {
     this.ctx.closePath();
     this.ctx.fill();
     this.ctx.stroke();
+  }
+
+  private updateAndDrawBubbles() {
+    this.bubbles = this.bubbles.filter(bubble => {
+      bubble.age++;
+
+      const opacity = 1 - (bubble.age / bubble.maxAge);
+
+      const normalizedX = bubble.x / this.canvas.width * 100;
+      const isInActiveWindow = normalizedX >= this.params.startTime &&
+                           normalizedX <= this.params.endTime;
+
+      if (this.funnelEnabled && bubble.particles.length > 0) {
+        // Draw particles
+        this.ctx.beginPath();
+        bubble.particles.forEach(particle => {
+          const pos = particle.body.position;
+          this.ctx.moveTo(pos.x, pos.y);
+          this.ctx.arc(pos.x, pos.y, 0.5, 0, Math.PI * 2);
+        });
+
+        if (isInActiveWindow) {
+          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
+          this.ctx.shadowBlur = 10;
+          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
+          this.ctx.lineWidth = 0.5 + bubble.intensity * 16;
+        } else {
+          this.ctx.shadowBlur = 0;
+          this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+          this.ctx.lineWidth = 0.25;
+        }
+
+        this.ctx.stroke();
+      } else {
+        // Draw regular bubble when funnel is disabled
+        this.ctx.beginPath();
+        this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+
+        if (isInActiveWindow) {
+          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
+          this.ctx.shadowBlur = 10;
+          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
+          this.ctx.lineWidth = 0.5 + bubble.intensity * 16;
+        } else {
+          this.ctx.shadowBlur = 0;
+          this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+          this.ctx.lineWidth = 0.25;
+        }
+
+        this.ctx.stroke();
+      }
+
+      if (bubble.age >= bubble.maxAge) {
+        // Clean up particles
+        if (bubble.particles.length > 0) {
+          bubble.particles.forEach(particle => {
+            Matter.World.remove(this.engine.world, particle.body);
+          });
+        }
+        return false;
+      }
+      return true;
+    });
   }
 
   private drawFrame(progress: number) {
