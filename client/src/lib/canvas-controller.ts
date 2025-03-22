@@ -181,7 +181,7 @@ export class CanvasController {
         const particleY = y + Math.sin(angle) * radius;
 
         // Create particle body
-        const body = Matter.Bodies.circle(particleX, particleY, 0.5, {
+        const body = Matter.Bodies.circle(particleX, particleY, 0.25, { 
           friction: 0,
           restitution: 0.8,
           mass: 0.01, 
@@ -192,8 +192,8 @@ export class CanvasController {
           }
         });
 
-        // Add radial velocity
-        const speed = 1;
+        // Add radial velocity 
+        const speed = 1.5;
         Matter.Body.setVelocity(body, {
           x: Math.cos(angle) * speed,
           y: Math.sin(angle) * speed
@@ -259,7 +259,7 @@ export class CanvasController {
 
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
-                               normalizedX <= this.params.endTime;
+                                normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
         // Draw particles
@@ -267,7 +267,7 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.5, 0, Math.PI * 2);
+          this.ctx.arc(pos.x, pos.y, 0.25, 0, Math.PI * 2); 
         });
 
         if (isInActiveWindow) {
