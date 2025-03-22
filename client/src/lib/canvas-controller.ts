@@ -53,7 +53,7 @@ export class CanvasController {
       coherence: 2.5,
       startTime: 0,
       endTime: 100,
-      frequency: 0.15
+      frequency: 0.075  // Reduced from 0.15
     };
 
     this.canvas.style.backgroundColor = '#1a1a1a';
@@ -116,8 +116,8 @@ export class CanvasController {
     const centerY = this.canvas.height / 2;
     const height = this.canvas.height;
 
-    const minWaves = 4;
-    const maxWaves = 8;
+    const minWaves = 2; // Reduced from 4
+    const maxWaves = 4; // Reduced from 8
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
@@ -145,7 +145,7 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticles = 50;
+        const numParticles = 25; // Reduced from 50
         for (let i = 0; i < numParticles; i++) {
           const angle = (i / numParticles) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -154,7 +154,7 @@ export class CanvasController {
           const body = Matter.Bodies.circle(particleX, particleY, 0.05, {
             friction: 0,
             restitution: 1.0,
-            mass: 0.1,          // Light mass for particles
+            mass: 0.1,
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
