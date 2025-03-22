@@ -72,8 +72,8 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const spreadY = height * 0.4; // Increased from 0.2 to 0.4 for wider opening
-    const wallLength = height * 0.6; // Increased from 0.4 to 0.6 for longer walls
+    const spreadY = height * 0.4; 
+    const wallLength = height * 0.6; 
     const centerY = height * 0.5;
 
     // Create funnel walls
@@ -82,8 +82,12 @@ export class CanvasController {
       render: { visible: true },
       friction: 0,
       restitution: 0.8,
-      mass: 1000, // 1kg in grams
-      density: 1
+      mass: 1000, 
+      density: 1,
+      collisionFilter: {
+        category: 0x0002, 
+        mask: 0x0001     
+      }
     };
 
     // Top wall of funnel
@@ -94,7 +98,7 @@ export class CanvasController {
       10,
       {
         ...wallOptions,
-        angle: Math.PI/12 // Changed from PI/6 (30°) to PI/12 (15°)
+        angle: Math.PI/12 
       }
     );
 
@@ -106,7 +110,7 @@ export class CanvasController {
       10,
       {
         ...wallOptions,
-        angle: -Math.PI/12 // Changed from -PI/6 (-30°) to -PI/12 (-15°)
+        angle: -Math.PI/12 
       }
     );
 
@@ -167,7 +171,7 @@ export class CanvasController {
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
     const particles: Particle[] = [];
-    const numParticles = 50; // Number of particles per bubble
+    const numParticles = 50; 
 
     if (this.funnelEnabled) {
       // Create particles arranged in a circle
@@ -180,8 +184,12 @@ export class CanvasController {
         const body = Matter.Bodies.circle(particleX, particleY, 0.5, {
           friction: 0,
           restitution: 0.8,
-          mass: 0.01, // 0.01g
-          density: 0.01
+          mass: 0.01, 
+          density: 0.01,
+          collisionFilter: {
+            category: 0x0001, 
+            mask: 0x0002     
+          }
         });
 
         // Add radial velocity
@@ -341,7 +349,7 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    if (Math.random() < (0.08 + intensity * 0.192)) { // Reduced by factor of 5 (from 0.4 to 0.08)
+    if (Math.random() < (0.08 + intensity * 0.192)) { 
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
