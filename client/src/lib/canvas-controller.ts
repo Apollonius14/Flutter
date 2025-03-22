@@ -74,11 +74,11 @@ export class CanvasController {
     const wallLength = height * 0.4;
 
     const wallOptions = {
-      isStatic: true,
+      isStatic: false, // Make walls dynamic
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 100,           // High mass to keep wall immovable
+      mass: 50,        // Reduced mass to allow tiny movements
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -106,6 +106,46 @@ export class CanvasController {
         angle: 0
       }
     );
+
+    // Add spring constraints to anchor the walls
+    const stiffness = 0.9; // Very stiff springs
+    const damping = 0.1;   // Light damping for small oscillations
+
+    // Anchor points for top wall
+    Matter.World.add(this.engine.world, [
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY - gapSize/2 - wallLength },
+        bodyB: topWall,
+        pointB: { x: 0, y: -wallLength/2 },
+        stiffness,
+        damping
+      }),
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY - gapSize/2 },
+        bodyB: topWall,
+        pointB: { x: 0, y: wallLength/2 },
+        stiffness,
+        damping
+      })
+    ]);
+
+    // Anchor points for bottom wall
+    Matter.World.add(this.engine.world, [
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY + gapSize/2 },
+        bodyB: bottomWall,
+        pointB: { x: 0, y: -wallLength/2 },
+        stiffness,
+        damping
+      }),
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY + gapSize/2 + wallLength },
+        bodyB: bottomWall,
+        pointB: { x: 0, y: wallLength/2 },
+        stiffness,
+        damping
+      })
+    ]);
 
     this.funnelWalls = [topWall, bottomWall];
     this.funnelWalls.forEach(wall => Matter.World.add(this.engine.world, wall));
