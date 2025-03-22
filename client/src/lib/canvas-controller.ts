@@ -35,15 +35,22 @@ export class CanvasController {
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
 
+  private setupEngine() {
+    this.engine = Matter.Engine.create({
+      gravity: { x: 0, y: 0 },
+      enableSleeping: false,
+      positionIterations: 8,
+      velocityIterations: 12
+    });
+  }
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
 
-    this.engine = Matter.Engine.create({
-      gravity: { x: 0, y: 0 }
-    });
+    this.setupEngine();
 
     this.params = {
       coherence: 2.5,
@@ -74,8 +81,8 @@ export class CanvasController {
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 1000,
-      density: 1,
+      mass: 100,
+      slop: 0,
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -151,8 +158,8 @@ export class CanvasController {
           const body = Matter.Bodies.circle(particleX, particleY, 0.05, {
             friction: 0,
             restitution: 1.0,
-            mass: 0.01,
-            density: 0.001,
+            mass: 1,
+            slop: 0,
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
@@ -302,9 +309,10 @@ export class CanvasController {
 
   private drawFrame(progress: number) {
     if (this.funnelEnabled) {
-      for (let i = 0; i < 2; i++) {
-        Matter.Engine.update(this.engine, (1000 / 60) / 2);
-      }
+      Matter.Engine.update(this.engine, 1000 / 60, {
+        positionIterations: 8,
+        velocityIterations: 12
+      });
     }
 
     const { width, height } = this.canvas;
