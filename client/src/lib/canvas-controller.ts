@@ -159,7 +159,7 @@ export class CanvasController {
               mask: 0x0002,
               group: -1
             },
-            frictionAir: 0
+            frictionAir: 0.001 // Added small air friction
           });
 
           const speed = 2.0; // Reduced from 4.0
@@ -303,8 +303,10 @@ export class CanvasController {
 
   private drawFrame(progress: number) {
     if (this.funnelEnabled) {
-      for (let i = 0; i < 2; i++) {
-        Matter.Engine.update(this.engine, (1000 / 60) / 2);
+      const numSubSteps = 5; // Number of sub-steps per frame
+      const subStepTime = (1000 / 60) / numSubSteps; 
+      for (let i = 0; i < numSubSteps; i++) {
+        Matter.Engine.update(this.engine, subStepTime);
       }
     }
 
