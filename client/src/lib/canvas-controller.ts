@@ -145,13 +145,13 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticles = 25; // Reduced from 50
+        const numParticles = 30; //Increased from 25
         for (let i = 0; i < numParticles; i++) {
           const angle = (i / numParticles) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
           const particleY = y + Math.sin(angle) * fixedRadius;
 
-          const body = Matter.Bodies.circle(particleX, particleY, 0.05, {
+          const body = Matter.Bodies.circle(particleX, particleY, 0.025, { // Reduced from 0.05
             friction: 0,
             restitution: 1.0,
             mass: 0.1,
