@@ -109,11 +109,12 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const spreadY = height * 0.6; // Increased from 0.4 to 0.6 for wider mouth
-    const wallLength = height * 0.8; // Increased from 0.6 to 0.8
     const centerY = height * 0.5;
+    const gapSize = height * 0.2; // 20% of height for the gap
+    const wallHeight = 10;
+    const wallLength = height * 0.4; // Length of each wall segment
 
-    // Create funnel walls
+    // Create wall segments
     const wallOptions = {
       isStatic: true,
       render: { visible: true },
@@ -127,27 +128,27 @@ export class CanvasController {
       }
     };
 
-    // Top wall of funnel - gentler angle (reduced from Math.PI/12)
+    // Top wall segment - vertical
     const topWall = Matter.Bodies.rectangle(
       midX,
-      centerY - spreadY / 2,
+      centerY - gapSize/2 - wallLength/2,
+      wallHeight,
       wallLength,
-      10,
       {
         ...wallOptions,
-        angle: Math.PI / 18 // Reduced angle for gentler slope
+        angle: 0 // Vertical wall
       }
     );
 
-    // Bottom wall of funnel
+    // Bottom wall segment - vertical
     const bottomWall = Matter.Bodies.rectangle(
       midX,
-      centerY + spreadY / 2,
+      centerY + gapSize/2 + wallLength/2,
+      wallHeight,
       wallLength,
-      10,
       {
         ...wallOptions,
-        angle: -Math.PI / 18 // Matching top angle
+        angle: 0 // Vertical wall
       }
     );
 
@@ -267,27 +268,18 @@ export class CanvasController {
     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     this.ctx.lineWidth = 2;
 
-    // Draw funnel as a filled path
-    this.ctx.beginPath();
-    const vertices = this.funnelWalls.flatMap(wall => wall.vertices);
-    this.ctx.moveTo(vertices[0].x, vertices[0].y);
-
-    // Draw top wall
-    for (let i = 0; i < 4; i++) {
-      this.ctx.lineTo(vertices[i].x, vertices[i].y);
-    }
-
-    // Connect to bottom wall
-    this.ctx.lineTo(vertices[4].x, vertices[4].y);
-
-    // Draw bottom wall
-    for (let i = 4; i < 8; i++) {
-      this.ctx.lineTo(vertices[i].x, vertices[i].y);
-    }
-
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.stroke();
+    // Draw walls as vertical lines
+    this.funnelWalls.forEach(wall => {
+      const vertices = wall.vertices;
+      this.ctx.beginPath();
+      this.ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        this.ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.stroke();
+    });
   }
 
   private updateAndDrawBubbles() {
