@@ -62,6 +62,42 @@ export class CanvasController {
 
     this.canvas.style.backgroundColor = '#1a1a1a';
     this.setupFunnelWalls();
+
+    // Add collision handling to maintain proper reflection angles
+    Matter.Events.on(this.engine, 'collisionStart', (event) => {
+      event.pairs.forEach((pair) => {
+        const { bodyA, bodyB } = pair;
+
+        // Only handle particle-wall collisions
+        if (bodyA.collisionFilter.category === 0x0001 && bodyB.collisionFilter.category === 0x0002) {
+          const particle = bodyA;
+          const wall = bodyB;
+
+          // Get the wall's normal vector
+          const wallAngle = wall.angle;
+          const normalX = Math.sin(wallAngle);
+          const normalY = -Math.cos(wallAngle);
+
+          // Calculate reflection vector
+          const v = particle.velocity;
+          const speed = Math.sqrt(v.x * v.x + v.y * v.y);
+
+          // Dot product
+          const dot = v.x * normalX + v.y * normalY;
+
+          // Reflection formula: v' = v - 2(v·n)n
+          const reflectedVx = v.x - 2 * dot * normalX;
+          const reflectedVy = v.y - 2 * dot * normalY;
+
+          // Normalize and apply original speed
+          const mag = Math.sqrt(reflectedVx * reflectedVx + reflectedVy * reflectedVy);
+          Matter.Body.setVelocity(particle, {
+            x: (reflectedVx / mag) * speed,
+            y: (reflectedVy / mag) * speed
+          });
+        }
+      });
+    });
   }
 
   private setupFunnelWalls() {
@@ -194,7 +230,7 @@ export class CanvasController {
           frictionAir: 0 // Disable air friction
         });
 
-        // Keep velocity the same since it's working well
+        // Add radial velocity with higher initial speed
         const speed = 2.5; // Increased base speed
         Matter.Body.setVelocity(body, {
           x: Math.cos(angle) * speed,
@@ -334,7 +370,10 @@ export class CanvasController {
 
   private drawFrame(progress: number) {
     if (this.funnelEnabled) {
-      Matter.Engine.update(this.engine, 1000 / 60);
+      // Run physics updates at higher frequency for better collision detection
+      for (let i = 0; i < 2; i++) { // Multiple updates per frame
+        Matter.Engine.update(this.engine, (1000 / 60) / 2);
+      }
     }
 
     const { width, height } = this.canvas;
