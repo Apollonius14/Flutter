@@ -11,7 +11,6 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
-  initialSpeed: number;
 }
 
 interface Bubble {
@@ -173,8 +172,7 @@ export class CanvasController {
           particles.push({
             body,
             intensity,
-            age: 0,
-            initialSpeed: speed
+            age: 0
           });
         }
       }
@@ -251,19 +249,6 @@ export class CanvasController {
         normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        // Maintain constant speed for particles
-        bubble.particles.forEach(particle => {
-          const velocity = particle.body.velocity;
-          const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
-          if (currentSpeed !== 0) {
-            const scaleFactor = particle.initialSpeed / currentSpeed;
-            Matter.Body.setVelocity(particle.body, {
-              x: velocity.x * scaleFactor,
-              y: velocity.y * scaleFactor
-            });
-          }
-        });
-
         this.ctx.beginPath();
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
