@@ -72,8 +72,8 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const spreadY = height * 0.2; // Vertical spread for funnel
-    const wallLength = height * 0.4; // Length of funnel walls
+    const spreadY = height * 0.4; // Increased from 0.2 to 0.4 for wider opening
+    const wallLength = height * 0.6; // Increased from 0.4 to 0.6 for longer walls
     const centerY = height * 0.5;
 
     // Create funnel walls
@@ -94,7 +94,7 @@ export class CanvasController {
       10,
       {
         ...wallOptions,
-        angle: Math.PI/6 // 30 degrees from horizontal
+        angle: Math.PI/12 // Changed from PI/6 (30°) to PI/12 (15°)
       }
     );
 
@@ -106,7 +106,7 @@ export class CanvasController {
       10,
       {
         ...wallOptions,
-        angle: -Math.PI/6 // -30 degrees from horizontal
+        angle: -Math.PI/12 // Changed from -PI/6 (-30°) to -PI/12 (-15°)
       }
     );
 
@@ -251,7 +251,7 @@ export class CanvasController {
 
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
-                           normalizedX <= this.params.endTime;
+                               normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
         // Draw particles
