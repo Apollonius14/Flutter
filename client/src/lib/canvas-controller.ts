@@ -78,7 +78,8 @@ export class CanvasController {
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 10,        // Reduced mass to allow tiny movements
+      mass: 10,        // Light mass to allow movement
+      inertia: Infinity, // Prevent rotation completely
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -108,8 +109,8 @@ export class CanvasController {
     );
 
     // Add spring constraints to anchor the walls
-    const stiffness = 0.99; // Increased stiffness
-    const damping = 0.5;    // Increased damping
+    const stiffness = 0.99; // High stiffness for tiny movements
+    const damping = 0.5;    // Moderate damping
 
     // For each wall, create constraints to:
     // 1. Lock Y position
@@ -124,13 +125,6 @@ export class CanvasController {
         bodyB: topWall,
         stiffness: 1, // Perfect stiffness for y-axis
         length: 0
-      }),
-      // X-axis spring for top wall
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
-        bodyB: topWall,
-        stiffness,
-        damping
       })
     ]);
 
@@ -142,13 +136,6 @@ export class CanvasController {
         bodyB: bottomWall,
         stiffness: 1, // Perfect stiffness for y-axis
         length: 0
-      }),
-      // X-axis spring for bottom wall
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
-        bodyB: bottomWall,
-        stiffness,
-        damping
       })
     ]);
 
