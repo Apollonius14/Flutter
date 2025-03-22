@@ -78,8 +78,7 @@ export class CanvasController {
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 100,           // Reduced from 1000
-      density: 0.1,        // Reduced from 1
+      mass: 100,           // High mass to keep wall immovable
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -155,8 +154,7 @@ export class CanvasController {
           const body = Matter.Bodies.circle(particleX, particleY, 0.05, {
             friction: 0,
             restitution: 1.0,
-            mass: 0.1,          // Increased from 0.01
-            density: 0.01,      // Increased from 0.001
+            mass: 0.1,          // Light mass for particles
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
