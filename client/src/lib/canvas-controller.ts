@@ -41,8 +41,12 @@ export class CanvasController {
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
 
+    // Configure engine with better iteration parameters
     this.engine = Matter.Engine.create({
-      gravity: { x: 0, y: 0 }
+      gravity: { x: 0, y: 0 },
+      positionIterations: 8,  // Increased from default 6
+      velocityIterations: 8,  // Increased from default 4
+      constraintIterations: 4 // Added explicit constraint iterations
     });
 
     this.params = {
@@ -74,8 +78,8 @@ export class CanvasController {
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 1000,
-      density: 1,
+      mass: 100,           // Reduced from 1000
+      density: 0.1,        // Reduced from 1
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -151,8 +155,8 @@ export class CanvasController {
           const body = Matter.Bodies.circle(particleX, particleY, 0.05, {
             friction: 0,
             restitution: 1.0,
-            mass: 0.01,
-            density: 0.001,
+            mass: 0.1,          // Increased from 0.01
+            density: 0.01,      // Increased from 0.001
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
