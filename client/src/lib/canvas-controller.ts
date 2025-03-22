@@ -172,7 +172,7 @@ export class CanvasController {
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
     const particles: Particle[] = [];
-    const numParticles = 75;
+    const numParticles = 100; // Increased number of particles
 
     if (this.funnelEnabled) {
       // Create particles arranged in a circle
@@ -182,7 +182,7 @@ export class CanvasController {
         const particleY = y + Math.sin(angle) * radius;
 
         // Create particle body with smaller radius
-        const body = Matter.Bodies.circle(particleX, particleY, 0.1, { // Reduced from 0.15 to 0.1
+        const body = Matter.Bodies.circle(particleX, particleY, 0.05, { // Reduced from 0.1 to 0.05
           friction: 0, // Completely frictionless
           restitution: 1.0, // Perfect elasticity
           mass: 0.01,
@@ -281,7 +281,7 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.1, 0, Math.PI * 2); // Match the smaller physical size
+          this.ctx.arc(pos.x, pos.y, 0.05, 0, Math.PI * 2); // Match the smaller physical size
         });
 
         if (isInActiveWindow) {
