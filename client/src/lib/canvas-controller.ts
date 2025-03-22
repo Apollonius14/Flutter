@@ -44,7 +44,7 @@ export class CanvasController {
     // Configure engine with better iteration parameters
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 8,  // Increased from default 6
+      positionIterations: 6,  // Increased from default 6
       velocityIterations: 8,  // Increased from default 4
       constraintIterations: 4 // Added explicit constraint iterations
     });
@@ -78,8 +78,8 @@ export class CanvasController {
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 10,        // Light mass to allow movement
-      inertia: Infinity, // Prevent rotation completely
+      mass: 50,        // Light mass to allow movement
+      // Prevent rotation completely
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -112,29 +112,82 @@ export class CanvasController {
     const stiffness = 0.99; // High stiffness for tiny movements
     const damping = 0.5;    // Moderate damping
 
-    // For each wall, create constraints to:
-    // 1. Lock Y position
-    // 2. Lock rotation
-    // 3. Allow only tiny X movement
+    // For each wall, create constraints at both ends to:
+    // 1. Lock Y position and prevent rotation
+    // 2. Allow only tiny X movement
 
     // Top wall constraints
     Matter.World.add(this.engine.world, [
-      // Y-position and rotation lock for top wall
+      // Y-position lock for top end
       Matter.Constraint.create({
         pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
         bodyB: topWall,
+        pointB: { x: 0, y: -wallLength/2 },
         stiffness: 1, // Perfect stiffness for y-axis
+        length: 0
+      }),
+      // Y-position lock for bottom end
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY - gapSize/2 + wallLength/2 },
+        bodyB: topWall,
+        pointB: { x: 0, y: wallLength/2 },
+        stiffness: 1, // Perfect stiffness for y-axis
+        length: 0
+      }),
+      // X-axis spring for top end
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
+        bodyB: topWall,
+        pointB: { x: 0, y: -wallLength/2 },
+        stiffness,
+        damping,
+        length: 0
+      }),
+      // X-axis spring for bottom end
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY - gapSize/2 + wallLength/2 },
+        bodyB: topWall,
+        pointB: { x: 0, y: wallLength/2 },
+        stiffness,
+        damping,
         length: 0
       })
     ]);
 
-    // Bottom wall constraints
+    // Bottom wall constraints with identical pattern
     Matter.World.add(this.engine.world, [
-      // Y-position and rotation lock for bottom wall
+      // Y-position lock for top end
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY + gapSize/2 - wallLength/2 },
+        bodyB: bottomWall,
+        pointB: { x: 0, y: -wallLength/2 },
+        stiffness: 1,
+        length: 0
+      }),
+      // Y-position lock for bottom end
       Matter.Constraint.create({
         pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
         bodyB: bottomWall,
-        stiffness: 1, // Perfect stiffness for y-axis
+        pointB: { x: 0, y: wallLength/2 },
+        stiffness: 1,
+        length: 0
+      }),
+      // X-axis spring for top end
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY + gapSize/2 - wallLength/2 },
+        bodyB: bottomWall,
+        pointB: { x: 0, y: -wallLength/2 },
+        stiffness,
+        damping,
+        length: 0
+      }),
+      // X-axis spring for bottom end
+      Matter.Constraint.create({
+        pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
+        bodyB: bottomWall,
+        pointB: { x: 0, y: wallLength/2 },
+        stiffness,
+        damping,
         length: 0
       })
     ]);
@@ -195,7 +248,7 @@ export class CanvasController {
             frictionAir: 0
           });
 
-          const speed = 5.0;
+          const speed = 4.0;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
