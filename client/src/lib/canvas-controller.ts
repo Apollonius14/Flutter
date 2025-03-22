@@ -70,7 +70,7 @@ export class CanvasController {
     const midX = width * 0.5;
     const centerY = height * 0.5;
     const gapSize = height * 0.2;
-    const wallHeight = 10;
+    const wallThickness = 20; // Increased from 10 to ensure solid collision
     const wallLength = height * 0.4;
 
     const wallOptions = {
@@ -87,7 +87,7 @@ export class CanvasController {
     const topWall = Matter.Bodies.rectangle(
       midX,
       centerY - gapSize/2 - wallLength/2,
-      wallHeight,
+      wallThickness,
       wallLength,
       {
         ...wallOptions,
@@ -98,7 +98,7 @@ export class CanvasController {
     const bottomWall = Matter.Bodies.rectangle(
       midX,
       centerY + gapSize/2 + wallLength/2,
-      wallHeight,
+      wallThickness,
       wallLength,
       {
         ...wallOptions,
