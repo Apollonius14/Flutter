@@ -80,8 +80,8 @@ export class CanvasController {
     const wallOptions = {
       isStatic: true,
       render: { visible: true },
-      friction: 0,
-      restitution: 0.8,
+      friction: 0.001, // Almost no friction
+      restitution: 0.95, // More bouncy
       mass: 1000, 
       density: 1,
       collisionFilter: {
@@ -182,10 +182,10 @@ export class CanvasController {
 
         // Create particle body with smaller radius
         const body = Matter.Bodies.circle(particleX, particleY, 0.15, { 
-          friction: 0,
-          restitution: 0.8,
+          friction: 0.001, // Almost no friction
+          restitution: 0.95, // More bouncy
           mass: 0.01, 
-          density: 0.01,
+          density: 0.001, // Reduced density
           collisionFilter: {
             category: 0x0001, 
             mask: 0x0002     
