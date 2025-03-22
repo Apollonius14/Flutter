@@ -4,7 +4,7 @@ interface AnimationParams {
   coherence: number;
   startTime: number;
   endTime: number;
-  pulseIntensity: number;
+  frequency: number;
 }
 
 interface Particle {
@@ -50,7 +50,7 @@ export class CanvasController {
       coherence: 2.5,
       startTime: 0,
       endTime: 100,
-      pulseIntensity: 0,
+      frequency: 0.15
     };
 
     this.canvas.style.backgroundColor = '#1a1a1a';
@@ -143,8 +143,8 @@ export class CanvasController {
     const centerY = this.canvas.height / 2;
     const height = this.canvas.height;
 
-    const minWaves = 5;
-    const maxWaves = 10;
+    const minWaves = 4;
+    const maxWaves = 8;
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
@@ -166,15 +166,13 @@ export class CanvasController {
 
     positions.forEach(y => {
       const normalizedX = x / this.canvas.width * 100;
-      const timeWindow = this.params.endTime - this.params.startTime;
-      const midTime = (this.params.startTime + this.params.endTime) / 2;
-      const scaledTime = (normalizedX - midTime) / (timeWindow / 8);
-      const sincValue = this.sinc(scaledTime);
-      const intensity = (sincValue + 1) / 2;
+      const isInActiveWindow = normalizedX >= this.params.startTime &&
+        normalizedX <= this.params.endTime;
+      const intensity = isInActiveWindow ? 1.0 : 0.3;
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticles = 50; // Reduced from 100 to 50 for better performance
+        const numParticles = 50;
         for (let i = 0; i < numParticles; i++) {
           const angle = (i / numParticles) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -192,7 +190,7 @@ export class CanvasController {
             frictionAir: 0
           });
 
-          const speed = 2.5;
+          const speed = 5.0;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -250,13 +248,6 @@ export class CanvasController {
   cleanup() {
     this.pause();
     Matter.Engine.clear(this.engine);
-  }
-
-  private sinc(x: number): number {
-    if (x === 0) return 1;
-    const scaledX = x * 2;
-    const decay = Math.exp(-Math.abs(x));
-    return (Math.sin(Math.PI * scaledX) / (Math.PI * scaledX)) * decay;
   }
 
 
@@ -365,8 +356,6 @@ export class CanvasController {
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(0, 0, width, height);
 
-    const { startTime, endTime } = this.params;
-
     const timeX = width * progress;
 
     this.ctx.beginPath();
@@ -376,14 +365,14 @@ export class CanvasController {
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
-    const midX = width * ((startTime + endTime) / 200);
+    const midX = width * ((this.params.startTime + this.params.endTime) / 200);
     this.ctx.beginPath();
     this.ctx.moveTo(midX, 0);
     this.ctx.lineTo(midX, height);
     this.ctx.strokeStyle = "rgba(255, 50, 50, 0.05)";
     this.ctx.stroke();
 
-    if (Math.random() < 0.15) {
+    if (Math.random() < this.params.frequency) {
       const newBubbles = this.generateBubbles(timeX);
       this.bubbles.push(...newBubbles);
     }

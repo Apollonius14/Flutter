@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 const translations = {
   en: {
     title: "Air Flow Visualizer",
-    pulseIntensity: "Pulse Intensity (0-1)",
+    frequency: "Spawn Frequency (0-1)",
     coherence: "Coherence (0-5)",
     startTime: "Start Time (0-100ms)",
     endTime: "End Time (0-100ms)",
@@ -20,7 +20,7 @@ const translations = {
   },
   ar: {
     title: "محاكاة تدفق الهواء",
-    pulseIntensity: "شدة النبض (٠-١)",
+    frequency: "معدل التوليد (٠-١)",
     coherence: "التماسك (٠-٥)",
     startTime: "وقت البدء (٠-١٠٠ م.ث)",
     endTime: "وقت النهاية (٠-١٠٠ م.ث)",
@@ -40,7 +40,7 @@ export default function Home() {
     coherence: 2.5,
     startTime: 0,
     endTime: 100,
-    pulseIntensity: 0,
+    frequency: 0.15,
   });
   const [funnelEnabled, setFunnelEnabled] = useState(false);
 
@@ -100,15 +100,15 @@ export default function Home() {
             <div className="grid gap-6">
               <div className="space-y-2">
                 <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.pulseIntensity}
+                  {t.frequency}
                 </Label>
                 <Slider
-                  value={[params.pulseIntensity]}
+                  value={[params.frequency]}
                   min={0}
                   max={1}
                   step={0.01}
                   onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, pulseIntensity: value }))
+                    setParams((p) => ({ ...p, frequency: value }))
                   }
                   className="pt-2"
                 />
