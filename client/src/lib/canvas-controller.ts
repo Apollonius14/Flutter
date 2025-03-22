@@ -75,7 +75,9 @@ export class CanvasController {
       isStatic: true,
       render: { visible: true },
       friction: 0,
-      restitution: 0.8
+      restitution: 0.8,
+      mass: 1000, // 1kg in grams
+      density: 1
     };
 
     // Top wall of funnel
@@ -173,7 +175,8 @@ export class CanvasController {
       const body = Matter.Bodies.circle(x, y, radius, {
         friction: 0,
         restitution: 0.8,
-        mass: 1,
+        mass: 0.01, // 0.01g
+        density: 0.01,
         velocity: { x: 1, y: 0 }
       });
       Matter.World.add(this.engine.world, body);
@@ -210,11 +213,11 @@ export class CanvasController {
         this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
         this.ctx.shadowBlur = 10;
         this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-        this.ctx.lineWidth = 1 + bubble.intensity * 16;
+        this.ctx.lineWidth = 0.5 + bubble.intensity * 16; // Start thinner
       } else {
         this.ctx.shadowBlur = 0;
         this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-        this.ctx.lineWidth = 0.5;
+        this.ctx.lineWidth = 0.25; // Even thinner for inactive bubbles
       }
 
       this.ctx.stroke();
@@ -294,7 +297,7 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    if (Math.random() < (0.4 + intensity * 0.96)) {
+    if (Math.random() < (0.08 + intensity * 0.192)) { // Reduced by factor of 5 (from 0.4 to 0.08)
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
