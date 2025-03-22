@@ -13,6 +13,7 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
+  initialSpeed: number; // Added initialSpeed property
 }
 
 interface Bubble {
@@ -72,8 +73,8 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const spreadY = height * 0.4; 
-    const wallLength = height * 0.6; 
+    const spreadY = height * 0.4;
+    const wallLength = height * 0.6;
     const centerY = height * 0.5;
 
     // Create funnel walls
@@ -82,35 +83,35 @@ export class CanvasController {
       render: { visible: true },
       friction: 0.001, // Almost no friction
       restitution: 1.0, // Perfect elasticity
-      mass: 1000, 
+      mass: 1000,
       density: 1,
       collisionFilter: {
-        category: 0x0002, 
-        mask: 0x0001     
+        category: 0x0002,
+        mask: 0x0001
       }
     };
 
     // Top wall of funnel
     const topWall = Matter.Bodies.rectangle(
       midX,
-      centerY - spreadY/2,
+      centerY - spreadY / 2,
       wallLength,
       10,
       {
         ...wallOptions,
-        angle: Math.PI/12 
+        angle: Math.PI / 12
       }
     );
 
     // Bottom wall of funnel
     const bottomWall = Matter.Bodies.rectangle(
       midX,
-      centerY + spreadY/2,
+      centerY + spreadY / 2,
       wallLength,
       10,
       {
         ...wallOptions,
-        angle: -Math.PI/12 
+        angle: -Math.PI / 12
       }
     );
 
@@ -171,7 +172,7 @@ export class CanvasController {
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
     const particles: Particle[] = [];
-    const numParticles = 75; 
+    const numParticles = 75;
 
     if (this.funnelEnabled) {
       // Create particles arranged in a circle
@@ -181,19 +182,20 @@ export class CanvasController {
         const particleY = y + Math.sin(angle) * radius;
 
         // Create particle body with smaller radius
-        const body = Matter.Bodies.circle(particleX, particleY, 0.15, { 
+        const body = Matter.Bodies.circle(particleX, particleY, 0.15, {
           friction: 0.001, // Almost no friction
           restitution: 1.0, // Perfect elasticity
-          mass: 0.01, 
+          mass: 0.01,
           density: 0.001, // Reduced density
           collisionFilter: {
-            category: 0x0001, 
-            mask: 0x0002     
-          }
+            category: 0x0001,
+            mask: 0x0002
+          },
+          frictionAir: 0 // Disable air friction
         });
 
         // Keep velocity the same since it's working well
-        const speed = 1.5;
+        const speed = 2.5; // Increased base speed
         Matter.Body.setVelocity(body, {
           x: Math.cos(angle) * speed,
           y: Math.sin(angle) * speed
@@ -204,7 +206,8 @@ export class CanvasController {
         particles.push({
           body,
           intensity,
-          age: 0
+          age: 0,
+          initialSpeed: speed // Store initial speed
         });
       }
     }
@@ -257,9 +260,22 @@ export class CanvasController {
 
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
-                              normalizedX <= this.params.endTime;
+        normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
+        // Maintain particle velocities
+        bubble.particles.forEach(particle => {
+          const velocity = particle.body.velocity;
+          const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+          if (currentSpeed !== 0) { // Avoid division by zero
+            const scaleFactor = particle.initialSpeed / currentSpeed;
+            Matter.Body.setVelocity(particle.body, {
+              x: velocity.x * scaleFactor,
+              y: velocity.y * scaleFactor
+            });
+          }
+        });
+
         // Draw particles
         this.ctx.beginPath();
         bubble.particles.forEach(particle => {
@@ -351,7 +367,7 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    if (Math.random() < 0.15) { 
+    if (Math.random() < 0.15) {
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
