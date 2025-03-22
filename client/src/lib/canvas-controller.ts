@@ -171,7 +171,7 @@ export class CanvasController {
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
     const particles: Particle[] = [];
-    const numParticles = 100; // Increased from 50 to 100
+    const numParticles = 75; 
 
     if (this.funnelEnabled) {
       // Create particles arranged in a circle
@@ -267,7 +267,7 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.15, 0, Math.PI * 2); // Match the smaller physical size
+          this.ctx.arc(pos.x, pos.y, 0.15, 0, Math.PI * 2); 
         });
 
         if (isInActiveWindow) {
@@ -349,7 +349,7 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    if (Math.random() < (0.08 + intensity * 0.192)) { 
+    if (Math.random() < 0.15) { 
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
