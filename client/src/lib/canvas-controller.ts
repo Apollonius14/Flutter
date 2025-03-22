@@ -74,12 +74,10 @@ export class CanvasController {
     const wallLength = height * 0.4;
 
     const wallOptions = {
-      isStatic: false,
+      isStatic: true,
       render: { visible: true },
       friction: 0,
       restitution: 1.0,
-      mass: 50,        // Light mass to allow movement
-      // Prevent rotation completely
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -107,90 +105,6 @@ export class CanvasController {
         angle: 0
       }
     );
-
-    // Add spring constraints to anchor the walls
-    const stiffness = 0.99; // High stiffness for tiny movements
-    const damping = 0.5;    // Moderate damping
-
-    // For each wall, create constraints at both ends to:
-    // 1. Lock Y position and prevent rotation
-    // 2. Allow only tiny X movement
-
-    // Top wall constraints
-    Matter.World.add(this.engine.world, [
-      // Y-position lock for top end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
-        bodyB: topWall,
-        pointB: { x: 0, y: -wallLength/2 },
-        stiffness: 1, // Perfect stiffness for y-axis
-        length: 0
-      }),
-      // Y-position lock for bottom end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 + wallLength/2 },
-        bodyB: topWall,
-        pointB: { x: 0, y: wallLength/2 },
-        stiffness: 1, // Perfect stiffness for y-axis
-        length: 0
-      }),
-      // X-axis spring for top end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
-        bodyB: topWall,
-        pointB: { x: 0, y: -wallLength/2 },
-        stiffness,
-        damping,
-        length: 0
-      }),
-      // X-axis spring for bottom end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY - gapSize/2 + wallLength/2 },
-        bodyB: topWall,
-        pointB: { x: 0, y: wallLength/2 },
-        stiffness,
-        damping,
-        length: 0
-      })
-    ]);
-
-    // Bottom wall constraints with identical pattern
-    Matter.World.add(this.engine.world, [
-      // Y-position lock for top end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 - wallLength/2 },
-        bodyB: bottomWall,
-        pointB: { x: 0, y: -wallLength/2 },
-        stiffness: 1,
-        length: 0
-      }),
-      // Y-position lock for bottom end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
-        bodyB: bottomWall,
-        pointB: { x: 0, y: wallLength/2 },
-        stiffness: 1,
-        length: 0
-      }),
-      // X-axis spring for top end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 - wallLength/2 },
-        bodyB: bottomWall,
-        pointB: { x: 0, y: -wallLength/2 },
-        stiffness,
-        damping,
-        length: 0
-      }),
-      // X-axis spring for bottom end
-      Matter.Constraint.create({
-        pointA: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
-        bodyB: bottomWall,
-        pointB: { x: 0, y: wallLength/2 },
-        stiffness,
-        damping,
-        length: 0
-      })
-    ]);
 
     this.funnelWalls = [topWall, bottomWall];
     this.funnelWalls.forEach(wall => Matter.World.add(this.engine.world, wall));
