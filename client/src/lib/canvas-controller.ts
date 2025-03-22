@@ -182,7 +182,7 @@ export class CanvasController {
         const particleY = y + Math.sin(angle) * radius;
 
         // Create particle body with smaller radius
-        const body = Matter.Bodies.circle(particleX, particleY, 0.15, {
+        const body = Matter.Bodies.circle(particleX, particleY, 0.1, { // Reduced from 0.15 to 0.1
           friction: 0, // Completely frictionless
           restitution: 1.0, // Perfect elasticity
           mass: 0.01,
@@ -276,20 +276,20 @@ export class CanvasController {
           }
         });
 
-        // Draw particles
+        // Draw particles with matching visual size
         this.ctx.beginPath();
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.15, 0, Math.PI * 2);
+          this.ctx.arc(pos.x, pos.y, 0.1, 0, Math.PI * 2); // Match the smaller physical size
         });
 
         if (isInActiveWindow) {
           // Active particles: full brightness, no decay
-          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
-          this.ctx.shadowBlur = 10;
+          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.8)'; // Increased shadow opacity
+          this.ctx.shadowBlur = 8; // Adjusted blur for smaller size
           this.ctx.strokeStyle = 'rgba(0, 200, 255, 1.0)';
-          this.ctx.lineWidth = 0.5 + bubble.intensity * 16;
+          this.ctx.lineWidth = 0.3 + bubble.intensity * 12; // Adjusted line width for smaller particles
         } else {
           // Inactive particles: apply opacity decay
           const opacity = 1 - (bubble.age / bubble.maxAge);
