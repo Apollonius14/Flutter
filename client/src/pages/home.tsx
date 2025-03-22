@@ -5,6 +5,8 @@ import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Play, Pause, Languages } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
+import { Switch } from "@/components/ui/switch"; // Import the Switch component
+
 
 const translations = {
   en: {
@@ -16,7 +18,8 @@ const translations = {
     endTime: "End Time (0-100ms)",
     peakPower: "Peak Power (1-10)",
     play: "Play",
-    pause: "Pause"
+    pause: "Pause",
+    showFunnel: "Show Funnel"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -27,7 +30,8 @@ const translations = {
     endTime: "وقت النهاية (٠-١٠٠ م.ث)",
     peakPower: "قوة الذروة (١-١٠)",
     play: "تشغيل",
-    pause: "إيقاف"
+    pause: "إيقاف",
+    showFunnel: "إظهار القمع"
   }
 };
 
@@ -37,7 +41,6 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
   const t = translations[language];
-
   const [params, setParams] = useState({
     turbulence: 2.5,
     coherence: 2.5,
@@ -46,6 +49,7 @@ export default function Home() {
     peakPower: 5,
     pulseIntensity: 0,
   });
+  const [funnelEnabled, setFunnelEnabled] = useState(false); // Added funnelEnabled state
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -72,6 +76,11 @@ export default function Home() {
       controller.pause();
     }
   }, [isPlaying, controller]);
+
+  useEffect(() => {
+    if (!controller) return;
+    controller.setFunnelEnabled(funnelEnabled); // Update funnelEnabled in controller
+  }, [funnelEnabled, controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
@@ -191,6 +200,19 @@ export default function Home() {
                   className="pt-2"
                 />
               </div>
+
+              <div className="space-y-2"> {/* Added funnel toggle */}
+                <div className="flex items-center justify-between">
+                  <Label className={`text-gray-200 ${language === 'ar' ? 'arabic' : ''}`}>
+                    {t.showFunnel}
+                  </Label>
+                  <Switch
+                    checked={funnelEnabled}
+                    onCheckedChange={setFunnelEnabled}
+                  />
+                </div>
+              </div>
+
             </div>
 
             <div className="flex justify-center">

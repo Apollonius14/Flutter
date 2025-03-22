@@ -1,3 +1,5 @@
+import Matter from 'matter-js';
+
 interface AnimationParams {
   turbulence: number;
   coherence: number;
@@ -15,6 +17,7 @@ interface Bubble {
   age: number;
   maxAge: number;
   intensity: number;
+  body?: Matter.Body;
 }
 
 export class CanvasController {
@@ -24,12 +27,23 @@ export class CanvasController {
   private animationFrame: number | null = null;
   private startTime: number | null = null;
   private bubbles: Bubble[] = [];
+  private funnelEnabled: boolean = false;
+
+  // Matter.js components
+  private engine: Matter.Engine;
+  private funnelWalls: Matter.Body[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
+
+    // Initialize Matter.js engine
+    this.engine = Matter.Engine.create({
+      gravity: { x: 0, y: 0 }
+    });
+
     this.params = {
       turbulence: 2.5,
       coherence: 2.5,
@@ -39,8 +53,62 @@ export class CanvasController {
       pulseIntensity: 0,
     };
 
-    // Set canvas background to dark
     this.canvas.style.backgroundColor = '#1a1a1a';
+    this.setupFunnelWalls();
+  }
+
+  private setupFunnelWalls() {
+    // Remove existing walls
+    this.funnelWalls.forEach(wall => Matter.World.remove(this.engine.world, wall));
+    this.funnelWalls = [];
+
+    if (!this.funnelEnabled) return;
+
+    const { width, height } = this.canvas;
+    const midX = width * 0.5;
+    const startY = height * 0.3;
+    const endY = height * 0.7;
+    const spread = width * 0.2;
+
+    // Create funnel walls
+    const wallOptions = {
+      isStatic: true,
+      render: { visible: true },
+      friction: 0,
+      restitution: 0.8
+    };
+
+    // Left wall of funnel
+    const leftWall = Matter.Bodies.rectangle(
+      midX - spread/2,
+      (startY + endY)/2,
+      10,
+      endY - startY,
+      {
+        ...wallOptions,
+        angle: -Math.PI/6
+      }
+    );
+
+    // Right wall of funnel
+    const rightWall = Matter.Bodies.rectangle(
+      midX + spread/2,
+      (startY + endY)/2,
+      10,
+      endY - startY,
+      {
+        ...wallOptions,
+        angle: Math.PI/6
+      }
+    );
+
+    this.funnelWalls = [leftWall, rightWall];
+    this.funnelWalls.forEach(wall => Matter.World.add(this.engine.world, wall));
+  }
+
+  setFunnelEnabled(enabled: boolean) {
+    this.funnelEnabled = enabled;
+    this.setupFunnelWalls();
   }
 
   updateParams(params: AnimationParams) {
@@ -63,14 +131,7 @@ export class CanvasController {
 
   cleanup() {
     this.pause();
-  }
-
-  private animate() {
-    if (!this.startTime) return;
-    const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 2000) / 2000;
-    this.drawFrame(progress);
-    this.animationFrame = requestAnimationFrame(() => this.animate());
+    Matter.Engine.clear(this.engine);
   }
 
   private sinc(x: number): number {
@@ -97,7 +158,7 @@ export class CanvasController {
     const yVariation = (5 - coherence) * 20;
     const y = centerY + (Math.random() - 0.5) * yVariation;
 
-    return {
+    const bubble: Bubble = {
       x,
       y,
       radius,
@@ -106,17 +167,37 @@ export class CanvasController {
       maxAge: 80 + intensity * 40,
       intensity
     };
+
+    if (this.funnelEnabled) {
+      // Create a circular body for the bubble
+      const body = Matter.Bodies.circle(x, y, radius, {
+        friction: 0,
+        restitution: 0.8,
+        mass: 1,
+        velocity: { x: 1, y: 0 }
+      });
+      Matter.World.add(this.engine.world, body);
+      bubble.body = body;
+    }
+
+    return bubble;
   }
 
   private updateAndDrawBubbles() {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      const baseGrowth = 2 + bubble.intensity * 48; 
+      const baseGrowth = 2 + bubble.intensity * 48;
       const growthFactor = 1 + (bubble.age / bubble.maxAge) * baseGrowth;
       bubble.radius = bubble.initialRadius * growthFactor;
 
       const opacity = 1 - (bubble.age / bubble.maxAge);
+
+      // Update position from physics engine if enabled
+      if (this.funnelEnabled && bubble.body) {
+        bubble.x = bubble.body.position.x;
+        bubble.y = bubble.body.position.y;
+      }
 
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
@@ -132,17 +213,45 @@ export class CanvasController {
         this.ctx.lineWidth = 1 + bubble.intensity * 16;
       } else {
         this.ctx.shadowBlur = 0;
-        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`; 
+        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
         this.ctx.lineWidth = 0.5;
       }
 
       this.ctx.stroke();
 
-      return bubble.age < bubble.maxAge;
+      if (bubble.age >= bubble.maxAge) {
+        if (bubble.body) {
+          Matter.World.remove(this.engine.world, bubble.body);
+        }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  private drawFunnel() {
+    if (!this.funnelEnabled) return;
+
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    this.ctx.lineWidth = 2;
+
+    this.funnelWalls.forEach(wall => {
+      const vertices = wall.vertices;
+      this.ctx.beginPath();
+      this.ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        this.ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      this.ctx.closePath();
+      this.ctx.stroke();
     });
   }
 
   private drawFrame(progress: number) {
+    if (this.funnelEnabled) {
+      Matter.Engine.update(this.engine, 1000 / 60);
+    }
+
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
 
@@ -177,6 +286,15 @@ export class CanvasController {
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
+    this.drawFunnel();
     this.updateAndDrawBubbles();
+  }
+
+  private animate() {
+    if (!this.startTime) return;
+    const elapsed = performance.now() - this.startTime;
+    const progress = (elapsed % 2000) / 2000;
+    this.drawFrame(progress);
+    this.animationFrame = requestAnimationFrame(() => this.animate());
   }
 }
