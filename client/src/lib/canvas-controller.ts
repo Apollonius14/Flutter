@@ -66,9 +66,9 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const startY = height * 0.3;
-    const endY = height * 0.7;
-    const spread = width * 0.2;
+    const spreadY = height * 0.2; // Vertical spread for funnel
+    const wallLength = height * 0.4; // Length of funnel walls
+    const centerY = height * 0.5;
 
     // Create funnel walls
     const wallOptions = {
@@ -78,31 +78,31 @@ export class CanvasController {
       restitution: 0.8
     };
 
-    // Left wall of funnel
-    const leftWall = Matter.Bodies.rectangle(
-      midX - spread/2,
-      (startY + endY)/2,
+    // Top wall of funnel
+    const topWall = Matter.Bodies.rectangle(
+      midX,
+      centerY - spreadY/2,
+      wallLength,
       10,
-      endY - startY,
       {
         ...wallOptions,
-        angle: -Math.PI/6
+        angle: Math.PI/6 // 30 degrees from horizontal
       }
     );
 
-    // Right wall of funnel
-    const rightWall = Matter.Bodies.rectangle(
-      midX + spread/2,
-      (startY + endY)/2,
+    // Bottom wall of funnel
+    const bottomWall = Matter.Bodies.rectangle(
+      midX,
+      centerY + spreadY/2,
+      wallLength,
       10,
-      endY - startY,
       {
         ...wallOptions,
-        angle: Math.PI/6
+        angle: -Math.PI/6 // -30 degrees from horizontal
       }
     );
 
-    this.funnelWalls = [leftWall, rightWall];
+    this.funnelWalls = [topWall, bottomWall];
     this.funnelWalls.forEach(wall => Matter.World.add(this.engine.world, wall));
   }
 
@@ -232,19 +232,31 @@ export class CanvasController {
   private drawFunnel() {
     if (!this.funnelEnabled) return;
 
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     this.ctx.lineWidth = 2;
 
-    this.funnelWalls.forEach(wall => {
-      const vertices = wall.vertices;
-      this.ctx.beginPath();
-      this.ctx.moveTo(vertices[0].x, vertices[0].y);
-      for (let i = 1; i < vertices.length; i++) {
-        this.ctx.lineTo(vertices[i].x, vertices[i].y);
-      }
-      this.ctx.closePath();
-      this.ctx.stroke();
-    });
+    // Draw funnel as a filled path
+    this.ctx.beginPath();
+    const vertices = this.funnelWalls.flatMap(wall => wall.vertices);
+    this.ctx.moveTo(vertices[0].x, vertices[0].y);
+
+    // Draw top wall
+    for (let i = 0; i < 4; i++) {
+      this.ctx.lineTo(vertices[i].x, vertices[i].y);
+    }
+
+    // Connect to bottom wall
+    this.ctx.lineTo(vertices[4].x, vertices[4].y);
+
+    // Draw bottom wall
+    for (let i = 4; i < 8; i++) {
+      this.ctx.lineTo(vertices[i].x, vertices[i].y);
+    }
+
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.stroke();
   }
 
   private drawFrame(progress: number) {
