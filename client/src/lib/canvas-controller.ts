@@ -39,6 +39,7 @@ export class CanvasController {
       pulseIntensity: 0,
     };
 
+    // Set canvas background to dark
     this.canvas.style.backgroundColor = '#1a1a1a';
   }
 
@@ -83,7 +84,6 @@ export class CanvasController {
     const { coherence } = this.params;
     const centerY = this.canvas.height / 2;
 
-    // Calculate intensity from sinc wave at this position
     const normalizedX = x / this.canvas.width * 100;
     const midTime = (this.params.startTime + this.params.endTime) / 2;
     const timeWindow = this.params.endTime - this.params.startTime;
@@ -91,26 +91,19 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    // Base radius now affected only by coherence
-    const baseRadius = 4;
-    const coherenceFactor = coherence / 5; // Normalize to 0-1
-    const radiusMultiplier = coherenceFactor === 1 
-      ? 1 // Perfect coherence = identical circles
-      : Math.exp(
-          (Math.random() - 0.5) * 2 * // Range -1 to 1
-          (1 - coherenceFactor) * // Scale by inverse coherence
-          Math.log(10) // Results in range 0.1x to 10x
-        );
-
-    const radius = baseRadius * radiusMultiplier;
+    const baseRadius = 4 + coherence * 2;
+    const radiusVariation = (5 - coherence) * 1.5;
+    const radius = baseRadius + (Math.random() - 0.5) * radiusVariation;
+    const yVariation = (5 - coherence) * 20;
+    const y = centerY + (Math.random() - 0.5) * yVariation;
 
     return {
       x,
-      y: centerY, // Always at center
+      y,
       radius,
       initialRadius: radius,
       age: 0,
-      maxAge: 80,
+      maxAge: 80 + intensity * 40,
       intensity
     };
   }
@@ -119,8 +112,8 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      // Constant growth rate for all bubbles
-      const growthFactor = 1 + (bubble.age / bubble.maxAge) * 2;
+      const baseGrowth = 2 + bubble.intensity * 48; 
+      const growthFactor = 1 + (bubble.age / bubble.maxAge) * baseGrowth;
       bubble.radius = bubble.initialRadius * growthFactor;
 
       const opacity = 1 - (bubble.age / bubble.maxAge);
@@ -139,7 +132,7 @@ export class CanvasController {
         this.ctx.lineWidth = 1 + bubble.intensity * 16;
       } else {
         this.ctx.shadowBlur = 0;
-        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`; 
         this.ctx.lineWidth = 0.5;
       }
 
@@ -180,10 +173,7 @@ export class CanvasController {
     const sincValue = this.sinc(scaledTime);
     const intensity = (sincValue + 1) / 2;
 
-    // Circle generation rate based on pulse intensity (exponential scaling)
-    const baseRate = 0.4;
-    const maxMultiplier = Math.pow(10, this.params.pulseIntensity);
-    if (Math.random() < (baseRate * maxMultiplier * intensity)) {
+    if (Math.random() < (0.4 + intensity * 0.96)) {
       this.bubbles.push(this.generateBubble(timeX, currentTime));
     }
 
