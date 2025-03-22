@@ -92,9 +92,9 @@ export class CanvasController {
     const intensity = (sincValue + 1) / 2;
 
     // Base radius now affected only by coherence
-    const baseRadius = 12; // Increased from 4 to 12
+    const baseRadius = 4;
     const coherenceFactor = coherence / 5; // Normalize to 0-1
-    const radiusMultiplier = coherenceFactor === 1
+    const radiusMultiplier = coherenceFactor === 1 
       ? 1 // Perfect coherence = identical circles
       : Math.exp(
           (Math.random() - 0.5) * 2 * // Range -1 to 1
@@ -104,20 +104,13 @@ export class CanvasController {
 
     const radius = baseRadius * radiusMultiplier;
 
-    // Determine maxAge based on whether this circle is in the active window
-    const isInActiveWindow = normalizedX >= this.params.startTime &&
-                           normalizedX <= this.params.endTime;
-
-    // Base lifetime of 80, multiplied by peakPower (1-10) for active circles
-    const maxAge = isInActiveWindow ? 80 * this.params.peakPower : 80;
-
     return {
       x,
       y: centerY, // Always at center
       radius,
       initialRadius: radius,
       age: 0,
-      maxAge,
+      maxAge: 80,
       intensity
     };
   }
