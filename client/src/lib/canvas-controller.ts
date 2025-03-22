@@ -55,35 +55,6 @@ export class CanvasController {
 
     this.canvas.style.backgroundColor = '#1a1a1a';
     this.setupFunnelWalls();
-
-    Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      event.pairs.forEach((pair) => {
-        const { bodyA, bodyB } = pair;
-
-        if (bodyA.collisionFilter.category === 0x0001 && bodyB.collisionFilter.category === 0x0002) {
-          const particle = bodyA;
-          const wall = bodyB;
-
-          const wallAngle = wall.angle;
-          const normalX = Math.sin(wallAngle);
-          const normalY = -Math.cos(wallAngle);
-
-          const v = particle.velocity;
-          const speed = Math.sqrt(v.x * v.x + v.y * v.y);
-
-          const dot = v.x * normalX + v.y * normalY;
-
-          const reflectedVx = v.x - 2 * dot * normalX;
-          const reflectedVy = v.y - 2 * dot * normalY;
-
-          const mag = Math.sqrt(reflectedVx * reflectedVx + reflectedVy * reflectedVy);
-          Matter.Body.setVelocity(particle, {
-            x: (reflectedVx / mag) * speed,
-            y: (reflectedVy / mag) * speed
-          });
-        }
-      });
-    });
   }
 
   private setupFunnelWalls() {
@@ -185,8 +156,8 @@ export class CanvasController {
             density: 0.001,
             collisionFilter: {
               category: 0x0001,
-              mask: 0x0002, // Only collide with walls
-              group: -1 // Negative group means particles won't collide with each other
+              mask: 0x0002,
+              group: -1
             },
             frictionAir: 0
           });
@@ -251,7 +222,6 @@ export class CanvasController {
     Matter.Engine.clear(this.engine);
   }
 
-
   private drawFunnel() {
     if (!this.funnelEnabled) return;
 
@@ -281,6 +251,7 @@ export class CanvasController {
         normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
+        // Maintain constant speed for particles
         bubble.particles.forEach(particle => {
           const velocity = particle.body.velocity;
           const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
