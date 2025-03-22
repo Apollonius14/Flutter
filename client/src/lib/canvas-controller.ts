@@ -81,7 +81,7 @@ export class CanvasController {
       isStatic: true,
       render: { visible: true },
       friction: 0.001, // Almost no friction
-      restitution: 0.95, // More bouncy
+      restitution: 1.0, // Perfect elasticity
       mass: 1000, 
       density: 1,
       collisionFilter: {
@@ -182,8 +182,8 @@ export class CanvasController {
 
         // Create particle body with smaller radius
         const body = Matter.Bodies.circle(particleX, particleY, 0.15, { 
-          friction: 0.001, // Almost no friction
-          restitution: 0.95, // More bouncy
+          friction: 0.0001, // Minimal friction
+          restitution: 1.0, // Perfect elasticity
           mass: 0.01, 
           density: 0.001, // Reduced density
           collisionFilter: {
