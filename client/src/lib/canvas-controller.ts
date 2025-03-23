@@ -53,7 +53,7 @@ export class CanvasController {
       coherence: 2.5,
       startTime: 0,
       endTime: 100,
-      frequency: 0.0375  // Reduced from 0.075 (halved)
+      frequency: 0.009375  // Reduced from 0.01875 (halved again)
     };
 
     this.canvas.style.backgroundColor = '#1a1a1a';
@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 2.67; // Reduced from 4.0 (by one-third)
+          const speed = 0.67; // Reduced from 1.33 (halved again)
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -231,8 +231,8 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
-    // Create semi-transparent clear for motion blur effect
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.35)'; // Darker background with partial transparency
+    // Increase motion blur by reducing alpha further
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.15)'; // Reduced from 0.2 for more trail
     this.ctx.fillRect(0, 0, width, height);
 
     const timeX = width * progress;
@@ -319,7 +319,7 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 6667) / 6667; // 5x faster (period reduced from 33335 to 6667)
+    const progress = (elapsed % 6667) / 6667; // 5x faster (period reduced from 33335)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
