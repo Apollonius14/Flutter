@@ -117,7 +117,7 @@ export class CanvasController {
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
-    const fixedRadius = 4;
+    const fixedRadius = 6;
 
     const positions: number[] = [];
     if (coherence === 5) {
@@ -139,7 +139,6 @@ export class CanvasController {
         normalizedX <= this.params.endTime;
       const intensity = isInActiveWindow ? 1.0 : 0.3;
 
-      // Create a single ring of particles for this wave point
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
         const numParticlesInRing = 24; // Doubled from 12
