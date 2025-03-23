@@ -162,15 +162,10 @@ export class CanvasController {
             frictionAir: 0.001 // Added small air friction
           });
 
-          // Match particle speed to sweep line movement
-          // Sweep line covers canvas width in 2000ms
-          // Calculate required velocity in pixels per millisecond
-          const horizontalSpeed = this.canvas.width / 2000; // pixels per ms
-          const speed = horizontalSpeed * 60; // Convert to pixels per frame at 60fps
-
+          const speed = 2.0; // Reduced from 4.0
           Matter.Body.setVelocity(body, {
-            x: speed, // Constant rightward velocity matching sweep line
-            y: 0     // No vertical velocity initially
+            x: Math.cos(angle) * speed,
+            y: Math.sin(angle) * speed
           });
 
           Matter.World.add(this.engine.world, body);
