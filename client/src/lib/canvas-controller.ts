@@ -80,7 +80,7 @@ export class CanvasController {
       isStatic: true,
       render: { visible: true },
       friction: 0,
-      restitution: 0.7,  // Changed from 1.0
+      restitution: 0.98,  // Changed from 0.7
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -117,7 +117,7 @@ export class CanvasController {
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
-    const fixedRadius = 4;
+    const fixedRadius = 4.8; // Increased by 20% from 4
 
     const positions: number[] = [];
     if (coherence === 5) {
@@ -150,7 +150,7 @@ export class CanvasController {
 
           const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
             friction: 0,
-            restitution: 0.7,
+            restitution: 0.98, // Changed from 0.7
             mass: 0.1,
             frictionAir: 0,
             collisionFilter: {
