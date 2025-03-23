@@ -107,7 +107,7 @@ export class CanvasController {
   private updateSpawnInterval() {
     // Lower frequency value = less frequent spawning = higher interval
     // Base interval now increased by 1.5x, then 1.2x, and now by another 1.5x
-    const baseInterval = 4000 / (1.5 * 1.2 * 1.5); // Increased frequency by 1.5x, then 1.2x, and now by another 1.5x
+    const baseInterval = 4000 / (1.5 * 1.2 * 1.9); // Increased frequency by 1.5x, then 1.2x, and now by another 1.5x
     this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
   }
 
@@ -215,8 +215,8 @@ export class CanvasController {
     const centerY = this.canvas.height / 2;
     const height = this.canvas.height;
 
-    const minWaves = 2;
-    const maxWaves = 6; // Increased from 5 to 6
+    const minWaves = 4;
+    const maxWaves = 8; // Increased from 5 to 6
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
@@ -279,7 +279,7 @@ export class CanvasController {
 
       const baseMaxAge = 80;
       // Increase max age of blue particles by 50% again (total 2.25x from original)
-      const maxAge = isInActiveWindow ? baseMaxAge * 6 * 1.5 * 1.5 : baseMaxAge * 0.5;
+      const maxAge = isInActiveWindow ? baseMaxAge * 6 * 1.5 * 4 : baseMaxAge * 0.5;
 
       bubbles.push({
         x,
