@@ -47,6 +47,8 @@ export default function Home() {
     frequency: 0.15,
   });
   const [funnelEnabled, setFunnelEnabled] = useState(false);
+  const [wallCurvature, setWallCurvature] = useState(0);
+  const [gapSize, setGapSize] = useState(0.4);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -78,6 +80,16 @@ export default function Home() {
     if (!controller) return;
     controller.setFunnelEnabled(funnelEnabled);
   }, [funnelEnabled, controller]);
+  
+  useEffect(() => {
+    if (!controller) return;
+    controller.setWallCurvature(wallCurvature);
+  }, [wallCurvature, controller]);
+  
+  useEffect(() => {
+    if (!controller) return;
+    controller.setGapSize(gapSize);
+  }, [gapSize, controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
@@ -185,12 +197,12 @@ export default function Home() {
                       {t.wallCurvature}
                     </Label>
                     <Slider
-                      value={[0]}
+                      value={[wallCurvature]}
                       min={0}
                       max={1}
                       step={0.01}
                       onValueChange={([value]) => {
-                        if (controller) controller.setWallCurvature(value);
+                        setWallCurvature(value);
                       }}
                       className="pt-2"
                     />
@@ -201,12 +213,12 @@ export default function Home() {
                       {t.gapSize}
                     </Label>
                     <Slider
-                      value={[0.4]}
+                      value={[gapSize]}
                       min={0.1}
                       max={0.8}
                       step={0.01}
                       onValueChange={([value]) => {
-                        if (controller) controller.setGapSize(value);
+                        setGapSize(value);
                       }}
                       className="pt-2"
                     />
