@@ -180,7 +180,7 @@ export class CanvasController {
         radius: fixedRadius,
         initialRadius: fixedRadius,
         age: 0,
-        maxAge: 80 + intensity * 40,
+        maxAge: 80 + (isInActiveWindow ? intensity * 120 : intensity * 40), // Triple for active window
         intensity,
         particles
       });
@@ -281,7 +281,7 @@ export class CanvasController {
       const fadeStart = 0.1; // Start fading when sweep line is 10% past the bubble
       const fadeEnd = 0.2;   // Complete fade by 20% past the bubble
 
-      const opacity = distanceFromSweep < fadeStart ? 1.0 : 
+      const opacity = distanceFromSweep < fadeStart ? 1.0 :
                     distanceFromSweep > fadeEnd ? 0.0 :
                     1.0 - ((distanceFromSweep - fadeStart) / (fadeEnd - fadeStart));
 
