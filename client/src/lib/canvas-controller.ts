@@ -129,8 +129,8 @@ export class CanvasController {
     const midX = width * 0.5;
     const centerY = height * 0.5;
     const gapSize = height * this.gapSize; // Use the stored gap size
-    const wallThickness = 20;
-    const wallLength = height * 0.4;
+    const wallThickness = 12; // Reduced from 20 to make walls more slender
+    const wallLength = height * 0.7; // Increased from 0.4 to 0.7 for longer walls
 
     // Set up walls as static bodies with high restitution
     const wallOptions = {
@@ -147,9 +147,6 @@ export class CanvasController {
     const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
     this.topWallAngle = -wallAngleRadians;
     this.bottomWallAngle = wallAngleRadians;
-
-    // Store angles for later reference
-    console.log(`Setting wall angles: top=${this.topWallAngle * (180/Math.PI)}°, bottom=${this.bottomWallAngle * (180/Math.PI)}°`);
 
     // Create the walls
     const topWall = Matter.Bodies.rectangle(
@@ -232,7 +229,8 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticlesInRing = Math.floor(48 * 1.3); // Increased by 30% from 48
+        // Reduced by 20% from previous value (48 * 1.3)
+        const numParticlesInRing = Math.floor((48 * 1.3) * 0.8);
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -250,7 +248,8 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.67 * 1.3 * 1.5; // Increased by another 50%
+          // Increased speed by 20% from previous value
+          const speed = 0.67 * 1.3 * 1.5 * 1.2;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -538,7 +537,7 @@ export class CanvasController {
       }
     } else {
       // Draw rectangular walls for straight walls
-      const wallThickness = 20;
+      const wallThickness = 12; // Match the thickness from setupFunnelWalls
       
       // Get wall positions
       const topWallPos = topWall.position;
@@ -597,36 +596,7 @@ export class CanvasController {
       this.ctx.restore();
     }
     
-    // Add a subtle glow effect when the wall is vibrating
-    this.wallSprings.forEach((spring, index) => {
-      if (Math.abs(spring.velocity) > 0.1) {
-        const wall = this.funnelWalls[index];
-        const wallPos = wall.position;
-        const wallBounds = wall.bounds;
-        const wallHeight = wallBounds.max.y - wallBounds.min.y;
-        const wallWidth = wallBounds.max.x - wallBounds.min.x;
-        
-        // Calculate intensity based on velocity
-        const glowIntensity = Math.min(0.3, Math.abs(spring.velocity) * 0.5);
-        
-        // Draw a larger glow around the wall with proper rotation
-        this.ctx.save();
-        this.ctx.translate(wallPos.x, wallPos.y);
-        this.ctx.rotate(wall.angle); // Use the wall's current angle
-        
-        this.ctx.beginPath();
-        this.ctx.rect(
-          -wallWidth/2 - 2,
-          -wallHeight/2 - 2,
-          wallWidth + 4,
-          wallHeight + 4
-        );
-        
-        // Cyan glow for active vibration
-        this.ctx.fillStyle = `rgba(0, 200, 255, ${glowIntensity})`;
-        this.ctx.fill();
-        this.ctx.restore();
-      }
-    });
+    // No wall highlighting effect during collisions
+    // Only maintain the wall spring data for position effects
   }
 }
