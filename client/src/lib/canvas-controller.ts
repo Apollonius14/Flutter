@@ -142,7 +142,7 @@ export class CanvasController {
       // Create a single ring of particles for this wave point
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticlesInRing = 12; // One ring of evenly spaced particles
+        const numParticlesInRing = 24; // Doubled from 12
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -160,7 +160,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 2.0;
+          const speed = 0.4; // Reduced from 2.0 (5x slower)
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -330,7 +330,7 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 2000) / 2000;
+    const progress = (elapsed % 10000) / 10000; // Changed from 2000 to 10000 (5x slower)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
