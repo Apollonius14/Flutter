@@ -117,7 +117,7 @@ export class CanvasController {
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
-    const fixedRadius = 4.8; // Increased by 20% from 4
+    const fixedRadius = 6; // Increased by 50% from 4
 
     const positions: number[] = [];
     if (coherence === 5) {
