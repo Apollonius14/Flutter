@@ -155,7 +155,7 @@ export class CanvasController {
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
-              group: -1
+              group: -1 
             }
           });
 
