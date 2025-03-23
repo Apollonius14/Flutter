@@ -53,7 +53,7 @@ export class CanvasController {
       coherence: 2.5,
       startTime: 0,
       endTime: 100,
-      frequency: 0.075  // Reduced from 0.15
+      frequency: 0.0375  // Reduced from 0.075 (halved)
     };
 
     this.canvas.style.backgroundColor = '#1a1a1a';
@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 4.0; // Reduced from 8.0 (half speed)
+          const speed = 2.67; // Reduced from 4.0 (by one-third)
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
