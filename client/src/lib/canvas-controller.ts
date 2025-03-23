@@ -151,11 +151,11 @@ export class CanvasController {
             friction: 0,
             restitution: 0.7,
             mass: 0.1,
-            frictionAir: 0.001,
+            frictionAir: 0, // Set to zero to remove air resistance
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
-              group: -1 
+              group: -1
             }
           });
 
