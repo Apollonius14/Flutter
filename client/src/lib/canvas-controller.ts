@@ -24,6 +24,14 @@ interface Bubble {
   particles: Particle[];
 }
 
+interface WallSpring {
+  body: Matter.Body;
+  equilibriumX: number;
+  velocity: number;
+  displacement: number;
+  lastUpdateTime: number;
+}
+
 export class CanvasController {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -34,6 +42,7 @@ export class CanvasController {
   private funnelEnabled: boolean = false;
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
+  private wallSprings: WallSpring[] = [];
   private lastSpawnTime: number = 0;
   private spawnInterval: number = 1000; // Default spawn interval in ms
 
@@ -63,6 +72,35 @@ export class CanvasController {
 
     this.canvas.style.backgroundColor = '#1a1a1a';
     this.setupFunnelWalls();
+    
+    // Set up collision detection to trigger spring vibrations
+    Matter.Events.on(this.engine, 'collisionStart', (event) => {
+      event.pairs.forEach((pair) => {
+        // Check if one of the collision bodies is a wall
+        const wallIndex = this.funnelWalls.findIndex(wall => 
+          wall.id === pair.bodyA.id || wall.id === pair.bodyB.id
+        );
+        
+        if (wallIndex !== -1) {
+          // Get the other body (the particle)
+          const particle = pair.bodyA.id === this.funnelWalls[wallIndex].id ? pair.bodyB : pair.bodyA;
+          // Calculate impact force based on relative velocity
+          const relVelocity = {
+            x: particle.velocity.x - this.funnelWalls[wallIndex].velocity.x,
+            y: particle.velocity.y - this.funnelWalls[wallIndex].velocity.y
+          };
+          
+          // Get the wall spring
+          const wallSpring = this.wallSprings[wallIndex];
+          if (wallSpring) {
+            // Apply impulse to wall spring based on x-component of relative velocity
+            // Scale down the impulse since we're dealing with many small particles
+            const impulse = relVelocity.x * 0.1;
+            wallSpring.velocity += impulse;
+          }
+        }
+      });
+    });
   }
   
   // Helper method to update spawn interval based on frequency
@@ -79,6 +117,7 @@ export class CanvasController {
       Matter.Composite.remove(this.engine.world, wall);
     });
     this.funnelWalls = [];
+    this.wallSprings = []; // Clear wall springs
 
     if (!this.funnelEnabled) return;
 
@@ -90,10 +129,18 @@ export class CanvasController {
     const wallLength = height * 0.4;
 
     const wallOptions = {
-      isStatic: true,
-      render: { visible: true },
+      // Not static anymore so they can move
+      isStatic: false,
+      // Very high mass to simulate a heavy spring
+      mass: 100,
+      // Low friction
       friction: 0,
-      restitution: 0.99,  // Changed from 0.7 to make collisions more elastic
+      // High restitution for elastic collisions
+      restitution: 0.99,
+      // Prevent walls from rotating
+      inertia: Infinity,
+      // Allow limited horizontal movement only
+      inverseInertia: 0,
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -116,8 +163,51 @@ export class CanvasController {
       wallOptions
     );
 
+    // Create spring behavior for walls
+    const currentTime = performance.now();
+    
+    this.wallSprings = [
+      {
+        body: topWall,
+        equilibriumX: midX,
+        velocity: 0,
+        displacement: 0,
+        lastUpdateTime: currentTime
+      },
+      {
+        body: bottomWall,
+        equilibriumX: midX,
+        velocity: 0,
+        displacement: 0,
+        lastUpdateTime: currentTime
+      }
+    ];
+
     this.funnelWalls = [topWall, bottomWall];
     Matter.Composite.add(this.engine.world, this.funnelWalls);
+    
+    // Add constraints to restrict vertical movement
+    const topConstraint = Matter.Constraint.create({
+      bodyA: topWall,
+      pointA: { x: 0, y: 0 },
+      pointB: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
+      stiffness: 1,
+      length: 0,
+      damping: 0,
+      render: { visible: false }
+    });
+    
+    const bottomConstraint = Matter.Constraint.create({
+      bodyA: bottomWall,
+      pointA: { x: 0, y: 0 },
+      pointB: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
+      stiffness: 1,
+      length: 0,
+      damping: 0,
+      render: { visible: false }
+    });
+    
+    Matter.Composite.add(this.engine.world, [topConstraint, bottomConstraint]);
   }
 
   private generateBubbles(x: number): Bubble[] {
@@ -237,7 +327,52 @@ export class CanvasController {
   }
 
   private drawFrame(progress: number) {
+    // Update wall springs before physics engine
     if (this.funnelEnabled) {
+      // Spring physics parameters
+      const springConstant = 0.25; // Spring stiffness
+      const dampingFactor = 0.05; // Low damping for oscillation
+
+      // Maximum particle size to set max vibration amplitude
+      const maxAmplitude = 2.0; // About the size of a particle
+
+      // Update spring physics for walls
+      const currentTime = performance.now();
+      this.wallSprings.forEach(spring => {
+        const deltaTime = (currentTime - spring.lastUpdateTime) / 1000; // Convert to seconds
+        if (deltaTime > 0) {
+          // Calculate spring force: F = -kx (where k is spring constant, x is displacement)
+          const springForce = -springConstant * spring.displacement;
+          // Calculate damping force: F = -cv (where c is damping factor, v is velocity)
+          const dampingForce = -dampingFactor * spring.velocity;
+          // Total force
+          const totalForce = springForce + dampingForce;
+          
+          // Update velocity: v = v + a*t (where a = F/m)
+          // For simplicity, assuming mass of 1 for calculations
+          spring.velocity += totalForce * deltaTime;
+          
+          // Update displacement: x = x + v*t
+          spring.displacement += spring.velocity * deltaTime;
+          
+          // Constrain displacement to maximum amplitude
+          if (Math.abs(spring.displacement) > maxAmplitude) {
+            spring.displacement = Math.sign(spring.displacement) * maxAmplitude;
+            // Reduce velocity when hitting amplitude limits
+            spring.velocity *= 0.8;
+          }
+          
+          // Update the wall position
+          Matter.Body.setPosition(spring.body, {
+            x: spring.equilibriumX + spring.displacement,
+            y: spring.body.position.y
+          });
+          
+          spring.lastUpdateTime = currentTime;
+        }
+      });
+
+      // Regular physics update
       const numSubSteps = 5;
       const subStepTime = (1000 / 60) / numSubSteps;
       for (let i = 0; i < numSubSteps; i++) {
@@ -352,20 +487,25 @@ export class CanvasController {
     if (this.funnelWalls.length !== 2) return;
     
     const [topWall, bottomWall] = this.funnelWalls;
-    const { width, height } = this.canvas;
-    const midX = width * 0.5;
-    const centerY = height * 0.5;
-    const gapSize = height * 0.4;
     const wallThickness = 20;
-    const wallLength = height * 0.4;
     
-    // Draw top wall
+    // Get wall positions from the actual physics bodies
+    const topWallPos = topWall.position;
+    const bottomWallPos = bottomWall.position;
+    
+    // Get wall dimensions
+    const topWallBounds = topWall.bounds;
+    const bottomWallBounds = bottomWall.bounds;
+    const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
+    const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
+    
+    // Draw top wall at its current position
     this.ctx.beginPath();
     this.ctx.rect(
-      midX - wallThickness/2,
-      centerY - gapSize/2 - wallLength,
+      topWallPos.x - wallThickness/2,
+      topWallPos.y - topWallHeight/2,
       wallThickness,
-      wallLength
+      topWallHeight
     );
     
     // Smoky white fill
@@ -377,13 +517,13 @@ export class CanvasController {
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
     
-    // Draw bottom wall
+    // Draw bottom wall at its current position
     this.ctx.beginPath();
     this.ctx.rect(
-      midX - wallThickness/2,
-      centerY + gapSize/2,
+      bottomWallPos.x - wallThickness/2,
+      bottomWallPos.y - bottomWallHeight/2,
       wallThickness,
-      wallLength
+      bottomWallHeight
     );
     
     // Smoky white fill
@@ -394,5 +534,31 @@ export class CanvasController {
     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
+    
+    // Add a subtle glow effect when the wall is vibrating
+    this.wallSprings.forEach((spring, index) => {
+      if (Math.abs(spring.velocity) > 0.1) {
+        const wall = this.funnelWalls[index];
+        const wallPos = wall.position;
+        const wallBounds = wall.bounds;
+        const wallHeight = wallBounds.max.y - wallBounds.min.y;
+        
+        // Calculate intensity based on velocity
+        const glowIntensity = Math.min(0.3, Math.abs(spring.velocity) * 0.5);
+        
+        // Draw a larger glow around the wall
+        this.ctx.beginPath();
+        this.ctx.rect(
+          wallPos.x - wallThickness/2 - 2,
+          wallPos.y - wallHeight/2 - 2,
+          wallThickness + 4,
+          wallHeight + 4
+        );
+        
+        // Cyan glow for active vibration
+        this.ctx.fillStyle = `rgba(0, 200, 255, ${glowIntensity})`;
+        this.ctx.fill();
+      }
+    });
   }
 }
