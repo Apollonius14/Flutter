@@ -68,8 +68,8 @@ export class CanvasController {
   // Helper method to update spawn interval based on frequency
   private updateSpawnInterval() {
     // Lower frequency value = less frequent spawning = higher interval
-    // Base interval of 2000ms (half frequency) when slider is at 0.5
-    const baseInterval = 4000; // Double the previous value (2000) to halve the frequency
+    // Base interval now increased by 1.5x
+    const baseInterval = 4000 / 1.5; // Increased frequency by 1.5x (lower interval)
     this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
   }
 
@@ -248,6 +248,11 @@ export class CanvasController {
     // Increase motion blur by reducing alpha further
     this.ctx.fillStyle = 'rgba(26, 26, 26, 0.15)'; // Reduced from 0.2 for more trail
     this.ctx.fillRect(0, 0, width, height);
+    
+    // Draw funnel walls with smoky white fill
+    if (this.funnelEnabled) {
+      this.drawFunnelWalls();
+    }
 
     const timeX = width * progress;
 
@@ -339,5 +344,53 @@ export class CanvasController {
     const progress = (elapsed % 6667) / 6667; // 5x faster (period reduced from 33335)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
+  }
+  
+  private drawFunnelWalls() {
+    if (this.funnelWalls.length !== 2) return;
+    
+    const [topWall, bottomWall] = this.funnelWalls;
+    const { width, height } = this.canvas;
+    const midX = width * 0.5;
+    const centerY = height * 0.5;
+    const gapSize = height * 0.4;
+    const wallThickness = 20;
+    const wallLength = height * 0.4;
+    
+    // Draw top wall
+    this.ctx.beginPath();
+    this.ctx.rect(
+      midX - wallThickness/2,
+      centerY - gapSize/2 - wallLength,
+      wallThickness,
+      wallLength
+    );
+    
+    // Smoky white fill
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    this.ctx.fill();
+    
+    // White border
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
+    
+    // Draw bottom wall
+    this.ctx.beginPath();
+    this.ctx.rect(
+      midX - wallThickness/2,
+      centerY + gapSize/2,
+      wallThickness,
+      wallLength
+    );
+    
+    // Smoky white fill
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    this.ctx.fill();
+    
+    // White border
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
   }
 }
