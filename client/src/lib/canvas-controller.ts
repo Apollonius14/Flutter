@@ -175,7 +175,7 @@ export class CanvasController {
       }
 
       const baseMaxAge = 80;
-      const maxAge = isInActiveWindow ? baseMaxAge * 6 : baseMaxAge; // Increased from 3x to 6x for active window bubbles
+      const maxAge = isInActiveWindow ? baseMaxAge * 6 : baseMaxAge * 0.5; // Active: 6x longer, Inactive: 0.5x shorter
 
       bubbles.push({
         x,
@@ -334,7 +334,7 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 6667) / 6667; // Changed from 10000 to 6667 (1.5x faster)
+    const progress = (elapsed % 66670) / 66670; // Changed from 6667 to 66670 (10x slower)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
