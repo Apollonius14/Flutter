@@ -154,7 +154,7 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticlesInRing = 48; // Doubled from 24
+        const numParticlesInRing = Math.floor(48 * 1.3); // Increased by 30% from 48
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -188,7 +188,8 @@ export class CanvasController {
       }
 
       const baseMaxAge = 80;
-      const maxAge = isInActiveWindow ? baseMaxAge * 6 : baseMaxAge * 0.5;
+      // Increase max age of blue particles by 50%
+      const maxAge = isInActiveWindow ? baseMaxAge * 6 * 1.5 : baseMaxAge * 0.5;
 
       bubbles.push({
         x,
@@ -298,7 +299,8 @@ export class CanvasController {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
           // Increase particle sizes by 5x
-          const particleSize = isInActiveWindow ? 1.5 : 0.75;
+          // Make particles 30% smaller
+          const particleSize = isInActiveWindow ? 1.5 * 0.7 : 0.75 * 0.7;
           this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
         });
 
