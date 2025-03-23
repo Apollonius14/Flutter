@@ -141,17 +141,18 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticles = 30;
-        for (let i = 0; i < numParticles; i++) {
-          const angle = (i / numParticles) * Math.PI * 2;
+        // Create a single ring of particles
+        const numParticlesInRing = 12; // Reduced from 30 to have fewer, more visible particles
+        for (let i = 0; i < numParticlesInRing; i++) {
+          const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
           const particleY = y + Math.sin(angle) * fixedRadius;
 
-          const body = Matter.Bodies.circle(particleX, particleY, 0.025, {
+          const body = Matter.Bodies.circle(particleX, particleY, 0.05, { // Increased size for better visibility
             friction: 0,
             restitution: 0.7,
             mass: 0.1,
-            frictionAir: 0, // Set to zero to remove air resistance
+            frictionAir: 0,
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
@@ -159,7 +160,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 3.0;
+          const speed = 2.0;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
