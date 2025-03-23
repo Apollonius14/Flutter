@@ -17,7 +17,7 @@ const translations = {
     play: "Play",
     pause: "Pause",
     showWall: "Show Wall",
-    wallCurvature: "Wall Curvature",
+    wallCurvature: "Wall Angle (0-90°)",
     gapSize: "Gap Size"
   },
   ar: {
@@ -29,7 +29,7 @@ const translations = {
     play: "تشغيل",
     pause: "إيقاف",
     showWall: "إظهار الحائط",
-    wallCurvature: "انحناء الحائط",
+    wallCurvature: "زاوية الحائط (٠-٩٠°)",
     gapSize: "حجم الفجوة"
   }
 };
@@ -47,7 +47,7 @@ export default function Home() {
     frequency: 0.15,
   });
   const [funnelEnabled, setFunnelEnabled] = useState(false);
-  const [wallCurvature, setWallCurvature] = useState(0);
+  const [wallAngle, setWallAngle] = useState(0);
   const [gapSize, setGapSize] = useState(0.4);
 
   useEffect(() => {
@@ -83,8 +83,8 @@ export default function Home() {
   
   useEffect(() => {
     if (!controller) return;
-    controller.setWallCurvature(wallCurvature);
-  }, [wallCurvature, controller]);
+    controller.setWallCurvature(wallAngle);
+  }, [wallAngle, controller]);
   
   useEffect(() => {
     if (!controller) return;
@@ -197,12 +197,12 @@ export default function Home() {
                       {t.wallCurvature}
                     </Label>
                     <Slider
-                      value={[wallCurvature]}
+                      value={[wallAngle]}
                       min={0}
-                      max={1}
-                      step={0.01}
+                      max={90}
+                      step={1}
                       onValueChange={([value]) => {
-                        setWallCurvature(value);
+                        setWallAngle(value);
                       }}
                       className="pt-2"
                     />

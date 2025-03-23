@@ -228,7 +228,9 @@ export class CanvasController {
         wallOptions
       );
     } else {
-      // Create straight rectangular walls
+      // Create straight rectangular walls with rotation based on angle
+      const angleInRadians = (this.wallCurvature * 90) * (Math.PI / 180);
+      
       topWall = Matter.Bodies.rectangle(
         midX,
         centerY - gapSize/2 - wallLength/2,
@@ -236,6 +238,8 @@ export class CanvasController {
         wallLength,
         wallOptions
       );
+      // Rotate top wall counter-clockwise (negative angle)
+      Matter.Body.rotate(topWall, -angleInRadians);
 
       bottomWall = Matter.Bodies.rectangle(
         midX,
@@ -244,6 +248,8 @@ export class CanvasController {
         wallLength,
         wallOptions
       );
+      // Rotate bottom wall clockwise (positive angle)
+      Matter.Body.rotate(bottomWall, angleInRadians);
     }
 
     // Create spring behavior for walls
@@ -384,8 +390,9 @@ export class CanvasController {
     this.setupFunnelWalls();
   }
   
-  setWallCurvature(curvature: number) {
-    this.wallCurvature = curvature;
+  setWallCurvature(angle: number) {
+    // Convert 0-90 angle to 0-1 normalized value for internal use
+    this.wallCurvature = angle / 90;
     if (this.funnelEnabled) {
       this.setupFunnelWalls();
     }
