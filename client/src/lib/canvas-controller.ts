@@ -262,7 +262,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.67 * 1.3; // Increased by 1.3x from previous value
+          const speed = 0.67 * 1.3 * 1.5; // Increased by another 50%
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -278,8 +278,8 @@ export class CanvasController {
       }
 
       const baseMaxAge = 80;
-      // Increase max age of blue particles by 50%
-      const maxAge = isInActiveWindow ? baseMaxAge * 6 * 1.5 : baseMaxAge * 0.5;
+      // Increase max age of blue particles by 50% again (total 2.25x from original)
+      const maxAge = isInActiveWindow ? baseMaxAge * 6 * 1.5 * 1.5 : baseMaxAge * 0.5;
 
       bubbles.push({
         x,
@@ -434,8 +434,10 @@ export class CanvasController {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
           // Increase particle sizes by 5x
-          // Make particles 30% smaller
-          const particleSize = isInActiveWindow ? 1.5 * 0.7 : 0.75 * 0.7;
+          // Make active particles 20% larger (and growing with age)
+          // For inactive particles, keep them smaller
+          const growthFactor = isInActiveWindow ? 1 + (particle.age / bubble.maxAge) * 0.4 : 1;
+          const particleSize = isInActiveWindow ? 1.5 * 1.2 * growthFactor : 0.75 * 0.7;
           this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
         });
 
