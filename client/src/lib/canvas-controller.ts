@@ -139,16 +139,16 @@ export class CanvasController {
         normalizedX <= this.params.endTime;
       const intensity = isInActiveWindow ? 1.0 : 0.3;
 
+      // Create a single ring of particles for this wave point
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        // Create a single ring of particles
-        const numParticlesInRing = 12; // Reduced from 30 to have fewer, more visible particles
+        const numParticlesInRing = 12; // One ring of evenly spaced particles
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
           const particleY = y + Math.sin(angle) * fixedRadius;
 
-          const body = Matter.Bodies.circle(particleX, particleY, 0.05, { // Increased size for better visibility
+          const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
             friction: 0,
             restitution: 0.7,
             mass: 0.1,
