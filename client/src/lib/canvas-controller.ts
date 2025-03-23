@@ -203,6 +203,10 @@ export class CanvasController {
       
       // Mirror bottom vertices
       for (let i = numSegments; i >= 0; i--) {
+        const normalizedPosition = i / numSegments;
+        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2);
+        const yOffset = curveRatio * maxCurveOffset;
+        
         bottomVertices.push({
           x: bottomVertices[i].x,
           y: centerY + gapSize/2 + wallLength - yOffset
@@ -684,6 +688,7 @@ export class CanvasController {
         const wallPos = wall.position;
         const wallBounds = wall.bounds;
         const wallHeight = wallBounds.max.y - wallBounds.min.y;
+        const wallWidth = wallBounds.max.x - wallBounds.min.x;
         
         // Calculate intensity based on velocity
         const glowIntensity = Math.min(0.3, Math.abs(spring.velocity) * 0.5);
@@ -691,9 +696,9 @@ export class CanvasController {
         // Draw a larger glow around the wall
         this.ctx.beginPath();
         this.ctx.rect(
-          wallPos.x - wallThickness/2 - 2,
+          wallPos.x - wallWidth/2 - 2,
           wallPos.y - wallHeight/2 - 2,
-          wallThickness + 4,
+          wallWidth + 4,
           wallHeight + 4
         );
         
