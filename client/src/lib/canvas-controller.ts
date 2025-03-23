@@ -174,13 +174,16 @@ export class CanvasController {
         }
       }
 
+      const baseMaxAge = 80;
+      const maxAge = isInActiveWindow ? baseMaxAge * 3 : baseMaxAge; // Triple the lifetime for active window bubbles
+
       bubbles.push({
         x,
         y,
         radius: fixedRadius,
         initialRadius: fixedRadius,
         age: 0,
-        maxAge: 80 + intensity * 40,
+        maxAge,
         intensity,
         particles
       });
