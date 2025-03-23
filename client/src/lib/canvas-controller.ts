@@ -149,7 +149,7 @@ export class CanvasController {
 
           const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
             friction: 0,
-            restitution: 0.99, // Changed from 0.7 to make collisions more elastic
+            restitution: 0.99,
             mass: 0.1,
             frictionAir: 0,
             collisionFilter: {
@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.8;
+          const speed = 1.6; // Increased to match new sweep speed
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -175,7 +175,7 @@ export class CanvasController {
       }
 
       const baseMaxAge = 80;
-      const maxAge = isInActiveWindow ? baseMaxAge * 6 : baseMaxAge * 0.5; // Active: 6x longer, Inactive: 0.5x shorter
+      const maxAge = isInActiveWindow ? baseMaxAge * 6 : baseMaxAge * 0.5;
 
       bubbles.push({
         x,
@@ -258,25 +258,6 @@ export class CanvasController {
       this.bubbles.push(...newBubbles);
     }
 
-    // Draw funnel walls
-    if (this.funnelEnabled) {
-      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      this.ctx.lineWidth = 2;
-
-      this.funnelWalls.forEach(wall => {
-        const vertices = wall.vertices;
-        this.ctx.beginPath();
-        this.ctx.moveTo(vertices[0].x, vertices[0].y);
-        for (let i = 1; i < vertices.length; i++) {
-          this.ctx.lineTo(vertices[i].x, vertices[i].y);
-        }
-        this.ctx.closePath();
-        this.ctx.fill();
-        this.ctx.stroke();
-      });
-    }
-
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
@@ -290,12 +271,12 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          // Double the particle size only for active window particles
-          const particleSize = isInActiveWindow ? 0.2 : 0.1;
+          // Increase particle sizes by 50% and reduce opacity
+          const particleSize = isInActiveWindow ? 0.3 : 0.15;
           this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
         });
 
-        const opacity = 1 - (bubble.age / bubble.maxAge);
+        const opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7; // Reduced base opacity by multiplying by 0.7
         if (isInActiveWindow) {
           this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
           this.ctx.lineWidth = 0.5;
@@ -334,7 +315,7 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 66670) / 66670; // Changed from 6667 to 66670 (10x slower)
+    const progress = (elapsed % 33335) / 33335; // Doubled speed (halved period from 66670)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
