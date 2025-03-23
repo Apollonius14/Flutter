@@ -141,7 +141,7 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticlesInRing = 24;
+        const numParticlesInRing = 48; // Doubled from 24
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 8.0; // Increased to match new sweep speed (5x faster)
+          const speed = 4.0; // Reduced from 8.0 (half speed)
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
