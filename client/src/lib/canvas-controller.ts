@@ -47,6 +47,8 @@ export class CanvasController {
   private spawnInterval: number = 1000; // Default spawn interval in ms
   private wallCurvature: number = 0; // 0 = straight wall, 1 = max curve
   private gapSize: number = 0.4; // Normalized gap size (fraction of canvas height)
+  private topWallAngle: number = 0; // Store angle for top wall in radians
+  private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -275,26 +277,45 @@ export class CanvasController {
     this.funnelWalls = [topWall, bottomWall];
     Matter.Composite.add(this.engine.world, this.funnelWalls);
     
-    // Add constraints to restrict vertical movement
+    // Add constraints to enable rotation while allowing horizontal spring movement
+    const topCenter = { x: midX, y: centerY - gapSize/2 - wallLength/2 };
+    const bottomCenter = { x: midX, y: centerY + gapSize/2 + wallLength/2 };
+    
+    // Fix the vertical position only, but allow rotation and horizontal movement
+    // Use lower stiffness for more realistic spring movement with rotation
     const topConstraint = Matter.Constraint.create({
       bodyA: topWall,
       pointA: { x: 0, y: 0 },
-      pointB: { x: midX, y: centerY - gapSize/2 - wallLength/2 },
-      stiffness: 1,
+      pointB: { x: topCenter.x, y: topCenter.y },
+      stiffness: 0.8,
       length: 0,
-      damping: 0,
+      damping: 0.1,
       render: { visible: false }
     });
     
     const bottomConstraint = Matter.Constraint.create({
       bodyA: bottomWall,
       pointA: { x: 0, y: 0 },
-      pointB: { x: midX, y: centerY + gapSize/2 + wallLength/2 },
-      stiffness: 1,
+      pointB: { x: bottomCenter.x, y: bottomCenter.y },
+      stiffness: 0.8,
       length: 0,
-      damping: 0,
+      damping: 0.1,
       render: { visible: false }
     });
+    
+    // Use Matter.Body properties to set angle limits and allow rotation
+    Matter.Body.setAngularVelocity(topWall, 0);
+    Matter.Body.setAngularVelocity(bottomWall, 0);
+    
+    // Store the angles in class properties
+    if (useCurvedWalls) {
+      this.topWallAngle = 0;
+      this.bottomWallAngle = 0;
+    } else {
+      const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
+      this.topWallAngle = -wallAngleRadians;
+      this.bottomWallAngle = wallAngleRadians;
+    }
     
     Matter.Composite.add(this.engine.world, [topConstraint, bottomConstraint]);
   }
@@ -651,11 +672,15 @@ export class CanvasController {
       const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
       const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
       
-      // Draw top wall at its current position
+      // Draw top wall at its current position with rotation
+      this.ctx.save();
+      this.ctx.translate(topWallPos.x, topWallPos.y);
+      this.ctx.rotate(topWall.angle); // Use the Matter.js body's current angle
+      
       this.ctx.beginPath();
       this.ctx.rect(
-        topWallPos.x - wallThickness/2,
-        topWallPos.y - topWallHeight/2,
+        -wallThickness/2,
+        -topWallHeight/2,
         wallThickness,
         topWallHeight
       );
@@ -668,12 +693,17 @@ export class CanvasController {
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       this.ctx.lineWidth = 1;
       this.ctx.stroke();
+      this.ctx.restore();
       
-      // Draw bottom wall at its current position
+      // Draw bottom wall at its current position with rotation
+      this.ctx.save();
+      this.ctx.translate(bottomWallPos.x, bottomWallPos.y);
+      this.ctx.rotate(bottomWall.angle); // Use the Matter.js body's current angle
+      
       this.ctx.beginPath();
       this.ctx.rect(
-        bottomWallPos.x - wallThickness/2,
-        bottomWallPos.y - bottomWallHeight/2,
+        -wallThickness/2,
+        -bottomWallHeight/2,
         wallThickness,
         bottomWallHeight
       );
@@ -686,6 +716,7 @@ export class CanvasController {
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       this.ctx.lineWidth = 1;
       this.ctx.stroke();
+      this.ctx.restore();
     }
     
     // Add a subtle glow effect when the wall is vibrating
@@ -700,11 +731,15 @@ export class CanvasController {
         // Calculate intensity based on velocity
         const glowIntensity = Math.min(0.3, Math.abs(spring.velocity) * 0.5);
         
-        // Draw a larger glow around the wall
+        // Draw a larger glow around the wall with proper rotation
+        this.ctx.save();
+        this.ctx.translate(wallPos.x, wallPos.y);
+        this.ctx.rotate(wall.angle); // Use the wall's current angle
+        
         this.ctx.beginPath();
         this.ctx.rect(
-          wallPos.x - wallWidth/2 - 2,
-          wallPos.y - wallHeight/2 - 2,
+          -wallWidth/2 - 2,
+          -wallHeight/2 - 2,
           wallWidth + 4,
           wallHeight + 4
         );
@@ -712,6 +747,7 @@ export class CanvasController {
         // Cyan glow for active vibration
         this.ctx.fillStyle = `rgba(0, 200, 255, ${glowIntensity})`;
         this.ctx.fill();
+        this.ctx.restore();
       }
     });
   }
