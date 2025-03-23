@@ -68,8 +68,8 @@ export class CanvasController {
   // Helper method to update spawn interval based on frequency
   private updateSpawnInterval() {
     // Lower frequency value = less frequent spawning = higher interval
-    // Base interval now increased by 1.5x and then by another 1.2x
-    const baseInterval = 4000 / (1.5 * 1.2); // Increased frequency by 1.5x and now by another 1.2x
+    // Base interval now increased by 1.5x, then 1.2x, and now by another 1.5x
+    const baseInterval = 4000 / (1.5 * 1.2 * 1.5); // Increased frequency by 1.5x, then 1.2x, and now by another 1.5x
     this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
   }
 
@@ -172,7 +172,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.67; // Reduced from 1.33 (halved again)
+          const speed = 0.67 * 1.3; // Increased by 1.3x from previous value
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -245,8 +245,8 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
-    // Increase motion blur by reducing alpha further
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.15)'; // Reduced from 0.2 for more trail
+    // Double motion blur by reducing alpha to half its previous value
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.075)'; // Halved from 0.15 to double blur effect
     this.ctx.fillRect(0, 0, width, height);
     
     // Draw funnel walls with smoky white fill
