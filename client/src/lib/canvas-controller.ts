@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 1.6; // Increased to match new sweep speed
+          const speed = 8.0; // Increased to match new sweep speed (5x faster)
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -271,12 +271,12 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          // Increase particle sizes by 50% and reduce opacity
-          const particleSize = isInActiveWindow ? 0.3 : 0.15;
+          // Increase particle sizes by 5x
+          const particleSize = isInActiveWindow ? 1.5 : 0.75;
           this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
         });
 
-        const opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7; // Reduced base opacity by multiplying by 0.7
+        const opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7;
         if (isInActiveWindow) {
           this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
           this.ctx.lineWidth = 0.5;
@@ -315,7 +315,7 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 33335) / 33335; // Doubled speed (halved period from 66670)
+    const progress = (elapsed % 6667) / 6667; // 5x faster (period reduced from 33335 to 6667)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
