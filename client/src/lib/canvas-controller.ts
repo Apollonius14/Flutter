@@ -231,8 +231,8 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
-    this.ctx.clearRect(0, 0, width, height);
-    this.ctx.fillStyle = '#1a1a1a';
+    // Create semi-transparent clear for motion blur effect
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.35)'; // Darker background with partial transparency
     this.ctx.fillRect(0, 0, width, height);
 
     const timeX = width * progress;
@@ -243,14 +243,6 @@ export class CanvasController {
     this.ctx.lineTo(timeX, height);
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
     this.ctx.lineWidth = 1;
-    this.ctx.stroke();
-
-    // Draw center line
-    const midX = width * ((this.params.startTime + this.params.endTime) / 200);
-    this.ctx.beginPath();
-    this.ctx.moveTo(midX, 0);
-    this.ctx.lineTo(midX, height);
-    this.ctx.strokeStyle = "rgba(255, 50, 50, 0.05)";
     this.ctx.stroke();
 
     if (Math.random() < this.params.frequency) {
@@ -265,6 +257,18 @@ export class CanvasController {
       const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
         normalizedX <= this.params.endTime;
+
+      // Update collision filters based on active state
+      if (bubble.particles.length > 0) {
+        bubble.particles.forEach(particle => {
+          const collisionFilter = {
+            category: 0x0001,
+            mask: isInActiveWindow ? 0x0002 : 0x0000, // Only active particles collide with walls
+            group: isInActiveWindow ? -1 : 1 // Inactive particles don't collide with anything
+          };
+          Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
+        });
+      }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
         this.ctx.beginPath();
