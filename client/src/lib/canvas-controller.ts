@@ -132,130 +132,54 @@ export class CanvasController {
     const wallThickness = 20;
     const wallLength = height * 0.4;
 
-    // Determine if we're using curved walls or straight walls
-    const useCurvedWalls = this.wallCurvature > 0;
-    
+    // Set up walls as static bodies with high restitution
     const wallOptions = {
-      // Not static anymore so they can move and rotate
-      isStatic: false,
-      // High mass to simulate a heavy spring
-      mass: 100,
-      // Low friction
-      friction: 0,
-      // High restitution for elastic collisions
-      restitution: 0.99,
-      // Allow rotation with high inertia (more stable)
-      inertia: 10000,
-      frictionAir: 0.2, // Add air friction to dampen unwanted motion
+      isStatic: true,
+      restitution: 0.95,
+      friction: 0.1,
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
       }
     };
 
-    let topWall, bottomWall;
+    // Calculate wall angles - this is key for the angle-based rotation
+    const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
+    this.topWallAngle = -wallAngleRadians;
+    this.bottomWallAngle = wallAngleRadians;
+
+    // Store angles for later reference
+    console.log(`Setting wall angles: top=${this.topWallAngle * (180/Math.PI)}°, bottom=${this.bottomWallAngle * (180/Math.PI)}°`);
+
+    // Create the walls
+    const topWall = Matter.Bodies.rectangle(
+      midX,
+      centerY - gapSize/2 - wallLength/2,
+      wallThickness,
+      wallLength,
+      wallOptions
+    );
     
-    if (useCurvedWalls) {
-      // Create curved walls using vertices
-      const numSegments = 8; // Number of segments to create the curved effect
-      const maxCurveOffset = 40 * this.wallCurvature; // Max curve offset based on curvature parameter
-      
-      // Create vertices for top curved wall
-      const topVertices = [];
-      for (let i = 0; i <= numSegments; i++) {
-        const xPos = midX - wallThickness/2 + (i/numSegments) * wallThickness;
-        // Calculate y-offset based on curve (parabolic shape)
-        // Maximum at center, tapering to 0
-        const normalizedPosition = i / numSegments; // 0 to 1
-        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2); // Parabolic function that peaks at 0.5
-        const yOffset = curveRatio * maxCurveOffset;
-        
-        topVertices.push({ 
-          x: xPos, 
-          y: centerY - gapSize/2 - wallLength + yOffset 
-        });
-      }
-      
-      // Mirror top vertices to create a rounded rectangle with top arc
-      for (let i = numSegments; i >= 0; i--) {
-        const normalizedPosition = i / numSegments;
-        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2);
-        const yOffset = curveRatio * maxCurveOffset;
-        
-        topVertices.push({
-          x: topVertices[i].x,
-          y: centerY - gapSize/2 - yOffset
-        });
-      }
-      
-      // Create vertices for bottom curved wall
-      const bottomVertices = [];
-      for (let i = 0; i <= numSegments; i++) {
-        const xPos = midX - wallThickness/2 + (i/numSegments) * wallThickness;
-        const normalizedPosition = i / numSegments;
-        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2);
-        const yOffset = curveRatio * maxCurveOffset;
-        
-        bottomVertices.push({ 
-          x: xPos, 
-          y: centerY + gapSize/2 + yOffset 
-        });
-      }
-      
-      // Mirror bottom vertices
-      for (let i = numSegments; i >= 0; i--) {
-        const normalizedPosition = i / numSegments;
-        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2);
-        const yOffset = curveRatio * maxCurveOffset;
-        
-        bottomVertices.push({
-          x: bottomVertices[i].x,
-          y: centerY + gapSize/2 + wallLength - yOffset
-        });
-      }
-      
-      // Create the actual bodies using the vertices
-      topWall = Matter.Bodies.fromVertices(
-        midX,
-        centerY - gapSize/2 - wallLength/2,
-        [topVertices],
-        wallOptions
-      );
-      
-      bottomWall = Matter.Bodies.fromVertices(
-        midX,
-        centerY + gapSize/2 + wallLength/2,
-        [bottomVertices],
-        wallOptions
-      );
-    } else {
-      // Create straight rectangular walls with rotation based on angle
-      const angleInRadians = (this.wallCurvature * 90) * (Math.PI / 180);
-      
-      topWall = Matter.Bodies.rectangle(
-        midX,
-        centerY - gapSize/2 - wallLength/2,
-        wallThickness,
-        wallLength,
-        wallOptions
-      );
-      // Rotate top wall counter-clockwise (negative angle)
-      Matter.Body.rotate(topWall, -angleInRadians);
+    const bottomWall = Matter.Bodies.rectangle(
+      midX,
+      centerY + gapSize/2 + wallLength/2,
+      wallThickness,
+      wallLength,
+      wallOptions
+    );
 
-      bottomWall = Matter.Bodies.rectangle(
-        midX,
-        centerY + gapSize/2 + wallLength/2,
-        wallThickness,
-        wallLength,
-        wallOptions
-      );
-      // Rotate bottom wall clockwise (positive angle)
-      Matter.Body.rotate(bottomWall, angleInRadians);
-    }
+    // Apply rotation to the walls directly
+    Matter.Body.setAngle(topWall, this.topWallAngle);
+    Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
+    
+    // Store walls for reference
+    this.funnelWalls = [topWall, bottomWall];
 
-    // Create spring behavior for walls
+    // Add walls to the physics world
+    Matter.Composite.add(this.engine.world, this.funnelWalls);
+    
+    // Create spring data for visual effects only
     const currentTime = performance.now();
-    
     this.wallSprings = [
       {
         body: topWall,
@@ -272,61 +196,6 @@ export class CanvasController {
         lastUpdateTime: currentTime
       }
     ];
-
-    // Calculate and store the angles in class properties first
-    if (useCurvedWalls) {
-      this.topWallAngle = 0;
-      this.bottomWallAngle = 0;
-    } else {
-      const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
-      this.topWallAngle = -wallAngleRadians;
-      this.bottomWallAngle = wallAngleRadians;
-    }
-    
-    this.funnelWalls = [topWall, bottomWall];
-    Matter.Composite.add(this.engine.world, this.funnelWalls);
-    
-    // Create pivot constraints to allow rotation around a fixed point
-    // This will create a pendulum-like effect while maintaining the walls' positions
-    const topPivot = { x: midX, y: centerY - gapSize/2 - wallLength/2 };
-    const bottomPivot = { x: midX, y: centerY + gapSize/2 + wallLength/2 };
-    
-    // Fix angles individually to maintain the desired rotation angle
-    // This manually sets the angle rather than letting it be controlled by physics
-    if (!useCurvedWalls) {
-      // Create direct angle manipulation in the physics update
-      Matter.Body.setAngle(topWall, this.topWallAngle);
-      Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
-      
-      // Lock rotation to prevent physics from changing the angle
-      Matter.Body.setAngularVelocity(topWall, 0);
-      Matter.Body.setAngularVelocity(bottomWall, 0);
-      Matter.Body.setStatic(topWall, true);
-      Matter.Body.setStatic(bottomWall, true);
-    }
-    
-    // Create constraints that fix the center position of the walls but allow rotation
-    const topConstraint = Matter.Constraint.create({
-      pointB: topPivot,
-      bodyA: topWall,
-      pointA: { x: 0, y: 0 },
-      stiffness: 0.5,     // Medium stiffness for better rotation
-      length: 0,          // Zero length for pivot point
-      damping: 0.2,       // Medium damping for smoother motion
-      render: { visible: false }
-    });
-    
-    const bottomConstraint = Matter.Constraint.create({
-      pointB: bottomPivot,
-      bodyA: bottomWall,
-      pointA: { x: 0, y: 0 },
-      stiffness: 0.5,     // Medium stiffness for better rotation
-      length: 0,          // Zero length for pivot point
-      damping: 0.2,       // Medium damping for smoother motion
-      render: { visible: false }
-    });
-    
-    Matter.Composite.add(this.engine.world, [topConstraint, bottomConstraint]);
   }
 
   private generateBubbles(x: number): Bubble[] {
