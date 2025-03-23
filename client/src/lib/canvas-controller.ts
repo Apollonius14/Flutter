@@ -34,6 +34,8 @@ export class CanvasController {
   private funnelEnabled: boolean = false;
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
+  private lastSpawnTime: number = 0;
+  private spawnInterval: number = 1000; // Default spawn interval in ms
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -53,11 +55,22 @@ export class CanvasController {
       coherence: 2.5,
       startTime: 0,
       endTime: 100,
-      frequency: 0.009375  // Reduced from 0.01875 (halved again)
+      frequency: 0.15  // Default frequency from home.tsx
     };
+    
+    // Calculate initial spawn interval based on frequency
+    this.updateSpawnInterval();
 
     this.canvas.style.backgroundColor = '#1a1a1a';
     this.setupFunnelWalls();
+  }
+  
+  // Helper method to update spawn interval based on frequency
+  private updateSpawnInterval() {
+    // Lower frequency value = less frequent spawning = higher interval
+    // Base interval of 2000ms (half frequency) when slider is at 0.5
+    const baseInterval = 4000; // Double the previous value (2000) to halve the frequency
+    this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
   }
 
   private setupFunnelWalls() {
@@ -199,6 +212,7 @@ export class CanvasController {
 
   updateParams(params: AnimationParams) {
     this.params = params;
+    this.updateSpawnInterval();
     this.drawFrame(0);
   }
 
@@ -245,9 +259,12 @@ export class CanvasController {
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
-    if (Math.random() < this.params.frequency) {
+    // Timer-based spawning for regular rhythm
+    const currentTime = performance.now();
+    if (currentTime - this.lastSpawnTime >= this.spawnInterval) {
       const newBubbles = this.generateBubbles(timeX);
       this.bubbles.push(...newBubbles);
+      this.lastSpawnTime = currentTime;
     }
 
     // Update and draw bubbles
