@@ -288,19 +288,16 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.05, 0, Math.PI * 2);
+          this.ctx.arc(pos.x, pos.y, 0.1, 0, Math.PI * 2);
         });
 
+        const opacity = 1 - (bubble.age / bubble.maxAge);
         if (isInActiveWindow) {
-          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.8)';
-          this.ctx.shadowBlur = 8;
-          this.ctx.strokeStyle = 'rgba(0, 200, 255, 1.0)';
-          this.ctx.lineWidth = 0.3 + bubble.intensity * 12;
+          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
+          this.ctx.lineWidth = 0.5; // Reduced from larger value
         } else {
-          const opacity = 1 - (bubble.age / bubble.maxAge);
-          this.ctx.shadowBlur = 0;
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-          this.ctx.lineWidth = 0.05;
+          this.ctx.lineWidth = 0.5; // Same width for consistency
         }
 
         this.ctx.stroke();
@@ -310,16 +307,11 @@ export class CanvasController {
         this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
 
         if (isInActiveWindow) {
-          this.ctx.shadowColor = 'rgba(0, 200, 255, 0.6)';
-          this.ctx.shadowBlur = 10;
           this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-          this.ctx.lineWidth = 0.5 + bubble.intensity * 16;
         } else {
-          this.ctx.shadowBlur = 0;
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-          this.ctx.lineWidth = 0.25;
         }
-
+        this.ctx.lineWidth = 0.5;
         this.ctx.stroke();
       }
 
