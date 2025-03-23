@@ -68,8 +68,8 @@ export class CanvasController {
   // Helper method to update spawn interval based on frequency
   private updateSpawnInterval() {
     // Lower frequency value = less frequent spawning = higher interval
-    // Base interval now increased by 1.5x
-    const baseInterval = 4000 / 1.5; // Increased frequency by 1.5x (lower interval)
+    // Base interval now increased by 1.5x and then by another 1.2x
+    const baseInterval = 4000 / (1.5 * 1.2); // Increased frequency by 1.5x and now by another 1.2x
     this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
   }
 
@@ -126,7 +126,7 @@ export class CanvasController {
     const height = this.canvas.height;
 
     const minWaves = 2;
-    const maxWaves = 5;
+    const maxWaves = 6; // Increased from 5 to 6
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
