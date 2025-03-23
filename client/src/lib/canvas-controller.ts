@@ -117,7 +117,7 @@ export class CanvasController {
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
-    const fixedRadius = 6; // Increased by 50% from 4
+    const fixedRadius = 6; // Increased from 4 to 6 (50% larger)
 
     const positions: number[] = [];
     if (coherence === 5) {
@@ -142,15 +142,15 @@ export class CanvasController {
       // Create a single ring of particles for this wave point
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticlesInRing = 24; // Doubled from 12
+        const numParticlesInRing = 24;
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
           const particleY = y + Math.sin(angle) * fixedRadius;
 
-          const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
+          const body = Matter.Bodies.circle(particleX, particleY, fixedRadius * 0.05, {
             friction: 0,
-            restitution: 0.98, // Changed from 0.7
+            restitution: 0.98,
             mass: 0.1,
             frictionAir: 0,
             collisionFilter: {
@@ -160,7 +160,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.4; // Reduced from 2.0 (5x slower)
+          const speed = 0.4;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -283,28 +283,27 @@ export class CanvasController {
       const isInActiveWindow = normalizedX >= this.params.startTime &&
         normalizedX <= this.params.endTime;
 
+      const opacity = 1 - (bubble.age / bubble.maxAge);
+
+      // Always draw the bubble outline with higher visibility
+      this.ctx.beginPath();
+      this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+      if (isInActiveWindow) {
+        this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity * 0.5})`; // Increased from 0.3
+      } else {
+        this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.2})`; // Increased from 0.1
+      }
+      this.ctx.lineWidth = 1.0; // Increased from 0.5
+      this.ctx.stroke();
+
+      // If funnel is enabled, draw individual particles
       if (this.funnelEnabled && bubble.particles.length > 0) {
         this.ctx.beginPath();
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.1, 0, Math.PI * 2);
+          this.ctx.arc(pos.x, pos.y, bubble.radius * 0.05, 0, Math.PI * 2); // Scale particle size with bubble radius
         });
-
-        const opacity = 1 - (bubble.age / bubble.maxAge);
-        if (isInActiveWindow) {
-          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-          this.ctx.lineWidth = 0.5; // Reduced from larger value
-        } else {
-          this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-          this.ctx.lineWidth = 0.5; // Same width for consistency
-        }
-
-        this.ctx.stroke();
-      } else {
-        const opacity = 1 - (bubble.age / bubble.maxAge);
-        this.ctx.beginPath();
-        this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
 
         if (isInActiveWindow) {
           this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
