@@ -61,7 +61,10 @@ export class CanvasController {
   }
 
   private setupFunnelWalls() {
-    this.funnelWalls.forEach(wall => Matter.World.remove(this.engine.world, wall));
+    // Clean up existing walls first
+    this.funnelWalls.forEach(wall => {
+      Matter.Composite.remove(this.engine.world, wall);
+    });
     this.funnelWalls = [];
 
     if (!this.funnelEnabled) return;
@@ -69,8 +72,8 @@ export class CanvasController {
     const { width, height } = this.canvas;
     const midX = width * 0.5;
     const centerY = height * 0.5;
-    const gapSize = height * 0.2;
-    const wallThickness = 20; // Increased from 10 to ensure solid collision
+    const gapSize = height * 0.4;
+    const wallThickness = 20;
     const wallLength = height * 0.4;
 
     const wallOptions = {
@@ -89,10 +92,7 @@ export class CanvasController {
       centerY - gapSize/2 - wallLength/2,
       wallThickness,
       wallLength,
-      {
-        ...wallOptions,
-        angle: 0
-      }
+      wallOptions
     );
 
     const bottomWall = Matter.Bodies.rectangle(
@@ -100,14 +100,11 @@ export class CanvasController {
       centerY + gapSize/2 + wallLength/2,
       wallThickness,
       wallLength,
-      {
-        ...wallOptions,
-        angle: 0
-      }
+      wallOptions
     );
 
     this.funnelWalls = [topWall, bottomWall];
-    this.funnelWalls.forEach(wall => Matter.World.add(this.engine.world, wall));
+    Matter.Composite.add(this.engine.world, this.funnelWalls);
   }
 
   private generateBubbles(x: number): Bubble[] {
@@ -115,8 +112,8 @@ export class CanvasController {
     const centerY = this.canvas.height / 2;
     const height = this.canvas.height;
 
-    const minWaves = 2; // Reduced from 4
-    const maxWaves = 4; // Reduced from 8
+    const minWaves = 2;
+    const maxWaves = 4;
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
@@ -144,32 +141,31 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticles = 30; //Increased from 25
+        const numParticles = 30;
         for (let i = 0; i < numParticles; i++) {
           const angle = (i / numParticles) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
           const particleY = y + Math.sin(angle) * fixedRadius;
 
-          const body = Matter.Bodies.circle(particleX, particleY, 0.025, { // Reduced from 0.05
+          const body = Matter.Bodies.circle(particleX, particleY, 0.025, {
             friction: 0,
-            restitution: 0.7, // Changed from 1.0
+            restitution: 0.7,
             mass: 0.1,
+            frictionAir: 0.001,
             collisionFilter: {
               category: 0x0001,
               mask: 0x0002,
               group: -1
-            },
-            frictionAir: 0.001 // Added small air friction
+            }
           });
 
-          const speed = 2.0; // Reduced from 4.0
+          const speed = 3.0;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
           });
 
-          Matter.World.add(this.engine.world, body);
-
+          Matter.Composite.add(this.engine.world, body);
           particles.push({
             body,
             intensity,
@@ -219,29 +215,66 @@ export class CanvasController {
   cleanup() {
     this.pause();
     Matter.Engine.clear(this.engine);
+    Matter.World.clear(this.engine.world, false);
   }
 
-  private drawFunnel() {
-    if (!this.funnelEnabled) return;
-
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    this.ctx.lineWidth = 2;
-
-    this.funnelWalls.forEach(wall => {
-      const vertices = wall.vertices;
-      this.ctx.beginPath();
-      this.ctx.moveTo(vertices[0].x, vertices[0].y);
-      for (let i = 1; i < vertices.length; i++) {
-        this.ctx.lineTo(vertices[i].x, vertices[i].y);
+  private drawFrame(progress: number) {
+    if (this.funnelEnabled) {
+      const numSubSteps = 5;
+      const subStepTime = (1000 / 60) / numSubSteps;
+      for (let i = 0; i < numSubSteps; i++) {
+        Matter.Engine.update(this.engine, subStepTime);
       }
-      this.ctx.closePath();
-      this.ctx.fill();
-      this.ctx.stroke();
-    });
-  }
+    }
 
-  private updateAndDrawBubbles() {
+    const { width, height } = this.canvas;
+    this.ctx.clearRect(0, 0, width, height);
+    this.ctx.fillStyle = '#1a1a1a';
+    this.ctx.fillRect(0, 0, width, height);
+
+    const timeX = width * progress;
+
+    // Draw time indicator line
+    this.ctx.beginPath();
+    this.ctx.moveTo(timeX, 0);
+    this.ctx.lineTo(timeX, height);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
+
+    // Draw center line
+    const midX = width * ((this.params.startTime + this.params.endTime) / 200);
+    this.ctx.beginPath();
+    this.ctx.moveTo(midX, 0);
+    this.ctx.lineTo(midX, height);
+    this.ctx.strokeStyle = "rgba(255, 50, 50, 0.05)";
+    this.ctx.stroke();
+
+    if (Math.random() < this.params.frequency) {
+      const newBubbles = this.generateBubbles(timeX);
+      this.bubbles.push(...newBubbles);
+    }
+
+    // Draw funnel walls
+    if (this.funnelEnabled) {
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      this.ctx.lineWidth = 2;
+
+      this.funnelWalls.forEach(wall => {
+        const vertices = wall.vertices;
+        this.ctx.beginPath();
+        this.ctx.moveTo(vertices[0].x, vertices[0].y);
+        for (let i = 1; i < vertices.length; i++) {
+          this.ctx.lineTo(vertices[i].x, vertices[i].y);
+        }
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+      });
+    }
+
+    // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
@@ -266,7 +299,7 @@ export class CanvasController {
           const opacity = 1 - (bubble.age / bubble.maxAge);
           this.ctx.shadowBlur = 0;
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-          this.ctx.lineWidth = 0.25;
+          this.ctx.lineWidth = 0.05;
         }
 
         this.ctx.stroke();
@@ -292,53 +325,13 @@ export class CanvasController {
       if (bubble.age >= bubble.maxAge) {
         if (bubble.particles.length > 0) {
           bubble.particles.forEach(particle => {
-            Matter.World.remove(this.engine.world, particle.body);
+            Matter.Composite.remove(this.engine.world, particle.body);
           });
         }
         return false;
       }
       return true;
     });
-  }
-
-  private drawFrame(progress: number) {
-    if (this.funnelEnabled) {
-      const numSubSteps = 5; // Number of sub-steps per frame
-      const subStepTime = (1000 / 60) / numSubSteps; 
-      for (let i = 0; i < numSubSteps; i++) {
-        Matter.Engine.update(this.engine, subStepTime);
-      }
-    }
-
-    const { width, height } = this.canvas;
-    this.ctx.clearRect(0, 0, width, height);
-
-    this.ctx.fillStyle = '#1a1a1a';
-    this.ctx.fillRect(0, 0, width, height);
-
-    const timeX = width * progress;
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(timeX, 0);
-    this.ctx.lineTo(timeX, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-    this.ctx.lineWidth = 1;
-    this.ctx.stroke();
-
-    const midX = width * ((this.params.startTime + this.params.endTime) / 200);
-    this.ctx.beginPath();
-    this.ctx.moveTo(midX, 0);
-    this.ctx.lineTo(midX, height);
-    this.ctx.strokeStyle = "rgba(255, 50, 50, 0.05)";
-    this.ctx.stroke();
-
-    if (Math.random() < this.params.frequency) {
-      const newBubbles = this.generateBubbles(timeX);
-      this.bubbles.push(...newBubbles);
-    }
-
-    this.drawFunnel();
-    this.updateAndDrawBubbles();
   }
 
   private animate() {
