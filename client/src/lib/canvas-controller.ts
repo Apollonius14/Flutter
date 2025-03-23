@@ -80,7 +80,7 @@ export class CanvasController {
       isStatic: true,
       render: { visible: true },
       friction: 0,
-      restitution: 0.7,  // Changed from 1.0
+      restitution: 0.99,  // Changed from 0.7 to make collisions more elastic
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -113,11 +113,11 @@ export class CanvasController {
     const height = this.canvas.height;
 
     const minWaves = 2;
-    const maxWaves = 5; // Increased from 4
+    const maxWaves = 5;
     const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
 
     const bubbles: Bubble[] = [];
-    const fixedRadius = 7.2; // Increased by 20% from 6
+    const fixedRadius = 7.2;
 
     const positions: number[] = [];
     if (coherence === 5) {
@@ -141,7 +141,7 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        const numParticlesInRing = 24; // Doubled from 12
+        const numParticlesInRing = 24;
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -149,7 +149,7 @@ export class CanvasController {
 
           const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
             friction: 0,
-            restitution: 0.7,
+            restitution: 0.99, // Changed from 0.7 to make collisions more elastic
             mass: 0.1,
             frictionAir: 0,
             collisionFilter: {
@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.8; // Increased from 0.4 (2x faster)
+          const speed = 0.8;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
