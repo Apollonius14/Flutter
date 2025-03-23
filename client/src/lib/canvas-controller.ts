@@ -180,7 +180,7 @@ export class CanvasController {
         radius: fixedRadius,
         initialRadius: fixedRadius,
         age: 0,
-        maxAge: 80 + (isInActiveWindow ? intensity * 120 : intensity * 40), // Triple for active window
+        maxAge: 80 + intensity * 40,
         intensity,
         particles
       });
@@ -276,18 +276,11 @@ export class CanvasController {
 
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
-      // Calculate opacity based on distance from sweep line
-      const distanceFromSweep = (timeX - bubble.x) / width;
-      const fadeStart = 0.1; // Start fading when sweep line is 10% past the bubble
-      const fadeEnd = 0.2;   // Complete fade by 20% past the bubble
+      bubble.age++;
 
-      const opacity = distanceFromSweep < fadeStart ? 1.0 :
-                    distanceFromSweep > fadeEnd ? 0.0 :
-                    1.0 - ((distanceFromSweep - fadeStart) / (fadeEnd - fadeStart));
-
-      const normalizedX = bubble.x / width * 100;
+      const normalizedX = bubble.x / this.canvas.width * 100;
       const isInActiveWindow = normalizedX >= this.params.startTime &&
-          normalizedX <= this.params.endTime;
+        normalizedX <= this.params.endTime;
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
         this.ctx.beginPath();
@@ -296,6 +289,21 @@ export class CanvasController {
           this.ctx.moveTo(pos.x, pos.y);
           this.ctx.arc(pos.x, pos.y, 0.1, 0, Math.PI * 2);
         });
+
+        const opacity = 1 - (bubble.age / bubble.maxAge);
+        if (isInActiveWindow) {
+          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
+          this.ctx.lineWidth = 0.5; // Reduced from larger value
+        } else {
+          this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+          this.ctx.lineWidth = 0.5; // Same width for consistency
+        }
+
+        this.ctx.stroke();
+      } else {
+        const opacity = 1 - (bubble.age / bubble.maxAge);
+        this.ctx.beginPath();
+        this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
 
         if (isInActiveWindow) {
           this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
@@ -306,8 +314,7 @@ export class CanvasController {
         this.ctx.stroke();
       }
 
-      // Remove bubbles that are completely faded
-      if (opacity <= 0) {
+      if (bubble.age >= bubble.maxAge) {
         if (bubble.particles.length > 0) {
           bubble.particles.forEach(particle => {
             Matter.Composite.remove(this.engine.world, particle.body);
