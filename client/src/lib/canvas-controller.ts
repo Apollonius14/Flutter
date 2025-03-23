@@ -159,7 +159,7 @@ export class CanvasController {
             }
           });
 
-          const speed = 0.4; // Reduced from 2.0 (5x slower)
+          const speed = 0.8; // Increased from 0.4 (2x faster)
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -329,7 +329,7 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 10000) / 10000; // Changed from 2000 to 10000 (5x slower)
+    const progress = (elapsed % 6667) / 6667; // Changed from 10000 to 6667 (1.5x faster)
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
