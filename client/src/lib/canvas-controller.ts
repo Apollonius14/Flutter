@@ -175,7 +175,7 @@ export class CanvasController {
       }
 
       const baseMaxAge = 80;
-      const maxAge = isInActiveWindow ? baseMaxAge * 3 : baseMaxAge; // Triple the lifetime for active window bubbles
+      const maxAge = isInActiveWindow ? baseMaxAge * 6 : baseMaxAge; // Increased from 3x to 6x for active window bubbles
 
       bubbles.push({
         x,
@@ -290,16 +290,18 @@ export class CanvasController {
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
           this.ctx.moveTo(pos.x, pos.y);
-          this.ctx.arc(pos.x, pos.y, 0.1, 0, Math.PI * 2);
+          // Double the particle size only for active window particles
+          const particleSize = isInActiveWindow ? 0.2 : 0.1;
+          this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
         });
 
         const opacity = 1 - (bubble.age / bubble.maxAge);
         if (isInActiveWindow) {
           this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-          this.ctx.lineWidth = 0.5; // Reduced from larger value
+          this.ctx.lineWidth = 0.5;
         } else {
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-          this.ctx.lineWidth = 0.5; // Same width for consistency
+          this.ctx.lineWidth = 0.5;
         }
 
         this.ctx.stroke();
