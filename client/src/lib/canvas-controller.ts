@@ -136,18 +136,17 @@ export class CanvasController {
     const useCurvedWalls = this.wallCurvature > 0;
     
     const wallOptions = {
-      // Not static anymore so they can move
+      // Not static anymore so they can move and rotate
       isStatic: false,
-      // Very high mass to simulate a heavy spring
+      // High mass to simulate a heavy spring
       mass: 100,
       // Low friction
       friction: 0,
       // High restitution for elastic collisions
       restitution: 0.99,
-      // Prevent walls from rotating
-      inertia: Infinity,
-      // Allow limited horizontal movement only
-      inverseInertia: 0,
+      // Allow rotation with high inertia (more stable)
+      inertia: 10000,
+      frictionAir: 0.2, // Add air friction to dampen unwanted motion
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -274,40 +273,7 @@ export class CanvasController {
       }
     ];
 
-    this.funnelWalls = [topWall, bottomWall];
-    Matter.Composite.add(this.engine.world, this.funnelWalls);
-    
-    // Add constraints to enable rotation while allowing horizontal spring movement
-    const topCenter = { x: midX, y: centerY - gapSize/2 - wallLength/2 };
-    const bottomCenter = { x: midX, y: centerY + gapSize/2 + wallLength/2 };
-    
-    // Fix the vertical position only, but allow rotation and horizontal movement
-    // Use lower stiffness for more realistic spring movement with rotation
-    const topConstraint = Matter.Constraint.create({
-      bodyA: topWall,
-      pointA: { x: 0, y: 0 },
-      pointB: { x: topCenter.x, y: topCenter.y },
-      stiffness: 0.8,
-      length: 0,
-      damping: 0.1,
-      render: { visible: false }
-    });
-    
-    const bottomConstraint = Matter.Constraint.create({
-      bodyA: bottomWall,
-      pointA: { x: 0, y: 0 },
-      pointB: { x: bottomCenter.x, y: bottomCenter.y },
-      stiffness: 0.8,
-      length: 0,
-      damping: 0.1,
-      render: { visible: false }
-    });
-    
-    // Use Matter.Body properties to set angle limits and allow rotation
-    Matter.Body.setAngularVelocity(topWall, 0);
-    Matter.Body.setAngularVelocity(bottomWall, 0);
-    
-    // Store the angles in class properties
+    // Calculate and store the angles in class properties first
     if (useCurvedWalls) {
       this.topWallAngle = 0;
       this.bottomWallAngle = 0;
@@ -316,6 +282,49 @@ export class CanvasController {
       this.topWallAngle = -wallAngleRadians;
       this.bottomWallAngle = wallAngleRadians;
     }
+    
+    this.funnelWalls = [topWall, bottomWall];
+    Matter.Composite.add(this.engine.world, this.funnelWalls);
+    
+    // Create pivot constraints to allow rotation around a fixed point
+    // This will create a pendulum-like effect while maintaining the walls' positions
+    const topPivot = { x: midX, y: centerY - gapSize/2 - wallLength/2 };
+    const bottomPivot = { x: midX, y: centerY + gapSize/2 + wallLength/2 };
+    
+    // Fix angles individually to maintain the desired rotation angle
+    // This manually sets the angle rather than letting it be controlled by physics
+    if (!useCurvedWalls) {
+      // Create direct angle manipulation in the physics update
+      Matter.Body.setAngle(topWall, this.topWallAngle);
+      Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
+      
+      // Lock rotation to prevent physics from changing the angle
+      Matter.Body.setAngularVelocity(topWall, 0);
+      Matter.Body.setAngularVelocity(bottomWall, 0);
+      Matter.Body.setStatic(topWall, true);
+      Matter.Body.setStatic(bottomWall, true);
+    }
+    
+    // Create constraints that fix the center position of the walls but allow rotation
+    const topConstraint = Matter.Constraint.create({
+      pointB: topPivot,
+      bodyA: topWall,
+      pointA: { x: 0, y: 0 },
+      stiffness: 0.5,     // Medium stiffness for better rotation
+      length: 0,          // Zero length for pivot point
+      damping: 0.2,       // Medium damping for smoother motion
+      render: { visible: false }
+    });
+    
+    const bottomConstraint = Matter.Constraint.create({
+      pointB: bottomPivot,
+      bodyA: bottomWall,
+      pointA: { x: 0, y: 0 },
+      stiffness: 0.5,     // Medium stiffness for better rotation
+      length: 0,          // Zero length for pivot point
+      damping: 0.2,       // Medium damping for smoother motion
+      render: { visible: false }
+    });
     
     Matter.Composite.add(this.engine.world, [topConstraint, bottomConstraint]);
   }
