@@ -45,6 +45,8 @@ export class CanvasController {
   private wallSprings: WallSpring[] = [];
   private lastSpawnTime: number = 0;
   private spawnInterval: number = 1000; // Default spawn interval in ms
+  private wallCurvature: number = 0; // 0 = straight wall, 1 = max curve
+  private gapSize: number = 0.4; // Normalized gap size (fraction of canvas height)
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -124,10 +126,13 @@ export class CanvasController {
     const { width, height } = this.canvas;
     const midX = width * 0.5;
     const centerY = height * 0.5;
-    const gapSize = height * 0.4;
+    const gapSize = height * this.gapSize; // Use the stored gap size
     const wallThickness = 20;
     const wallLength = height * 0.4;
 
+    // Determine if we're using curved walls or straight walls
+    const useCurvedWalls = this.wallCurvature > 0;
+    
     const wallOptions = {
       // Not static anymore so they can move
       isStatic: false,
@@ -147,21 +152,95 @@ export class CanvasController {
       }
     };
 
-    const topWall = Matter.Bodies.rectangle(
-      midX,
-      centerY - gapSize/2 - wallLength/2,
-      wallThickness,
-      wallLength,
-      wallOptions
-    );
+    let topWall, bottomWall;
+    
+    if (useCurvedWalls) {
+      // Create curved walls using vertices
+      const numSegments = 8; // Number of segments to create the curved effect
+      const maxCurveOffset = 40 * this.wallCurvature; // Max curve offset based on curvature parameter
+      
+      // Create vertices for top curved wall
+      const topVertices = [];
+      for (let i = 0; i <= numSegments; i++) {
+        const xPos = midX - wallThickness/2 + (i/numSegments) * wallThickness;
+        // Calculate y-offset based on curve (parabolic shape)
+        // Maximum at center, tapering to 0
+        const normalizedPosition = i / numSegments; // 0 to 1
+        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2); // Parabolic function that peaks at 0.5
+        const yOffset = curveRatio * maxCurveOffset;
+        
+        topVertices.push({ 
+          x: xPos, 
+          y: centerY - gapSize/2 - wallLength + yOffset 
+        });
+      }
+      
+      // Mirror top vertices to create a rounded rectangle with top arc
+      for (let i = numSegments; i >= 0; i--) {
+        const normalizedPosition = i / numSegments;
+        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2);
+        const yOffset = curveRatio * maxCurveOffset;
+        
+        topVertices.push({
+          x: topVertices[i].x,
+          y: centerY - gapSize/2 - yOffset
+        });
+      }
+      
+      // Create vertices for bottom curved wall
+      const bottomVertices = [];
+      for (let i = 0; i <= numSegments; i++) {
+        const xPos = midX - wallThickness/2 + (i/numSegments) * wallThickness;
+        const normalizedPosition = i / numSegments;
+        const curveRatio = 1 - 4 * Math.pow(normalizedPosition - 0.5, 2);
+        const yOffset = curveRatio * maxCurveOffset;
+        
+        bottomVertices.push({ 
+          x: xPos, 
+          y: centerY + gapSize/2 + yOffset 
+        });
+      }
+      
+      // Mirror bottom vertices
+      for (let i = numSegments; i >= 0; i--) {
+        bottomVertices.push({
+          x: bottomVertices[i].x,
+          y: centerY + gapSize/2 + wallLength - yOffset
+        });
+      }
+      
+      // Create the actual bodies using the vertices
+      topWall = Matter.Bodies.fromVertices(
+        midX,
+        centerY - gapSize/2 - wallLength/2,
+        [topVertices],
+        wallOptions
+      );
+      
+      bottomWall = Matter.Bodies.fromVertices(
+        midX,
+        centerY + gapSize/2 + wallLength/2,
+        [bottomVertices],
+        wallOptions
+      );
+    } else {
+      // Create straight rectangular walls
+      topWall = Matter.Bodies.rectangle(
+        midX,
+        centerY - gapSize/2 - wallLength/2,
+        wallThickness,
+        wallLength,
+        wallOptions
+      );
 
-    const bottomWall = Matter.Bodies.rectangle(
-      midX,
-      centerY + gapSize/2 + wallLength/2,
-      wallThickness,
-      wallLength,
-      wallOptions
-    );
+      bottomWall = Matter.Bodies.rectangle(
+        midX,
+        centerY + gapSize/2 + wallLength/2,
+        wallThickness,
+        wallLength,
+        wallOptions
+      );
+    }
 
     // Create spring behavior for walls
     const currentTime = performance.now();
@@ -299,6 +378,20 @@ export class CanvasController {
   setFunnelEnabled(enabled: boolean) {
     this.funnelEnabled = enabled;
     this.setupFunnelWalls();
+  }
+  
+  setWallCurvature(curvature: number) {
+    this.wallCurvature = curvature;
+    if (this.funnelEnabled) {
+      this.setupFunnelWalls();
+    }
+  }
+  
+  setGapSize(size: number) {
+    this.gapSize = size;
+    if (this.funnelEnabled) {
+      this.setupFunnelWalls();
+    }
   }
 
   updateParams(params: AnimationParams) {
@@ -489,53 +582,100 @@ export class CanvasController {
     if (this.funnelWalls.length !== 2) return;
     
     const [topWall, bottomWall] = this.funnelWalls;
-    const wallThickness = 20;
     
-    // Get wall positions from the actual physics bodies
-    const topWallPos = topWall.position;
-    const bottomWallPos = bottomWall.position;
+    // Draw wall shapes based on the actual physics bodies
+    const useCurvedWalls = this.wallCurvature > 0;
     
-    // Get wall dimensions
-    const topWallBounds = topWall.bounds;
-    const bottomWallBounds = bottomWall.bounds;
-    const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
-    const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
-    
-    // Draw top wall at its current position
-    this.ctx.beginPath();
-    this.ctx.rect(
-      topWallPos.x - wallThickness/2,
-      topWallPos.y - topWallHeight/2,
-      wallThickness,
-      topWallHeight
-    );
-    
-    // Smoky white fill
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    this.ctx.fill();
-    
-    // White border
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    this.ctx.lineWidth = 1;
-    this.ctx.stroke();
-    
-    // Draw bottom wall at its current position
-    this.ctx.beginPath();
-    this.ctx.rect(
-      bottomWallPos.x - wallThickness/2,
-      bottomWallPos.y - bottomWallHeight/2,
-      wallThickness,
-      bottomWallHeight
-    );
-    
-    // Smoky white fill
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    this.ctx.fill();
-    
-    // White border
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    this.ctx.lineWidth = 1;
-    this.ctx.stroke();
+    // Get wall positions and vertices from the actual physics bodies
+    if (useCurvedWalls) {
+      // Draw curved walls using the vertices from Matter.js bodies
+      if (topWall.vertices && topWall.vertices.length > 0) {
+        // Draw top wall
+        this.ctx.beginPath();
+        this.ctx.moveTo(topWall.vertices[0].x, topWall.vertices[0].y);
+        for (let i = 1; i < topWall.vertices.length; i++) {
+          this.ctx.lineTo(topWall.vertices[i].x, topWall.vertices[i].y);
+        }
+        this.ctx.closePath();
+        
+        // Smoky white fill
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        this.ctx.fill();
+        
+        // White border
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+      }
+      
+      if (bottomWall.vertices && bottomWall.vertices.length > 0) {
+        // Draw bottom wall
+        this.ctx.beginPath();
+        this.ctx.moveTo(bottomWall.vertices[0].x, bottomWall.vertices[0].y);
+        for (let i = 1; i < bottomWall.vertices.length; i++) {
+          this.ctx.lineTo(bottomWall.vertices[i].x, bottomWall.vertices[i].y);
+        }
+        this.ctx.closePath();
+        
+        // Smoky white fill
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        this.ctx.fill();
+        
+        // White border
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+      }
+    } else {
+      // Draw rectangular walls for straight walls
+      const wallThickness = 20;
+      
+      // Get wall positions
+      const topWallPos = topWall.position;
+      const bottomWallPos = bottomWall.position;
+      
+      // Get wall dimensions
+      const topWallBounds = topWall.bounds;
+      const bottomWallBounds = bottomWall.bounds;
+      const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
+      const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
+      
+      // Draw top wall at its current position
+      this.ctx.beginPath();
+      this.ctx.rect(
+        topWallPos.x - wallThickness/2,
+        topWallPos.y - topWallHeight/2,
+        wallThickness,
+        topWallHeight
+      );
+      
+      // Smoky white fill
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      this.ctx.fill();
+      
+      // White border
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      this.ctx.lineWidth = 1;
+      this.ctx.stroke();
+      
+      // Draw bottom wall at its current position
+      this.ctx.beginPath();
+      this.ctx.rect(
+        bottomWallPos.x - wallThickness/2,
+        bottomWallPos.y - bottomWallHeight/2,
+        wallThickness,
+        bottomWallHeight
+      );
+      
+      // Smoky white fill
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      this.ctx.fill();
+      
+      // White border
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      this.ctx.lineWidth = 1;
+      this.ctx.stroke();
+    }
     
     // Add a subtle glow effect when the wall is vibrating
     this.wallSprings.forEach((spring, index) => {

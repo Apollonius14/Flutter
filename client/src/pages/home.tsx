@@ -16,7 +16,9 @@ const translations = {
     endTime: "End Time (0-100ms)",
     play: "Play",
     pause: "Pause",
-    showFunnel: "Show Funnel"
+    showWall: "Show Wall",
+    wallCurvature: "Wall Curvature",
+    gapSize: "Gap Size"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -26,7 +28,9 @@ const translations = {
     endTime: "وقت النهاية (٠-١٠٠ م.ث)",
     play: "تشغيل",
     pause: "إيقاف",
-    showFunnel: "إظهار القمع"
+    showWall: "إظهار الحائط",
+    wallCurvature: "انحناء الحائط",
+    gapSize: "حجم الفجوة"
   }
 };
 
@@ -165,7 +169,7 @@ export default function Home() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className={`text-gray-200 ${language === 'ar' ? 'arabic' : ''}`}>
-                    {t.showFunnel}
+                    {t.showWall}
                   </Label>
                   <Switch
                     checked={funnelEnabled}
@@ -173,6 +177,42 @@ export default function Home() {
                   />
                 </div>
               </div>
+              
+              {funnelEnabled && (
+                <>
+                  <div className="space-y-2">
+                    <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                      {t.wallCurvature}
+                    </Label>
+                    <Slider
+                      value={[0]}
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      onValueChange={([value]) => {
+                        if (controller) controller.setWallCurvature(value);
+                      }}
+                      className="pt-2"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                      {t.gapSize}
+                    </Label>
+                    <Slider
+                      value={[0.4]}
+                      min={0.1}
+                      max={0.8}
+                      step={0.01}
+                      onValueChange={([value]) => {
+                        if (controller) controller.setGapSize(value);
+                      }}
+                      className="pt-2"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-center">
