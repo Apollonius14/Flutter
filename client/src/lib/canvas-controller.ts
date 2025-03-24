@@ -110,8 +110,8 @@ export class CanvasController {
   // Helper method to update spawn interval based on frequency
   private updateSpawnInterval() {
     // Lower frequency value = less frequent spawning = higher interval
-    // Base interval now increased by 1.5x, then 1.2x, and now by another 1.5x
-    const baseInterval = 4000 / (1.5 * 1.2 * 1.9); // Increased frequency by 1.5x, then 1.2x, and now by another 1.5x
+    // Base interval now increased by 1.5x, then 1.2x, then 1.5x, and now by another 1.2x
+    const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2); // Increased frequency by an additional 20%
     this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
   }
 
@@ -132,11 +132,11 @@ export class CanvasController {
     const wallThickness = 12; // Reduced from 20 to make walls more slender
     const wallLength = height * 0.7; // Increased from 0.4 to 0.7 for longer walls
 
-    // Set up walls as static bodies with high restitution
+    // Set up walls as static bodies with perfect restitution
     const wallOptions = {
       isStatic: true,
-      restitution: 0.95,
-      friction: 0.1,
+      restitution: 1.0, // Perfect elasticity (no energy loss)
+      friction: 0.05, // Lower friction
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -238,7 +238,7 @@ export class CanvasController {
 
           const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
             friction: 0,
-            restitution: 0.99,
+            restitution: 1.0, // Perfect elasticity
             mass: 0.1,
             frictionAir: 0,
             collisionFilter: {
@@ -482,7 +482,9 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    const progress = (elapsed % 6667) / 6667; // 5x faster (period reduced from 33335)
+    // Increase line speed by 20% by reducing cycle time
+    const cyclePeriod = 6667 * 0.8; // 20% faster (0.8 of original time)
+    const progress = (elapsed % cyclePeriod) / cyclePeriod;
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
