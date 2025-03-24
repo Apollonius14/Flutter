@@ -440,32 +440,28 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        // Draw particles
-        this.ctx.beginPath();
-        bubble.particles.forEach(particle => {
-          const pos = particle.body.position;
-          this.ctx.moveTo(pos.x, pos.y);
-          // Increase particle sizes by 5x
-          // Make active particles 20% larger (and growing with age)
-          // For inactive particles, keep them smaller
-          const growthFactor = isInActiveWindow ? 1 + (particle.age / bubble.maxAge) * 0.4 : 1;
-          // Increased size by 20% for all particles
-          const particleSize = isInActiveWindow ? 1.5 * 1.2 * 1.2 * growthFactor : 0.75 * 0.7 * 1.2;
-          this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-        });
-
         const opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7;
-        if (isInActiveWindow) {
-          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-          this.ctx.lineWidth = 0.5;
-        } else {
+        
+        // For inactive particles, draw them normally
+        if (!isInActiveWindow) {
+          // Draw particles
+          this.ctx.beginPath();
+          bubble.particles.forEach(particle => {
+            const pos = particle.body.position;
+            this.ctx.moveTo(pos.x, pos.y);
+            // Keep inactive particles smaller
+            const particleSize = 0.75 * 0.7 * 1.2;
+            this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
+          });
+
           this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
           this.ctx.lineWidth = 0.5;
-        }
-
-        this.ctx.stroke();
+          this.ctx.stroke();
+        } 
+        // For active particles, they'll be drawn with the bezier curves below
+        // We skip drawing them here to avoid double-rendering
         
-        // Draw connecting lines between particles for blue waves only
+        // Draw smooth bezier curves between particles for blue waves only
         if (isInActiveWindow && bubble.particles.length > 1) {
           const visibleParticles = bubble.particles
             .filter(p => {
@@ -482,10 +478,69 @@ export class CanvasController {
               return aAngle - bAngle;
             });
           
-          if (visibleParticles.length > 1) {
-            // Draw lines between consecutive particles
+          if (visibleParticles.length > 2) {
+            // Draw a glow effect for the curve first
             this.ctx.beginPath();
-            const lineOpacity = opacity * 0.4; // Slightly transparent lines
+            const lineOpacity = opacity * 0.6; // Slightly increased opacity for better visibility
+            this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
+            this.ctx.shadowBlur = 8;
+            this.ctx.strokeStyle = `rgba(20, 210, 255, ${lineOpacity})`;
+            this.ctx.lineWidth = 1.8;
+            
+            // Start at the first particle
+            const startPos = visibleParticles[0].body.position;
+            this.ctx.moveTo(startPos.x, startPos.y);
+            
+            // Use cubic bezier curves to create a smooth path through all particles
+            for (let i = 0; i < visibleParticles.length - 1; i++) {
+              const p0 = visibleParticles[Math.max(0, i-1)].body.position;
+              const p1 = visibleParticles[i].body.position;
+              const p2 = visibleParticles[i+1].body.position;
+              const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
+              
+              // Calculate control points for the current segment (p1 to p2)
+              // Use a portion of the vector from previous to next particle
+              const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
+              
+              // First control point - influenced by p0 and p2
+              const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+              const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+              
+              // Second control point - influenced by p1 and p3
+              const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+              const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+              
+              // Draw the cubic bezier curve
+              this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+            }
+            
+            this.ctx.stroke();
+            
+            // Reset shadow effects after drawing the curve
+            this.ctx.shadowColor = 'transparent';
+            this.ctx.shadowBlur = 0;
+            
+            // Draw particles as semi-transparent circles to emphasize the curve
+            visibleParticles.forEach(particle => {
+              const pos = particle.body.position;
+              // Calculate particle size with growth factor
+              const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
+              // Draw a filled circle with a subtle glow effect
+              this.ctx.beginPath();
+              this.ctx.arc(pos.x, pos.y, particleSize * 0.7, 0, Math.PI * 2);
+              this.ctx.fillStyle = `rgba(0, 200, 255, ${lineOpacity * 0.3})`;
+              this.ctx.fill();
+              
+              // Add a tiny bright center to each particle
+              this.ctx.beginPath();
+              this.ctx.arc(pos.x, pos.y, particleSize * 0.2, 0, Math.PI * 2);
+              this.ctx.fillStyle = `rgba(120, 220, 255, ${lineOpacity * 0.6})`;
+              this.ctx.fill();
+            });
+          } else if (visibleParticles.length > 1) {
+            // If we don't have enough points for a proper curve, fall back to lines
+            this.ctx.beginPath();
+            const lineOpacity = opacity * 0.4;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
             this.ctx.lineWidth = 0.8;
             
