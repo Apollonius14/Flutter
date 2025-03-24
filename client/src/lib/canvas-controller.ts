@@ -43,6 +43,8 @@ export class CanvasController {
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
   private wallSprings: WallSpring[] = [];
+  private previousSweepLineX: number = 0; // Track previous position of sweep line
+  private activationLineX: number = 0; // Will be set to 20% of canvas width
   private lastSpawnTime: number = 0;
   private spawnInterval: number = 1000; // Default spawn interval in ms
   private wallCurvature: number = 0; // 0 = straight wall, 1 = max curve
@@ -69,6 +71,9 @@ export class CanvasController {
       power: 3, // Default power level (mid-range: 1-7)
       frequency: 0.15  // Default frequency from home.tsx
     };
+    
+    // Set the activation line at 20% of canvas width
+    this.activationLineX = canvas.width * 0.2;
     
     // Calculate initial spawn interval based on frequency
     this.updateSpawnInterval();
@@ -219,10 +224,10 @@ export class CanvasController {
       positions.push(compressedPosition);
     }
 
-    // The activation line is at 20% of canvas width
-    const activationLine = width * 0.2;
+    // Use the class activation line property
+    const activationLine = this.activationLineX;
     
-    // Check if this spawn is close to the activation line
+    // Check if this spawn is at the activation line position or not
     const isOnActivationLine = Math.abs(x - activationLine) < 5;
     
     positions.forEach(y => {
@@ -414,21 +419,45 @@ export class CanvasController {
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
-    // Timer-based spawning for regular rhythm
+    // Draw activation line
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.activationLineX, 0);
+    this.ctx.lineTo(this.activationLineX, height);
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.05)";
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
+
+    // Check if the sweep line has crossed the activation line
+    const hasPassedActivationLine = 
+      (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX) || 
+      (timeX < this.previousSweepLineX && 
+       this.previousSweepLineX >= this.activationLineX && 
+       timeX <= this.activationLineX);
+    
+    // Activation line spawning - create blue particles when sweep line crosses activation line
+    if (hasPassedActivationLine) {
+      const newBubbles = this.generateBubbles(this.activationLineX);
+      this.bubbles.push(...newBubbles);
+    }
+    
+    // Regular time-based spawning for white particles
     const currentTime = performance.now();
     if (currentTime - this.lastSpawnTime >= this.spawnInterval) {
+      // Generate white particles at the sweep line position
       const newBubbles = this.generateBubbles(timeX);
       this.bubbles.push(...newBubbles);
       this.lastSpawnTime = currentTime;
     }
+    
+    // Update previous position for next frame
+    this.previousSweepLineX = timeX;
 
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      // Check if bubble is close to activationLine (x = 20% of canvas width)
-      const activationLine = this.canvas.width * 0.2;
-      const isInActiveWindow = Math.abs(bubble.x - activationLine) < 5;
+      // Check if bubble is close to activation line
+      const isInActiveWindow = Math.abs(bubble.x - this.activationLineX) < 5;
 
       // Update collision filters based on active state
       if (bubble.particles.length > 0) {
