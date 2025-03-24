@@ -38,8 +38,7 @@ export default function Home() {
     power: 3, // default value of 3 (middle of 1-7 range)
     frequency: 0.15,
   });
-  // Walls are now always enabled
-  const [funnelEnabled, setFunnelEnabled] = useState(true);
+  // Walls are now always enabled (no need for a state)
   const [wallAngle, setWallAngle] = useState(30); // Start with a slight angle
   const [gapSize, setGapSize] = useState(0.4);
 
@@ -69,10 +68,7 @@ export default function Home() {
     }
   }, [isPlaying, controller]);
 
-  useEffect(() => {
-    if (!controller) return;
-    controller.setFunnelEnabled(funnelEnabled);
-  }, [funnelEnabled, controller]);
+  // Removed funnelEnabled effect since it's always true now
   
   useEffect(() => {
     if (!controller) return;
@@ -83,6 +79,12 @@ export default function Home() {
     if (!controller) return;
     controller.setGapSize(gapSize);
   }, [gapSize, controller]);
+
+  useEffect(() => {
+    if (!controller) return;
+    // Always maintain funnelEnabled as true
+    controller.setFunnelEnabled(true);
+  }, [controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
