@@ -240,8 +240,8 @@ export class CanvasController {
       
       const particles: Particle[] = [];
       // Create particles for blue waves
-      // Reduced by another 50% from original value ((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8)
-      const numParticlesInRing = Math.floor((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8);
+      // Set fixed number of particles to 20
+      const numParticlesInRing = 20;
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
