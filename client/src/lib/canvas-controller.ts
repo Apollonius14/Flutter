@@ -229,8 +229,8 @@ export class CanvasController {
 
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
-        // Reduced by 20% from previous value (48 * 1.3)
-        const numParticlesInRing = Math.floor((48 * 1.3) * 0.8);
+        // Reduced by another 20% from previous value ((48 * 1.3) * 0.8)
+        const numParticlesInRing = Math.floor((48 * 1.3) * 0.8 * 0.8);
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -248,8 +248,8 @@ export class CanvasController {
             }
           });
 
-          // Increased speed by 20% from previous value
-          const speed = 0.67 * 1.3 * 1.5 * 1.2;
+          // Increased speed by 50% from previous value
+          const speed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -383,8 +383,8 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
-    // Double motion blur by reducing alpha to half its previous value
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.075)'; // Halved from 0.15 to double blur effect
+    // Reduce motion blur by increasing alpha by 20%
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.09)'; // Increased from 0.075 by 20%
     this.ctx.fillRect(0, 0, width, height);
     
     // Draw funnel walls with smoky white fill
@@ -439,7 +439,8 @@ export class CanvasController {
           // Make active particles 20% larger (and growing with age)
           // For inactive particles, keep them smaller
           const growthFactor = isInActiveWindow ? 1 + (particle.age / bubble.maxAge) * 0.4 : 1;
-          const particleSize = isInActiveWindow ? 1.5 * 1.2 * growthFactor : 0.75 * 0.7;
+          // Increased size by 20% for all particles
+          const particleSize = isInActiveWindow ? 1.5 * 1.2 * 1.2 * growthFactor : 0.75 * 0.7 * 1.2;
           this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
         });
 
