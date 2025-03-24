@@ -259,8 +259,8 @@ export class CanvasController {
             }
           });
 
-          // Increased speed by 50% from previous value
-          const speed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5;
+          // Doubled the previous speed
+          const speed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2;
           Matter.Body.setVelocity(body, {
             x: Math.cos(angle) * speed,
             y: Math.sin(angle) * speed
@@ -606,8 +606,8 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    // Increase line speed by 20% by reducing cycle time
-    const cyclePeriod = 6667 * 0.8; // 20% faster (0.8 of original time)
+    // Double line speed by halving cycle time
+    const cyclePeriod = 6667 * 0.4; // Twice as fast (0.4 of original time)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
