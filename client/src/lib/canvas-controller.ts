@@ -411,19 +411,45 @@ export class CanvasController {
 
     const timeX = width * progress;
 
-    // Draw time indicator line
+    // Draw enhanced time indicator line with motion blur effect
+    // First draw a wider, lower opacity blur for motion blur effect
+    this.ctx.beginPath();
+    this.ctx.moveTo(timeX - 3, 0);
+    this.ctx.lineTo(timeX - 3, height);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+    this.ctx.lineWidth = 6;
+    this.ctx.stroke();
+    
+    // Second blur layer, closer to main line
+    this.ctx.beginPath();
+    this.ctx.moveTo(timeX - 1.5, 0);
+    this.ctx.lineTo(timeX - 1.5, height);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    this.ctx.lineWidth = 4;
+    this.ctx.stroke();
+    
+    // Main sweep line - thicker and brighter
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)"; // Increased brightness
+    this.ctx.lineWidth = 2; // Thicker line
     this.ctx.stroke();
 
-    // Draw activation line
+    // Draw enhanced activation line with subtle glow
+    // First draw a wider, low opacity glow
     this.ctx.beginPath();
     this.ctx.moveTo(this.activationLineX, 0);
     this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.05)";
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.03)";
+    this.ctx.lineWidth = 4;
+    this.ctx.stroke();
+    
+    // Main activation line
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.activationLineX, 0);
+    this.ctx.lineTo(this.activationLineX, height);
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.08)";
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
@@ -440,14 +466,8 @@ export class CanvasController {
       this.bubbles.push(...newBubbles);
     }
     
-    // Regular time-based spawning for white particles
-    const currentTime = performance.now();
-    if (currentTime - this.lastSpawnTime >= this.spawnInterval) {
-      // Generate white particles at the sweep line position
-      const newBubbles = this.generateBubbles(timeX);
-      this.bubbles.push(...newBubbles);
-      this.lastSpawnTime = currentTime;
-    }
+    // No more regular time-based spawning for white particles
+    // We're now only spawning particles at the activation line
     
     // Update previous position for next frame
     this.previousSweepLineX = timeX;
@@ -474,22 +494,8 @@ export class CanvasController {
       if (this.funnelEnabled && bubble.particles.length > 0) {
         const opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7;
         
-        // For inactive particles, draw them normally
-        if (!isInActiveWindow) {
-          // Draw particles
-          this.ctx.beginPath();
-          bubble.particles.forEach(particle => {
-            const pos = particle.body.position;
-            this.ctx.moveTo(pos.x, pos.y);
-            // Keep inactive particles smaller
-            const particleSize = 0.75 * 0.7 * 1.2;
-            this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-          });
-
-          this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-          this.ctx.lineWidth = 0.5;
-          this.ctx.stroke();
-        } 
+        // We no longer draw inactive particles - they're completely invisible
+        // Only blue particles at the activation line are visible
         // For active particles, they'll be drawn with the bezier curves below
         // We skip drawing them here to avoid double-rendering
         
@@ -588,19 +594,8 @@ export class CanvasController {
             this.ctx.stroke();
           }
         }
-      } else {
-        const opacity = 1 - (bubble.age / bubble.maxAge);
-        this.ctx.beginPath();
-        this.ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
-
-        if (isInActiveWindow) {
-          this.ctx.strokeStyle = `rgba(0, 200, 255, ${opacity})`;
-        } else {
-          this.ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
-        }
-        this.ctx.lineWidth = 0.5;
-        this.ctx.stroke();
-      }
+      } 
+      // We no longer draw non-particle bubbles at all
 
       if (bubble.age >= bubble.maxAge) {
         if (bubble.particles.length > 0) {
