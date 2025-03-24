@@ -224,27 +224,24 @@ export class CanvasController {
       positions.push(compressedPosition);
     }
 
-    // Use the class activation line property
-    const activationLine = this.activationLineX;
+    // Always use the activation line position for spawning particles
+    // This ensures particles only appear at the activation line
+    x = this.activationLineX;
     
-    // Check if this spawn is at the activation line position or not
-    const isOnActivationLine = Math.abs(x - activationLine) < 5;
+    // All particles are active since we're only generating at the activation line
+    const isActive = true;
     
     positions.forEach(y => {
-      // Only create blue particles at the activation line
-      const isActive = isOnActivationLine;
-      
-      // Set intensity based on active status
-      const intensity = isActive ? 1.0 : 0.0;
+      // Always create active blue particles
+      const intensity = 1.0;
 
       // Generate a unique group ID for this ring of particles
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Only create particles for active (blue) waves
-      if (isActive) {
-        // Reduced by another 50% from original value ((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8)
-        const numParticlesInRing = Math.floor((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8);
+      // Create particles for blue waves
+      // Reduced by another 50% from original value ((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8)
+      const numParticlesInRing = Math.floor((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8);
         for (let i = 0; i < numParticlesInRing; i++) {
           const angle = (i / numParticlesInRing) * Math.PI * 2;
           const particleX = x + Math.cos(angle) * fixedRadius;
@@ -277,12 +274,12 @@ export class CanvasController {
             groupId: groupId  // Assign the same group ID to all particles in this ring
           });
         }
-      }
 
       const baseMaxAge = 80;
       // Apply power factor to the max age (from 1/3 to 7/3 of base value at power=3)
       const powerFactor = power / 3;
-      const maxAge = isActive ? baseMaxAge * 6 * 1.5 * 4 * powerFactor : baseMaxAge * 0.5;
+      // All particles are now active blue ones, so always use the longer maxAge
+      const maxAge = baseMaxAge * 6 * 1.5 * 4 * powerFactor;
 
       bubbles.push({
         x,
@@ -453,12 +450,9 @@ export class CanvasController {
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
-    // Check if the sweep line has crossed the activation line
+    // Check if the sweep line has crossed the activation line (left to right only)
     const hasPassedActivationLine = 
-      (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX) || 
-      (timeX < this.previousSweepLineX && 
-       this.previousSweepLineX >= this.activationLineX && 
-       timeX <= this.activationLineX);
+      (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX);
     
     // Activation line spawning - create blue particles when sweep line crosses activation line
     if (hasPassedActivationLine) {
