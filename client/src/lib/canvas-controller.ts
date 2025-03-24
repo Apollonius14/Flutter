@@ -134,7 +134,7 @@ export class CanvasController {
     const centerY = height * 0.5;
     const gapSize = height * this.gapSize; // Use the stored gap size
     const wallThickness = 12; // Reduced from 20 to make walls more slender
-    const wallLength = height * 0.7; // Increased from 0.4 to 0.7 for longer walls
+    const wallLength = height * 0.85; // Increased to 0.85 for complete closure
 
     // Set up walls as static bodies with perfect restitution
     const wallOptions = {
@@ -607,7 +607,7 @@ export class CanvasController {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
     // Double line speed by halving cycle time
-    const cyclePeriod = 6667 * 0.4; // Twice as fast (0.4 of original time)
+    const cyclePeriod = 6667 * 0.44; // Slowed down by 10% (0.4 * 1.1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
