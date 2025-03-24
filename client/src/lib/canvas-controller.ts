@@ -11,6 +11,7 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
+  groupId: number; // Add group ID to identify particles in the same ring
 }
 
 interface Bubble {
@@ -22,6 +23,7 @@ interface Bubble {
   maxAge: number;
   intensity: number;
   particles: Particle[];
+  groupId: number; // Add group ID to identify this bubble's particle group
 }
 
 interface WallSpring {
@@ -49,6 +51,7 @@ export class CanvasController {
   private gapSize: number = 0.4; // Normalized gap size (fraction of canvas height)
   private topWallAngle: number = 0; // Store angle for top wall in radians
   private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
+  private currentGroupId: number = 0; // Counter for generating unique group IDs
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -227,6 +230,9 @@ export class CanvasController {
         normalizedX <= this.params.endTime;
       const intensity = isInActiveWindow ? 1.0 : 0.3;
 
+      // Generate a unique group ID for this ring of particles
+      const groupId = this.currentGroupId++;
+      
       const particles: Particle[] = [];
       if (this.funnelEnabled) {
         // Reduced by another 20% from previous value ((48 * 1.3) * 0.8)
@@ -259,7 +265,8 @@ export class CanvasController {
           particles.push({
             body,
             intensity,
-            age: 0
+            age: 0,
+            groupId  // Assign the same group ID to all particles in this ring
           });
         }
       }
@@ -276,7 +283,8 @@ export class CanvasController {
         age: 0,
         maxAge,
         intensity,
-        particles
+        particles,
+        groupId  // Assign the same group ID to the bubble
       });
     });
 
@@ -431,6 +439,7 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
+        // Draw particles
         this.ctx.beginPath();
         bubble.particles.forEach(particle => {
           const pos = particle.body.position;
@@ -454,6 +463,41 @@ export class CanvasController {
         }
 
         this.ctx.stroke();
+        
+        // Draw connecting lines between particles for blue waves only
+        if (isInActiveWindow && bubble.particles.length > 1) {
+          const visibleParticles = bubble.particles
+            .filter(p => {
+              // Get particles that are on screen
+              const pos = p.body.position;
+              return pos.x >= 0 && pos.x <= width && pos.y >= 0 && pos.y <= height;
+            })
+            .sort((a, b) => {
+              // Sort particles by angle around the center
+              const aPos = a.body.position;
+              const bPos = b.body.position;
+              const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
+              const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
+              return aAngle - bAngle;
+            });
+          
+          if (visibleParticles.length > 1) {
+            // Draw lines between consecutive particles
+            this.ctx.beginPath();
+            const lineOpacity = opacity * 0.4; // Slightly transparent lines
+            this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
+            this.ctx.lineWidth = 0.8;
+            
+            for (let i = 0; i < visibleParticles.length - 1; i++) {
+              const pos1 = visibleParticles[i].body.position;
+              const pos2 = visibleParticles[i + 1].body.position;
+              this.ctx.moveTo(pos1.x, pos1.y);
+              this.ctx.lineTo(pos2.x, pos2.y);
+            }
+            
+            this.ctx.stroke();
+          }
+        }
       } else {
         const opacity = 1 - (bubble.age / bubble.maxAge);
         this.ctx.beginPath();
