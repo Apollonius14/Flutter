@@ -215,7 +215,7 @@ export class CanvasController {
     // Generate evenly spaced positions but closer to the centerline
     const positions: number[] = [];
     const spacing = height / (numWaves + 1);
-    const compressionFactor = 0.85; // Make rings slightly closer to center (0.85 of full range)
+    const compressionFactor = 0.65; // Increased compression to bring rings much closer to center
     
     for (let i = 1; i <= numWaves; i++) {
       // Calculate position with compression toward center
