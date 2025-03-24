@@ -140,8 +140,8 @@ export class CanvasController {
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.6, // Increased friction to prevent slipping
-      frictionStatic: 0.9, // High static friction to keep particles from sliding
+      friction: 0.3, // Reduced friction by 50%
+      frictionStatic: 0.45, // Reduced static friction by 50%
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -248,7 +248,7 @@ export class CanvasController {
           const particleY = y + Math.sin(angle) * fixedRadius;
 
           const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
-            friction: 0.2, // Add some friction for normal collision behavior
+            friction: 0.1, // Reduced friction by 50%
             restitution: 1.0, // Perfect elasticity
             mass: 0.1,
             frictionAir: 0,
