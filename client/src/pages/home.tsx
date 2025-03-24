@@ -11,24 +11,18 @@ const translations = {
   en: {
     title: "Air Flow Visualizer",
     frequency: "Spawn Frequency (0-1)",
-    coherence: "Coherence (0-5)",
-    startTime: "Start Time (0-100ms)",
-    endTime: "End Time (0-100ms)",
+    power: "Power (1-7)",
     play: "Play",
     pause: "Pause",
-    showWall: "Show Wall",
     wallCurvature: "Wall Angle (0-90°)",
     gapSize: "Gap Size"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
     frequency: "معدل التوليد (٠-١)",
-    coherence: "التماسك (٠-٥)",
-    startTime: "وقت البدء (٠-١٠٠ م.ث)",
-    endTime: "وقت النهاية (٠-١٠٠ م.ث)",
+    power: "القوة (١-٧)",
     play: "تشغيل",
     pause: "إيقاف",
-    showWall: "إظهار الحائط",
     wallCurvature: "زاوية الحائط (٠-٩٠°)",
     gapSize: "حجم الفجوة"
   }
@@ -41,13 +35,12 @@ export default function Home() {
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
   const t = translations[language];
   const [params, setParams] = useState({
-    coherence: 2.5,
-    startTime: 0,
-    endTime: 100,
+    power: 3, // default value of 3 (middle of 1-7 range)
     frequency: 0.15,
   });
-  const [funnelEnabled, setFunnelEnabled] = useState(false);
-  const [wallAngle, setWallAngle] = useState(0);
+  // Walls are now always enabled
+  const [funnelEnabled, setFunnelEnabled] = useState(true);
+  const [wallAngle, setWallAngle] = useState(30); // Start with a slight angle
   const [gapSize, setGapSize] = useState(0.4);
 
   useEffect(() => {
@@ -132,99 +125,52 @@ export default function Home() {
 
               <div className="space-y-2">
                 <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.coherence}
+                  {t.power}
                 </Label>
                 <Slider
-                  value={[params.coherence]}
-                  min={0}
-                  max={5}
-                  step={0.1}
+                  value={[params.power]}
+                  min={1}
+                  max={7}
+                  step={0.5}
                   onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, coherence: value }))
+                    setParams((p) => ({ ...p, power: value }))
                   }
                   className="pt-2"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.startTime}
-                </Label>
-                <Slider
-                  value={[params.startTime]}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, startTime: value }))
-                  }
-                  className="pt-2"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.endTime}
-                </Label>
-                <Slider
-                  value={[params.endTime]}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, endTime: value }))
-                  }
-                  className="pt-2"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className={`text-gray-200 ${language === 'ar' ? 'arabic' : ''}`}>
-                    {t.showWall}
-                  </Label>
-                  <Switch
-                    checked={funnelEnabled}
-                    onCheckedChange={setFunnelEnabled}
-                  />
-                </div>
               </div>
               
-              {funnelEnabled && (
-                <>
-                  <div className="space-y-2">
-                    <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                      {t.wallCurvature}
-                    </Label>
-                    <Slider
-                      value={[wallAngle]}
-                      min={0}
-                      max={90}
-                      step={1}
-                      onValueChange={([value]) => {
-                        setWallAngle(value);
-                      }}
-                      className="pt-2"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                      {t.gapSize}
-                    </Label>
-                    <Slider
-                      value={[gapSize]}
-                      min={0.1}
-                      max={0.8}
-                      step={0.01}
-                      onValueChange={([value]) => {
-                        setGapSize(value);
-                      }}
-                      className="pt-2"
-                    />
-                  </div>
-                </>
-              )}
+              {/* Wall controls - now always visible */}
+              <div className="space-y-2">
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.wallCurvature}
+                </Label>
+                <Slider
+                  value={[wallAngle]}
+                  min={0}
+                  max={90}
+                  step={1}
+                  onValueChange={([value]) => {
+                    setWallAngle(value);
+                  }}
+                  className="pt-2"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.gapSize}
+                </Label>
+                <Slider
+                  value={[gapSize]}
+                  min={0.1}
+                  max={0.8}
+                  step={0.01}
+                  onValueChange={([value]) => {
+                    setGapSize(value);
+                  }}
+                  className="pt-2"
+                />
+              </div>
             </div>
 
             <div className="flex justify-center">

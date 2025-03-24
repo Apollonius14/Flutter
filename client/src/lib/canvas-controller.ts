@@ -1,9 +1,7 @@
 import Matter from 'matter-js';
 
 interface AnimationParams {
-  coherence: number;
-  startTime: number;
-  endTime: number;
+  power: number;
   frequency: number;
 }
 
@@ -41,7 +39,7 @@ export class CanvasController {
   private animationFrame: number | null = null;
   private startTime: number | null = null;
   private bubbles: Bubble[] = [];
-  private funnelEnabled: boolean = false;
+  private funnelEnabled: boolean = true;
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
   private wallSprings: WallSpring[] = [];
@@ -68,9 +66,7 @@ export class CanvasController {
     });
 
     this.params = {
-      coherence: 2.5,
-      startTime: 0,
-      endTime: 100,
+      power: 3, // Default power level (mid-range: 1-7)
       frequency: 0.15  // Default frequency from home.tsx
     };
     
@@ -200,42 +196,48 @@ export class CanvasController {
   }
 
   private generateBubbles(x: number): Bubble[] {
-    const { coherence } = this.params;
+    const { power } = this.params;
     const centerY = this.canvas.height / 2;
     const height = this.canvas.height;
+    const width = this.canvas.width;
 
-    const minWaves = 4;
-    const maxWaves = 8; // Increased from 5 to 6
-    const numWaves = Math.floor(minWaves + (coherence / 5) * (maxWaves - minWaves));
-
+    // Always generate the maximum number of waves
+    const numWaves = 8; 
+    
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
+    // Generate evenly spaced positions but closer to the centerline
     const positions: number[] = [];
-    if (coherence === 5) {
-      const spacing = height / (numWaves + 1);
-      for (let i = 1; i <= numWaves; i++) {
-        positions.push(spacing * i);
-      }
-    } else {
-      const margin = height * 0.1;
-      for (let i = 0; i < numWaves; i++) {
-        positions.push(margin + Math.random() * (height - 2 * margin));
-      }
-      positions.sort((a, b) => a - b);
+    const spacing = height / (numWaves + 1);
+    const compressionFactor = 0.85; // Make rings slightly closer to center (0.85 of full range)
+    
+    for (let i = 1; i <= numWaves; i++) {
+      // Calculate position with compression toward center
+      const normalPosition = i / (numWaves + 1); // 0.1 to 0.9
+      const compressedPosition = centerY + (normalPosition - 0.5) * height * compressionFactor;
+      positions.push(compressedPosition);
     }
 
+    // The activation line is at 20% of canvas width
+    const activationLine = width * 0.2;
+    
+    // Check if this spawn is close to the activation line
+    const isOnActivationLine = Math.abs(x - activationLine) < 5;
+    
     positions.forEach(y => {
-      const normalizedX = x / this.canvas.width * 100;
-      const isInActiveWindow = normalizedX >= this.params.startTime &&
-        normalizedX <= this.params.endTime;
-      const intensity = isInActiveWindow ? 1.0 : 0.3;
+      // Only create blue particles at the activation line
+      const isActive = isOnActivationLine;
+      
+      // Set intensity based on active status
+      const intensity = isActive ? 1.0 : 0.0;
 
       // Generate a unique group ID for this ring of particles
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      if (this.funnelEnabled) {
+      // Only create particles for active (blue) waves
+      if (isActive) {
         // Reduced by another 50% from original value ((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8)
         const numParticlesInRing = Math.floor((48 * 1.3) * 0.8 * 0.8 * 0.8 * 0.8);
         for (let i = 0; i < numParticlesInRing; i++) {
@@ -265,16 +267,17 @@ export class CanvasController {
           Matter.Composite.add(this.engine.world, body);
           particles.push({
             body,
-            intensity,
+            intensity: intensity,
             age: 0,
-            groupId  // Assign the same group ID to all particles in this ring
+            groupId: groupId  // Assign the same group ID to all particles in this ring
           });
         }
       }
 
       const baseMaxAge = 80;
-      // Increase max age of blue particles by 50% again (total 2.25x from original)
-      const maxAge = isInActiveWindow ? baseMaxAge * 6 * 1.5 * 4 : baseMaxAge * 0.5;
+      // Apply power factor to the max age (from 1/3 to 7/3 of base value at power=3)
+      const powerFactor = power / 3;
+      const maxAge = isActive ? baseMaxAge * 6 * 1.5 * 4 * powerFactor : baseMaxAge * 0.5;
 
       bubbles.push({
         x,
@@ -283,9 +286,9 @@ export class CanvasController {
         initialRadius: fixedRadius,
         age: 0,
         maxAge,
-        intensity,
+        intensity: intensity,
         particles,
-        groupId  // Assign the same group ID to the bubble
+        groupId: groupId  // Assign the same group ID to the bubble
       });
     });
 
@@ -423,9 +426,9 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      const normalizedX = bubble.x / this.canvas.width * 100;
-      const isInActiveWindow = normalizedX >= this.params.startTime &&
-        normalizedX <= this.params.endTime;
+      // Check if bubble is close to activationLine (x = 20% of canvas width)
+      const activationLine = this.canvas.width * 0.2;
+      const isInActiveWindow = Math.abs(bubble.x - activationLine) < 5;
 
       // Update collision filters based on active state
       if (bubble.particles.length > 0) {
@@ -482,10 +485,12 @@ export class CanvasController {
             // Draw a glow effect for the curve first
             this.ctx.beginPath();
             const lineOpacity = opacity * 0.6; // Slightly increased opacity for better visibility
+            // Scale shadow effect by power factor
+            const powerFactor = this.params.power / 3;
             this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
-            this.ctx.shadowBlur = 8;
+            this.ctx.shadowBlur = 8 * powerFactor;
             this.ctx.strokeStyle = `rgba(20, 210, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 1.8;
+            this.ctx.lineWidth = 1.8 * powerFactor;
             
             // Start at the first particle
             const startPos = visibleParticles[0].body.position;
