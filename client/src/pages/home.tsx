@@ -162,24 +162,22 @@ export default function Home() {
                 />
               </div>
               
-              {/* Wall angle control - only visible when gap size > 0 */}
-              {gapSize > 0.001 && (
-                <div className="space-y-2">
-                  <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                    {t.wallCurvature}
-                  </Label>
-                  <Slider
-                    value={[wallAngle]}
-                    min={0}
-                    max={90}
-                    step={1}
-                    onValueChange={([value]) => {
-                      setWallAngle(value);
-                    }}
-                    className="pt-2"
-                  />
-                </div>
-              )}
+              {/* Wall controls - now always visible */}
+              <div className="space-y-2">
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
+                  {t.wallCurvature}
+                </Label>
+                <Slider
+                  value={[wallAngle]}
+                  min={0}
+                  max={90}
+                  step={1}
+                  onValueChange={([value]) => {
+                    setWallAngle(value);
+                  }}
+                  className="pt-2"
+                />
+              </div>
               
               <div className="space-y-2">
                 <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
