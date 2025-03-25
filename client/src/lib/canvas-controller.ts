@@ -112,16 +112,33 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    const centerY = height * 0.5;
-    const gapSize = height * this.gapSize; // Use the stored gap size
-    const wallThickness = 20; // Increased back from 12 to ensure no gaps
-    const wallLength = height * 4; // Made walls even longer to ensure complete blockage
+    
+    // Wall dimensions - each wall is half the height of the canvas
+    const wallThickness = 20;
+    const wallLength = height * 0.5; // Each wall is half the canvas height
+    
+    // Calculate positions based on gap size
+    // When gapSize = 0, walls are at 1/4 and 3/4 of canvas height
+    // As gapSize increases, they move further apart
+    
+    // Normalized gap factor (0 to 1)
+    const gapFactor = this.gapSize;
+    
+    // Base positions at 1/4 and 3/4 of canvas height
+    const baseTopY = height * 0.25;
+    const baseBottomY = height * 0.75;
+    
+    // Move walls apart based on gap factor
+    // Maximum movement is 20% of canvas height in each direction
+    const maxOffset = height * 0.2; 
+    const topWallY = baseTopY - (gapFactor * maxOffset);
+    const bottomWallY = baseBottomY + (gapFactor * maxOffset);
 
     // Set up walls as static bodies with perfect restitution
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.3, 
+      friction: 0.3,
       frictionStatic: 0.45,
       collisionFilter: {
         category: 0x0002,
@@ -134,13 +151,7 @@ export class CanvasController {
     this.topWallAngle = -wallAngleRadians;
     this.bottomWallAngle = wallAngleRadians;
 
-    // Calculate wall positions ensuring they meet at center when gap is 0
-    // The key is to position the walls exactly half of gapSize away from center
-    // When gapSize is 0, they will be positioned directly at the center
-    const topWallY = centerY - Math.max(gapSize, 0.001) * height / 2;
-    const bottomWallY = centerY + Math.max(gapSize, 0.001) * height / 2;
-
-    // Create the walls with adjusted positions
+    // Create the walls with the calculated positions
     const topWall = Matter.Bodies.rectangle(
       midX,
       topWallY,
