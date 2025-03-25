@@ -206,15 +206,36 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Increased by 20% from 14 to 17 particles per ring
-      // No position-based modulation for simpler physics
-      const numParticlesInRing = 17;
+      // Increased by 10% from 17 to 19 particles per ring as requested
+      const numParticlesInRing = 19;
       
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3;
       
+      // Create an array to store the angles we'll use for particle placement
+      const particleAngles: number[] = [];
+      
+      // Generate non-uniform angles to concentrate particles along horizontal axis
       for (let i = 0; i < numParticlesInRing; i++) {
-        const angle = (i / numParticlesInRing) * Math.PI * 2;
+        // Step 1: Generate a uniform angle distribution
+        const uniformAngle = (i / numParticlesInRing) * Math.PI * 2;
+        
+        // Step 2: Apply a sine-based transform to concentrate particles horizontally
+        // This creates more particles at 0° and 180° (left and right sides)
+        // sin(2*theta) oscillates between -1 and 1 twice per cycle
+        // Adding 0.5 * sin(2*theta) to theta distorts the uniform distribution
+        // The 0.5 coefficient controls how strong the concentration effect is
+        const concentrationStrength = 0.5; // Controls how much to concentrate horizontally
+        const distortedAngle = uniformAngle + concentrationStrength * Math.sin(2 * uniformAngle);
+        
+        particleAngles.push(distortedAngle);
+      }
+      
+      // Sort the angles to maintain sequential ordering around the circle
+      particleAngles.sort((a, b) => a - b);
+      
+      // Create particles at the calculated angles
+      for (const angle of particleAngles) {
         const particleX = x + Math.cos(angle) * fixedRadius;
         const particleY = y + Math.sin(angle) * fixedRadius;
 
@@ -230,11 +251,22 @@ export class CanvasController {
           }
         });
 
-        // Doubled the previous speed
-        const speed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2;
+        // Base speed (kept the same as before)
+        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2;
+        
+        // Calculate how much the particle is aligned with the horizontal axis
+        // cos(angle) is 1 or -1 at 0° and 180° (horizontal alignment)
+        // and 0 at 90° and 270° (vertical alignment)
+        const horizontalAlignment = Math.abs(Math.cos(angle));
+        
+        // Boost speed for horizontally-aligned particles
+        // 1 + 0.5 * horizontalAlignment gives boost from 1.0x to 1.5x based on alignment
+        const directedSpeed = baseSpeed * (1 + 0.5 * horizontalAlignment);
+        
+        // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
-          x: Math.cos(angle) * speed,
-          y: Math.sin(angle) * speed
+          x: Math.cos(angle) * directedSpeed,
+          y: Math.sin(angle) * directedSpeed
         });
 
         Matter.Composite.add(this.engine.world, body);
