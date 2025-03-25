@@ -114,15 +114,15 @@ export class CanvasController {
     const midX = width * 0.5;
     const centerY = height * 0.5;
     const gapSize = height * this.gapSize; // Use the stored gap size
-    const wallThickness = 12; // Reduced from 20 to make walls more slender
-    const wallLength = height * 2; // Make walls much longer to ensure complete blockage at minimum gap
+    const wallThickness = 20; // Increased back from 12 to ensure no gaps
+    const wallLength = height * 4; // Made walls even longer to ensure complete blockage
 
     // Set up walls as static bodies with perfect restitution
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.3, // Reduced friction by 50%
-      frictionStatic: 0.45, // Reduced static friction by 50%
+      friction: 0.3, 
+      frictionStatic: 0.45,
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -134,10 +134,16 @@ export class CanvasController {
     this.topWallAngle = -wallAngleRadians;
     this.bottomWallAngle = wallAngleRadians;
 
-    // Create the walls
+    // Calculate wall positions ensuring they meet at center when gap is 0
+    // The key is to position the walls exactly half of gapSize away from center
+    // When gapSize is 0, they will be positioned directly at the center
+    const topWallY = centerY - Math.max(gapSize, 0.001) * height / 2;
+    const bottomWallY = centerY + Math.max(gapSize, 0.001) * height / 2;
+
+    // Create the walls with adjusted positions
     const topWall = Matter.Bodies.rectangle(
       midX,
-      centerY - gapSize/2 - wallLength/2,
+      topWallY,
       wallThickness,
       wallLength,
       wallOptions
@@ -145,7 +151,7 @@ export class CanvasController {
     
     const bottomWall = Matter.Bodies.rectangle(
       midX,
-      centerY + gapSize/2 + wallLength/2,
+      bottomWallY,
       wallThickness,
       wallLength,
       wallOptions
@@ -174,22 +180,22 @@ export class CanvasController {
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
-    // Generate symmetrically distributed positions
+    // Generate more spread out positions along the blue line
     this.positions = []; // Clear previous positions
-    const compressionFactor = 0.585; // Reduced by 10% from 0.65
+    const spreadFactor = 0.85; // Increased from 0.585 to spread waves more evenly
     
     // Calculate center and offsets for symmetric distribution
     const center = height / 2;
-    const baseSpacing = (height * compressionFactor) / 8; // Divide space into 8 parts for 7 waves
+    const baseSpacing = (height * spreadFactor) / 8; // Divide space into 8 parts for 7 waves
     
-    // Add positions in order from top to bottom
-    this.positions.push(center - baseSpacing * 3); // Outer top
-    this.positions.push(center - baseSpacing * 2); // Middle top
-    this.positions.push(center - baseSpacing);     // Inner top
-    this.positions.push(center);                   // Center
-    this.positions.push(center + baseSpacing);     // Inner bottom
-    this.positions.push(center + baseSpacing * 2); // Middle bottom
-    this.positions.push(center + baseSpacing * 3); // Outer bottom
+    // Add positions in order from top to bottom, more spread out
+    this.positions.push(center - baseSpacing * 3.5); // Outer top (moved further)
+    this.positions.push(center - baseSpacing * 2.3); // Middle top (moved further)
+    this.positions.push(center - baseSpacing * 1.1); // Inner top (moved further)
+    this.positions.push(center);                     // Center (unchanged)
+    this.positions.push(center + baseSpacing * 1.1); // Inner bottom (moved further)
+    this.positions.push(center + baseSpacing * 2.3); // Middle bottom (moved further)
+    this.positions.push(center + baseSpacing * 3.5); // Outer bottom (moved further)
 
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
@@ -287,10 +293,10 @@ export class CanvasController {
         // and 0 at 90° and 270° (vertical alignment)
         const horizontalAlignment = Math.abs(Math.cos(angle));
         
-        // Boost speed for horizontally-aligned particles more significantly
-        // Increasing from 0.3 to 0.7 for more pronounced horizontal movement
-        // 1 + 0.7 * horizontalAlignment gives boost from 1.0x to 1.7x for horizontal particles
-        const directedSpeed = baseSpeed * (1 + 0.7 * horizontalAlignment);
+        // Boost speed for horizontally-aligned particles
+        // Reduced from 0.7 to 0.2 as requested by user
+        // 1 + 0.2 * horizontalAlignment gives boost from 1.0x to 1.2x for horizontal particles
+        const directedSpeed = baseSpeed * (1 + 0.2 * horizontalAlignment);
         
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
