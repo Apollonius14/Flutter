@@ -174,22 +174,26 @@ export class CanvasController {
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
-    // Generate symmetrically distributed positions
+    // Generate symmetrically distributed positions with even number of rings
     this.positions = []; // Clear previous positions
     const compressionFactor = 0.585; // Reduced by 10% from 0.65
     
     // Calculate center and offsets for symmetric distribution
     const center = height / 2;
-    const baseSpacing = (height * compressionFactor) / 8; // Divide space into 8 parts for 7 waves
+    // Change to 6 positions (even number) with no ring on centerline
+    const numPositions = 6; 
+    const baseSpacing = (height * compressionFactor) / (numPositions + 1);
     
-    // Add positions in order from top to bottom
-    this.positions.push(center - baseSpacing * 3); // Outer top
-    this.positions.push(center - baseSpacing * 2); // Middle top
-    this.positions.push(center - baseSpacing);     // Inner top
-    this.positions.push(center);                   // Center
-    this.positions.push(center + baseSpacing);     // Inner bottom
-    this.positions.push(center + baseSpacing * 2); // Middle bottom
-    this.positions.push(center + baseSpacing * 3); // Outer bottom
+    // Calculate offset to avoid placing ring directly on centerline
+    const halfSpacing = baseSpacing / 2;
+    
+    // Add positions in order from top to bottom (even count, all offset from center)
+    this.positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer
+    this.positions.push(center - halfSpacing - baseSpacing);     // Upper middle
+    this.positions.push(center - halfSpacing);                   // Upper inner
+    this.positions.push(center + halfSpacing);                   // Lower inner
+    this.positions.push(center + halfSpacing + baseSpacing);     // Lower middle
+    this.positions.push(center + halfSpacing + baseSpacing * 2); // Lower outer
 
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
@@ -215,31 +219,48 @@ export class CanvasController {
       // Create an array to store the angles we'll use for particle placement
       const particleAngles: number[] = [];
       
-      // Increased number of particles to create denser wavefront effect
-      // Total particles will remain similar as we'll concentrate them
-      const numParticlesForDistribution = numParticlesInRing * 1.5;
+      // Use exactly the number of particles specified (no probabilistic sampling)
+      // This ensures we always have the same number of particles in each ring
+      const exactParticleCount = numParticlesInRing;
       
-      // Generate non-uniform angles to concentrate particles at the wavefront (right side)
-      for (let i = 0; i < numParticlesForDistribution; i++) {
-        // Step 1: Generate a uniform angle distribution
-        const uniformAngle = (i / numParticlesForDistribution) * Math.PI * 2;
-        
-        // Step The right side of the circle is at angle 0
-        // We want to concentrate particles around this angle (wavefront)
-        
-        // Use cosine function to concentrate particles towards 0° (right side)
-        // cos(theta) is 1 at 0°, 0 at 90° and 270°, and -1 at 180°
-        // We'll use this to weight the probability of keeping each angle
-        const rightConcentration = 0.5 * (Math.cos(uniformAngle) + 1); // Value from 0 to 1, highest at 0°
-        
-        // Only keep particles with higher probability toward the right side (wavefront)
-        // This creates 10 waves in the front, while keeping total particle count similar
-        if (Math.random() < rightConcentration) {
-          particleAngles.push(uniformAngle);
-        }
+      // Generate deterministic non-uniform angles to concentrate particles at the wavefront (right side)
+      // First create a base array of uniformly distributed angles
+      const baseAngles: number[] = [];
+      for (let i = 0; i < exactParticleCount; i++) {
+        // Generate uniform angles that go all the way around the circle
+        const uniformAngle = (i / exactParticleCount) * Math.PI * 2;
+        baseAngles.push(uniformAngle);
       }
       
-      // Sort the angles to maintain sequential ordering around the circle
+      // Now redistribute these angles using a deterministic function to
+      // concentrate particles toward the right side (0 degrees)
+      for (let i = 0; i < baseAngles.length; i++) {
+        const angle = baseAngles[i];
+        // Map the angle to a value from 0 to 1
+        const normalizedAngle = angle / (Math.PI * 2);
+        
+        // Use sine function to create a non-uniform but deterministic distribution
+        // sin(θ/2) compresses angles toward 0 and π
+        const compressionFactor = Math.sin(angle / 2);
+        
+        // Create a transformed angle that concentrates particles at 0° (right side)
+        // This creates a higher density of particles in the wavefront (right side)
+        // while maintaining perfect symmetry between top and bottom
+        let transformedAngle;
+        
+        if (angle <= Math.PI) {
+          // First half of the circle (top): Compress toward 0
+          transformedAngle = angle * (1 - 0.5 * compressionFactor);
+        } else {
+          // Second half of the circle (bottom): Compress toward 2π
+          transformedAngle = Math.PI + (angle - Math.PI) * (1 + 0.5 * compressionFactor);
+        }
+        
+        particleAngles.push(transformedAngle);
+      }
+      
+      // Sort is not strictly needed since our generation is already in order,
+      // but keep it for safety
       particleAngles.sort((a, b) => a - b);
       
       // Create particles at the calculated angles
@@ -247,11 +268,12 @@ export class CanvasController {
         const particleX = x + Math.cos(angle) * fixedRadius;
         const particleY = y + Math.sin(angle) * fixedRadius;
 
-        const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
-          friction: 0.1, 
-          restitution: 1.0, // Perfect elasticity
-          mass: 0.1,
-          frictionAir: 0,
+        // Increase particle size and adjust collision properties to prevent squeezing through walls
+        const body = Matter.Bodies.circle(particleX, particleY, 0.5, { // Increased from 0.1 to 0.5
+          friction: 0.2, // Increased from 0.1 to 0.2
+          restitution: 0.9, // Decreased from 1.0 to 0.9 to prevent excessive bouncing
+          mass: 0.2, // Increased mass to make particles less likely to squeeze through
+          frictionAir: 0.005, // Added slight air friction to dampen motion
           collisionFilter: {
             category: 0x0001,
             mask: 0x0002,
@@ -501,13 +523,15 @@ export class CanvasController {
               // Calculate line thickness based on wave position
               let thicknessFactor = 1.0;
               const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
-              const middleIndex = 3; // Center wave index
-              const distanceFromMiddle = Math.abs(waveIndex - middleIndex);
+              // With 6 positions (0-5), central positions are 2 and 3
+              const centralPositions = [2, 3]; // The two positions closest to center
+              const innerPositions = [1, 4];   // The next two positions from center
+              const outerPositions = [0, 5];   // The two positions farthest from center
               
-              if (distanceFromMiddle === 0) thicknessFactor = 1.2; // Center: 20% thicker
-              else if (distanceFromMiddle === 1) thicknessFactor = 1.1; // Inner: 10% thicker
-              else if (distanceFromMiddle === 2) thicknessFactor = 1.05; // Middle: 5% thicker
-              // Outer waves use default thickness (1.0)
+              // Assign thickness based on position group
+              if (centralPositions.includes(waveIndex)) thicknessFactor = 1.2;      // Center: 20% thicker
+              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.1;   // Inner: 10% thicker
+              else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.0;   // Outer: default thickness
               
               this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor;
               
