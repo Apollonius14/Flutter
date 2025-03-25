@@ -1,4 +1,4 @@
-import Matter from 'matter-js';
+import * as Matter from 'matter-js';
 
 interface AnimationParams {
   power: number;
@@ -24,14 +24,6 @@ interface Bubble {
   groupId: number; // Add group ID to identify this bubble's particle group
 }
 
-interface WallSpring {
-  body: Matter.Body;
-  equilibriumX: number;
-  velocity: number;
-  displacement: number;
-  lastUpdateTime: number;
-}
-
 export class CanvasController {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -42,7 +34,6 @@ export class CanvasController {
   private funnelEnabled: boolean = true;
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
-  private wallSprings: WallSpring[] = [];
   private previousSweepLineX: number = 0; // Track previous position of sweep line
   private activationLineX: number = 0; // Will be set to 20% of canvas width
   private lastSpawnTime: number = 0;
@@ -95,33 +86,10 @@ export class CanvasController {
   
   // Extract collision detection setup to a separate method
   private setupCollisionDetection() {
-    // Set up collision detection to trigger spring vibrations
+    // Simple collision detection without spring effects
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      event.pairs.forEach((pair) => {
-        // Check if one of the collision bodies is a wall
-        const wallIndex = this.funnelWalls.findIndex(wall => 
-          wall.id === pair.bodyA.id || wall.id === pair.bodyB.id
-        );
-        
-        if (wallIndex !== -1) {
-          // Get the other body (the particle)
-          const particle = pair.bodyA.id === this.funnelWalls[wallIndex].id ? pair.bodyB : pair.bodyA;
-          // Calculate impact force based on relative velocity
-          const relVelocity = {
-            x: particle.velocity.x - this.funnelWalls[wallIndex].velocity.x,
-            y: particle.velocity.y - this.funnelWalls[wallIndex].velocity.y
-          };
-          
-          // Get the wall spring
-          const wallSpring = this.wallSprings[wallIndex];
-          if (wallSpring) {
-            // Apply impulse to wall spring based on x-component of relative velocity
-            // Scale down the impulse since we're dealing with many small particles
-            const impulse = relVelocity.x * 0.1;
-            wallSpring.velocity += impulse;
-          }
-        }
-      });
+      // We keep the collision listener for potential future audio effects
+      // But removed all spring-related code
     });
   }
   
@@ -139,7 +107,6 @@ export class CanvasController {
       Matter.Composite.remove(this.engine.world, wall);
     });
     this.funnelWalls = [];
-    this.wallSprings = []; // Clear wall springs
 
     if (!this.funnelEnabled) return;
 
@@ -193,25 +160,6 @@ export class CanvasController {
 
     // Add walls to the physics world
     Matter.Composite.add(this.engine.world, this.funnelWalls);
-    
-    // Create spring data for visual effects only
-    const currentTime = performance.now();
-    this.wallSprings = [
-      {
-        body: topWall,
-        equilibriumX: midX,
-        velocity: 0,
-        displacement: 0,
-        lastUpdateTime: currentTime
-      },
-      {
-        body: bottomWall,
-        equilibriumX: midX,
-        velocity: 0,
-        displacement: 0,
-        lastUpdateTime: currentTime
-      }
-    ];
   }
 
   private generateBubbles(x: number): Bubble[] {
@@ -365,51 +313,7 @@ export class CanvasController {
   }
 
   private drawFrame(progress: number) {
-    // Update wall springs before physics engine
     if (this.funnelEnabled) {
-      // Spring physics parameters - reduced for better performance
-      const springConstant = 0.2; // Reduced from 0.25 for less calculation intensity
-      const dampingFactor = 0.06; // Increased from 0.05 for faster settling
-      
-      // Maximum particle size to set max vibration amplitude
-      const maxAmplitude = 1.8; // Reduced from 2.0 for less visual distraction
-
-      // Update spring physics for walls
-      const currentTime = performance.now();
-      this.wallSprings.forEach(spring => {
-        const deltaTime = (currentTime - spring.lastUpdateTime) / 1000; // Convert to seconds
-        if (deltaTime > 0) {
-          // Calculate spring force: F = -kx (where k is spring constant, x is displacement)
-          const springForce = -springConstant * spring.displacement;
-          // Calculate damping force: F = -cv (where c is damping factor, v is velocity)
-          const dampingForce = -dampingFactor * spring.velocity;
-          // Total force
-          const totalForce = springForce + dampingForce;
-          
-          // Update velocity: v = v + a*t (where a = F/m)
-          // For simplicity, assuming mass of 1 for calculations
-          spring.velocity += totalForce * deltaTime;
-          
-          // Update displacement: x = x + v*t
-          spring.displacement += spring.velocity * deltaTime;
-          
-          // Constrain displacement to maximum amplitude
-          if (Math.abs(spring.displacement) > maxAmplitude) {
-            spring.displacement = Math.sign(spring.displacement) * maxAmplitude;
-            // Reduce velocity when hitting amplitude limits
-            spring.velocity *= 0.8;
-          }
-          
-          // Update the wall position
-          Matter.Body.setPosition(spring.body, {
-            x: spring.equilibriumX + spring.displacement,
-            y: spring.body.position.y
-          });
-          
-          spring.lastUpdateTime = currentTime;
-        }
-      });
-
       // Regular physics update with reduced substeps for better performance
       const numSubSteps = 3; // Reduced from 5 for better performance
       const subStepTime = (1000 / 60) / numSubSteps;
@@ -760,8 +664,5 @@ export class CanvasController {
       this.ctx.stroke();
       this.ctx.restore();
     }
-    
-    // No wall highlighting effect during collisions
-    // Only maintain the wall spring data for position effects
   }
 }
