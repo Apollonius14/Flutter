@@ -48,29 +48,40 @@ export default function Home() {
 
   // Separate UI initialization from physics initialization
   useEffect(() => {
+    console.log('Starting UI initialization');
     // Set a flag that the UI is ready
     setIsCanvasReady(true);
+    console.log('Canvas ready state set to true');
+    
     // Delay physics engine initialization to allow UI to render first
     const timer = setTimeout(() => {
+      console.log('Timeout complete, initializing physics engine');
       initPhysicsEngine();
-    }, 100);
+    }, 300); // Increased timeout for more reliable initialization
     
     return () => clearTimeout(timer);
   }, []);
   
   // Initialize physics engine after the UI is ready
   const initPhysicsEngine = () => {
-    if (!canvasRef.current || !isCanvasReady) return;
+    console.log('initPhysicsEngine called, canvasRef.current:', !!canvasRef.current, 'isCanvasReady:', isCanvasReady);
+    if (!canvasRef.current || !isCanvasReady) {
+      console.error('Canvas not ready yet!');
+      return;
+    }
     
     try {
       console.time('Physics Engine Initialization');
+      console.log('Creating new CanvasController instance');
       const newController = new CanvasController(canvasRef.current);
       console.timeEnd('Physics Engine Initialization');
+      console.log('Setting controller and turning off loading state');
       setController(newController);
       setIsLoading(false);
       return () => newController.cleanup();
     } catch (error) {
       console.error("Failed to initialize canvas controller:", error);
+      console.log('Error details:', error);
       setIsLoading(false);
     }
   };
