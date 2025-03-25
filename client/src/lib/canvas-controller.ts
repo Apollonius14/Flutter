@@ -102,37 +102,27 @@ export class CanvasController {
   }
 
   private setupFunnelWalls() {
+    // Clean up existing walls first
+    this.funnelWalls.forEach(wall => {
+      Matter.Composite.remove(this.engine.world, wall);
+    });
+    this.funnelWalls = [];
+
+    if (!this.funnelEnabled) return;
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    
-    // Wall dimensions - each wall is half the height of the canvas
-    const wallThickness = 20;
-    const wallLength = height * 0.5; // Each wall is half the canvas height
-    
-    // Calculate positions based on gap size
-    // When gapSize = 0, walls are at 1/4 and 3/4 of canvas height
-    // As gapSize increases, they move further apart
-    
-    // Normalized gap factor (0 to 1)
-    const gapFactor = this.gapSize;
-    
-    // Base positions at 1/4 and 3/4 of canvas height
-    const baseTopY = height * 0.25;
-    const baseBottomY = height * 0.75;
-    
-    // Move walls apart based on gap factor
-    // Maximum movement is 20% of canvas height in each direction
-    const maxOffset = height * 0.2; 
-    const topWallY = baseTopY - (gapFactor * maxOffset);
-    const bottomWallY = baseBottomY + (gapFactor * maxOffset);
+    const centerY = height * 0.5;
+    const gapSize = height * this.gapSize; // Use the stored gap size
+    const wallThickness = 12; // Reduced from 20 to make walls more slender
+    const wallLength = height * 2; // Make walls much longer to ensure complete blockage at minimum gap
 
     // Set up walls as static bodies with perfect restitution
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.2,
-      frictionStatic: 0.2,
+      friction: 0.3, // Reduced friction by 50%
+      frictionStatic: 0.45, // Reduced static friction by 50%
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -144,10 +134,10 @@ export class CanvasController {
     this.topWallAngle = -wallAngleRadians;
     this.bottomWallAngle = wallAngleRadians;
 
-    // Create the walls with the calculated positions
+    // Create the walls
     const topWall = Matter.Bodies.rectangle(
       midX,
-      topWallY,
+      centerY - gapSize/2 - wallLength/2,
       wallThickness,
       wallLength,
       wallOptions
@@ -155,7 +145,7 @@ export class CanvasController {
     
     const bottomWall = Matter.Bodies.rectangle(
       midX,
-      bottomWallY,
+      centerY + gapSize/2 + wallLength/2,
       wallThickness,
       wallLength,
       wallOptions
@@ -184,22 +174,22 @@ export class CanvasController {
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
-    // Generate more spread out positions along the blue line
+    // Generate symmetrically distributed positions
     this.positions = []; // Clear previous positions
-    const spreadFactor = 0.85; // Increased from 0.585 to spread waves more evenly
+    const compressionFactor = 0.585; // Reduced by 10% from 0.65
     
     // Calculate center and offsets for symmetric distribution
     const center = height / 2;
-    const baseSpacing = (height * spreadFactor) / 8; // Divide space into 8 parts for 7 waves
+    const baseSpacing = (height * compressionFactor) / 8; // Divide space into 8 parts for 7 waves
     
-    // Add positions in order from top to bottom, more spread out
-    this.positions.push(center - baseSpacing * 3.5); // Outer top (moved further)
-    this.positions.push(center - baseSpacing * 2.3); // Middle top (moved further)
-    this.positions.push(center - baseSpacing * 1.1); // Inner top (moved further)
-    //this.positions.push(center);                     // Center (unchanged)
-    this.positions.push(center + baseSpacing * 1.1); // Inner bottom (moved further)
-    this.positions.push(center + baseSpacing * 2.3); // Middle bottom (moved further)
-    this.positions.push(center + baseSpacing * 3.5); // Outer bottom (moved further)
+    // Add positions in order from top to bottom
+    this.positions.push(center - baseSpacing * 3); // Outer top
+    this.positions.push(center - baseSpacing * 2); // Middle top
+    this.positions.push(center - baseSpacing);     // Inner top
+    this.positions.push(center);                   // Center
+    this.positions.push(center + baseSpacing);     // Inner bottom
+    this.positions.push(center + baseSpacing * 2); // Middle bottom
+    this.positions.push(center + baseSpacing * 3); // Outer bottom
 
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
@@ -297,10 +287,10 @@ export class CanvasController {
         // and 0 at 90° and 270° (vertical alignment)
         const horizontalAlignment = Math.abs(Math.cos(angle));
         
-        // Boost speed for horizontally-aligned particles
-        // Reduced from 0.7 to 0.2 as requested by user
-        // 1 + 0.2 * horizontalAlignment gives boost from 1.0x to 1.2x for horizontal particles
-        const directedSpeed = baseSpeed * (1 + 0.2 * horizontalAlignment);
+        // Boost speed for horizontally-aligned particles more significantly
+        // Increasing from 0.3 to 0.7 for more pronounced horizontal movement
+        // 1 + 0.7 * horizontalAlignment gives boost from 1.0x to 1.7x for horizontal particles
+        const directedSpeed = baseSpeed * (1 + 0.7 * horizontalAlignment);
         
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
