@@ -243,18 +243,26 @@ export class CanvasController {
         // sin(θ/2) compresses angles toward 0 and π
         const compressionFactor = Math.sin(angle / 2);
         
+        // Rotate the entire angle space by π/4 (45 degrees) clockwise to align symmetry with centerline
+        // This compensates for the π/4 counterclockwise bias observed in the rendering
+        const rotationCorrection = -Math.PI/4; // Negative for clockwise rotation
+        const rotatedAngle = (angle + rotationCorrection + 2*Math.PI) % (2*Math.PI); // Add 2π before modulo to handle negative angles
+        
         // Create a transformed angle that concentrates particles at 0° (right side)
         // This creates a higher density of particles in the wavefront (right side)
         // while maintaining perfect symmetry between top and bottom
         let transformedAngle;
         
-        if (angle <= Math.PI) {
+        if (rotatedAngle <= Math.PI) {
           // First half of the circle (top): Compress toward 0
-          transformedAngle = angle * (1 - 0.5 * compressionFactor);
+          transformedAngle = rotatedAngle * (1 - 0.5 * compressionFactor);
         } else {
           // Second half of the circle (bottom): Compress toward 2π
-          transformedAngle = Math.PI + (angle - Math.PI) * (1 + 0.5 * compressionFactor);
+          transformedAngle = Math.PI + (rotatedAngle - Math.PI) * (1 + 0.5 * compressionFactor);
         }
+        
+        // Rotate back to original coordinate space
+        transformedAngle = (transformedAngle - rotationCorrection + 2*Math.PI) % (2*Math.PI);
         
         particleAngles.push(transformedAngle);
       }
@@ -268,12 +276,12 @@ export class CanvasController {
         const particleX = x + Math.cos(angle) * fixedRadius;
         const particleY = y + Math.sin(angle) * fixedRadius;
 
-        // Increase particle size and adjust collision properties to prevent squeezing through walls
+        // Increase particle size to prevent squeezing through walls but keep perfect elasticity
         const body = Matter.Bodies.circle(particleX, particleY, 0.5, { // Increased from 0.1 to 0.5
-          friction: 0.2, // Increased from 0.1 to 0.2
-          restitution: 0.9, // Decreased from 1.0 to 0.9 to prevent excessive bouncing
+          friction: 0.1, 
+          restitution: 1.0, // Perfect elasticity as requested
           mass: 0.2, // Increased mass to make particles less likely to squeeze through
-          frictionAir: 0.005, // Added slight air friction to dampen motion
+          frictionAir: 0, // No air resistance as requested
           collisionFilter: {
             category: 0x0001,
             mask: 0x0002,
