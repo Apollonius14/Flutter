@@ -112,29 +112,9 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
-    
-    // Wall dimensions - each wall is half the height of the canvas
     const wallThickness = 20;
-    const wallLength = height * 0.5; // Each wall is half the canvas height
     
-    // Calculate positions based on gap size
-    // When gapSize = 0, walls are at 1/4 and 3/4 of canvas height
-    // As gapSize increases, they move further apart
-    
-    // Normalized gap factor (0 to 1)
-    const gapFactor = this.gapSize;
-    
-    // Base positions at 1/4 and 3/4 of canvas height
-    const baseTopY = height * 0.25;
-    const baseBottomY = height * 0.75;
-    
-    // Move walls apart based on gap factor
-    // Maximum movement is 20% of canvas height in each direction
-    const maxOffset = height * 0.2; 
-    const topWallY = baseTopY - (gapFactor * maxOffset);
-    const bottomWallY = baseBottomY + (gapFactor * maxOffset);
-
-    // Set up walls as static bodies with perfect restitution
+    // Common wall options
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
@@ -146,34 +126,137 @@ export class CanvasController {
       }
     };
 
-    // Calculate wall angles - this is key for the angle-based rotation
-    const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
-    this.topWallAngle = -wallAngleRadians;
-    this.bottomWallAngle = wallAngleRadians;
-
-    // Create the walls with the calculated positions
-    const topWall = Matter.Bodies.rectangle(
-      midX,
-      topWallY,
-      wallThickness,
-      wallLength,
-      wallOptions
-    );
+    // Determine if we're using a solid wall (gap = 0) or split walls (gap > 0)
+    const isGapZero = this.gapSize < 0.001; // Allow for floating point imprecision
     
-    const bottomWall = Matter.Bodies.rectangle(
-      midX,
-      bottomWallY,
-      wallThickness,
-      wallLength,
-      wallOptions
-    );
+    if (isGapZero) {
+      // Create a single solid wall spanning the entire canvas height
+      const solidWall = Matter.Bodies.rectangle(
+        midX,
+        height / 2, // Centered vertically
+        wallThickness,
+        height, // Full canvas height
+        wallOptions
+      );
+      
+      // No rotation for solid wall
+      this.topWallAngle = 0;
+      this.bottomWallAngle = 0;
+      
+      this.funnelWalls = [solidWall];
+    } else {
+      // Create two separate walls with gap
+      // Wall dimensions - each wall is half the height of the canvas
+      const wallLength = height * 0.5; // Each wall is half the canvas height
+      
+      // Calculate positions based on gap size
+      // When gapSize is just above zero, walls are at 1/4 and 3/4 of canvas height
+      // As gapSize increases, they move further apart
+      
+      // Normalized gap factor (0 to 1)
+      const gapFactor = this.gapSize;
+      
+      // Base positions at 1/4 and 3/4 of canvas height
+      const baseTopY = height * 0.25;
+      const baseBottomY = height * 0.75;
+      
+      // Move walls apart based on gap factor
+      // Maximum movement is 20% of canvas height in each direction
+      const maxOffset = height * 0.2; 
+      const topWallY = baseTopY - (gapFactor * maxOffset);
+      const bottomWallY = baseBottomY + (gapFactor * maxOffset);
 
-    // Apply rotation to the walls directly
-    Matter.Body.setAngle(topWall, this.topWallAngle);
-    Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
-    
-    // Store walls for reference
-    this.funnelWalls = [topWall, bottomWall];
+      // Calculate wall angles - this is key for the angle-based rotation
+      const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
+      this.topWallAngle = -wallAngleRadians;
+      this.bottomWallAngle = wallAngleRadians;
+
+      // Create rounded-end walls instead of rectangles
+      const circleRadius = wallThickness / 2;
+      
+      // Create top wall with rounded ends (a rectangle with two circles at the ends)
+      // The wall is a compound body made of 3 parts: left circle, right circle, and rectangle
+      const wallHalfLength = wallLength / 2;
+      
+      // Calculate the positions of the circles at the ends of the wall
+      const topWallLeftCircleX = midX - wallHalfLength * Math.sin(this.topWallAngle);
+      const topWallLeftCircleY = topWallY - wallHalfLength * Math.cos(this.topWallAngle);
+      const topWallRightCircleX = midX + wallHalfLength * Math.sin(this.topWallAngle);
+      const topWallRightCircleY = topWallY + wallHalfLength * Math.cos(this.topWallAngle);
+      
+      // Create the left and right circles for top wall
+      const topWallLeftCircle = Matter.Bodies.circle(
+        topWallLeftCircleX,
+        topWallLeftCircleY,
+        circleRadius,
+        wallOptions
+      );
+      
+      const topWallRightCircle = Matter.Bodies.circle(
+        topWallRightCircleX, 
+        topWallRightCircleY,
+        circleRadius,
+        wallOptions
+      );
+      
+      // Create the rectangle for top wall
+      const topWallRectangle = Matter.Bodies.rectangle(
+        midX,
+        topWallY,
+        wallThickness,
+        wallLength,
+        wallOptions
+      );
+      
+      // Create the top wall as a compound body
+      const topWall = Matter.Body.create({
+        parts: [topWallRectangle, topWallLeftCircle, topWallRightCircle],
+        isStatic: true
+      });
+      
+      // Create bottom wall with rounded ends
+      const bottomWallLeftCircleX = midX - wallHalfLength * Math.sin(this.bottomWallAngle);
+      const bottomWallLeftCircleY = bottomWallY - wallHalfLength * Math.cos(this.bottomWallAngle);
+      const bottomWallRightCircleX = midX + wallHalfLength * Math.sin(this.bottomWallAngle);
+      const bottomWallRightCircleY = bottomWallY + wallHalfLength * Math.cos(this.bottomWallAngle);
+      
+      // Create the left and right circles for bottom wall
+      const bottomWallLeftCircle = Matter.Bodies.circle(
+        bottomWallLeftCircleX,
+        bottomWallLeftCircleY,
+        circleRadius,
+        wallOptions
+      );
+      
+      const bottomWallRightCircle = Matter.Bodies.circle(
+        bottomWallRightCircleX,
+        bottomWallRightCircleY,
+        circleRadius,
+        wallOptions
+      );
+      
+      // Create the rectangle for bottom wall
+      const bottomWallRectangle = Matter.Bodies.rectangle(
+        midX,
+        bottomWallY,
+        wallThickness,
+        wallLength,
+        wallOptions
+      );
+      
+      // Create the bottom wall as a compound body
+      const bottomWall = Matter.Body.create({
+        parts: [bottomWallRectangle, bottomWallLeftCircle, bottomWallRightCircle],
+        isStatic: true
+      });
+      
+      // Apply rotation to the walls directly
+      Matter.Body.setAngle(topWall, this.topWallAngle);
+      Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
+      
+      // Store walls for reference
+      this.funnelWalls = [topWall, bottomWall];
+    }
 
     // Add walls to the physics world
     Matter.Composite.add(this.engine.world, this.funnelWalls);
