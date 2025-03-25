@@ -36,7 +36,6 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
   const [isLoading, setIsLoading] = useState(true);
-  const [isCanvasReady, setIsCanvasReady] = useState(false);
   const t = translations[language];
   const [params, setParams] = useState({
     power: 3, // default value of 3 (middle of 1-7 range)
@@ -46,27 +45,12 @@ export default function Home() {
   const [wallAngle, setWallAngle] = useState(30); // Start with a slight angle
   const [gapSize, setGapSize] = useState(0.4);
 
-  // Separate UI initialization from physics initialization
+  // Initialize physics engine when the component is mounted
   useEffect(() => {
-    console.log('Starting UI initialization');
-    // Set a flag that the UI is ready
-    setIsCanvasReady(true);
-    console.log('Canvas ready state set to true');
+    console.log('Starting physics engine initialization');
     
-    // Delay physics engine initialization to allow UI to render first
-    const timer = setTimeout(() => {
-      console.log('Timeout complete, initializing physics engine');
-      initPhysicsEngine();
-    }, 300); // Increased timeout for more reliable initialization
-    
-    return () => clearTimeout(timer);
-  }, []);
-  
-  // Initialize physics engine after the UI is ready
-  const initPhysicsEngine = () => {
-    console.log('initPhysicsEngine called, canvasRef.current:', !!canvasRef.current, 'isCanvasReady:', isCanvasReady);
-    if (!canvasRef.current || !isCanvasReady) {
-      console.error('Canvas not ready yet!');
+    if (!canvasRef.current) {
+      console.error('Canvas ref not available yet');
       return;
     }
     
@@ -78,13 +62,18 @@ export default function Home() {
       console.log('Setting controller and turning off loading state');
       setController(newController);
       setIsLoading(false);
-      return () => newController.cleanup();
+      
+      // Cleanup function for when component unmounts
+      return () => {
+        console.log('Cleaning up physics engine');
+        newController.cleanup();
+      };
     } catch (error) {
       console.error("Failed to initialize canvas controller:", error);
       console.log('Error details:', error);
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!controller) return;
