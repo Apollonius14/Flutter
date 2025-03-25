@@ -61,7 +61,7 @@ export class CanvasController {
     });
 
     this.params = {
-      power: 3, // Default power level (mid-range: 1-7)
+      power: 6, // Doubled from 3 (mid-range: 1-7)
       frequency: 0.15  // Default frequency from home.tsx
     };
     
@@ -246,7 +246,7 @@ export class CanvasController {
         });
         }
 
-      const baseMaxAge = 80;
+      const baseMaxAge = 160; // Doubled from 80
       // All particles are now active blue ones, so always use the longer maxAge
       // Use the power factor for max age (from 1/3 to 7/3 of base value at power=3)
       const maxAge = baseMaxAge * 6 * 1.5 * 4 * particlePowerFactor;
