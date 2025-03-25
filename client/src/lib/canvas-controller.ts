@@ -220,13 +220,41 @@ export class CanvasController {
         // Step 1: Generate a uniform angle distribution
         const uniformAngle = (i / numParticlesInRing) * Math.PI * 2;
         
-        // Step 2: Apply a sine-based transform to concentrate particles horizontally
-        // This creates more particles at 0° and 180° (left and right sides)
-        // sin(2*theta) oscillates between -1 and 1 twice per cycle
-        // Adding 0.5 * sin(2*theta) to theta distorts the uniform distribution
-        // The 0.5 coefficient controls how strong the concentration effect is
-        const concentrationStrength = 0.5; // Controls how much to concentrate horizontally
-        const distortedAngle = uniformAngle + concentrationStrength * Math.sin(2 * uniformAngle);
+        // Step 2: Apply a cosine-based transform to concentrate particles horizontally
+        // Maximum concentration at 0° and 180° (left and right of circle)
+        // We need to shift the particles toward 0° and 180° (horizontal axis)
+        // Math.cos(uniformAngle) is 1 at 0°, -1 at 180°, and 0 at 90° and 270°
+        
+        // We want to keep the same ordering of particles but shift them toward horizontal axis
+        // Using cos^2 function for smooth transition and always positive adjustment
+        const concentrationStrength = 0.7; // Increased from 0.5 to 0.7 for stronger horizontal concentration
+        
+        // This makes angles at 0° and 180° move less (stay where they are),
+        // while angles at 90° and 270° get pushed toward 0° and 180° respectively
+        let distortedAngle: number;
+        
+        // For the top half of the circle (0 to π)
+        if (uniformAngle < Math.PI) {
+          // If in first quadrant (0 to π/2), pull toward 0
+          if (uniformAngle < Math.PI/2) {
+            distortedAngle = uniformAngle * (1 - concentrationStrength * Math.pow(Math.cos(uniformAngle), 2));
+          } 
+          // If in second quadrant (π/2 to π), pull toward π
+          else {
+            distortedAngle = uniformAngle + (Math.PI - uniformAngle) * concentrationStrength * Math.pow(Math.cos(uniformAngle), 2);
+          }
+        } 
+        // For the bottom half of the circle (π to 2π)
+        else {
+          // If in third quadrant (π to 3π/2), pull toward π
+          if (uniformAngle < 3 * Math.PI/2) {
+            distortedAngle = uniformAngle - (uniformAngle - Math.PI) * concentrationStrength * Math.pow(Math.cos(uniformAngle), 2);
+          } 
+          // If in fourth quadrant (3π/2 to 2π), pull toward 2π
+          else {
+            distortedAngle = uniformAngle + (2 * Math.PI - uniformAngle) * concentrationStrength * Math.pow(Math.cos(uniformAngle), 2);
+          }
+        }
         
         particleAngles.push(distortedAngle);
       }
@@ -259,10 +287,10 @@ export class CanvasController {
         // and 0 at 90° and 270° (vertical alignment)
         const horizontalAlignment = Math.abs(Math.cos(angle));
         
-        // Boost speed for horizontally-aligned particles but by less
-        // 1 + 0.3 * horizontalAlignment gives boost from 1.0x to 1.3x based on alignment
-        // Reduced from 0.5 to 0.3 to slow down the particles a bit more
-        const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
+        // Boost speed for horizontally-aligned particles more significantly
+        // Increasing from 0.3 to 0.7 for more pronounced horizontal movement
+        // 1 + 0.7 * horizontalAlignment gives boost from 1.0x to 1.7x for horizontal particles
+        const directedSpeed = baseSpeed * (1 + 0.7 * horizontalAlignment);
         
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
