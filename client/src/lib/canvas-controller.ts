@@ -206,29 +206,37 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Increased by 10% from 17 to 19 particles per ring as requested
-      const numParticlesInRing = 19;
+      // Number of particles per ring (was previously 26)
+      const numParticlesInRing = 26;
       
       // Keep track of power factor for maxAge calculation
-      const particlePowerFactor = this.params.power / 3;
+      const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
       
       // Create an array to store the angles we'll use for particle placement
       const particleAngles: number[] = [];
       
-      // Generate non-uniform angles to concentrate particles along horizontal axis
-      for (let i = 0; i < numParticlesInRing; i++) {
+      // Increased number of particles to create denser wavefront effect
+      // Total particles will remain similar as we'll concentrate them
+      const numParticlesForDistribution = numParticlesInRing * 1.5;
+      
+      // Generate non-uniform angles to concentrate particles at the wavefront (right side)
+      for (let i = 0; i < numParticlesForDistribution; i++) {
         // Step 1: Generate a uniform angle distribution
-        const uniformAngle = (i / numParticlesInRing) * Math.PI * 2;
+        const uniformAngle = (i / numParticlesForDistribution) * Math.PI * 2;
         
-        // Step 2: Apply a sine-based transform to concentrate particles horizontally
-        // This creates more particles at 0° and 180° (left and right sides)
-        // sin(2*theta) oscillates between -1 and 1 twice per cycle
-        // Adding 0.5 * sin(2*theta) to theta distorts the uniform distribution
-        // The 0.5 coefficient controls how strong the concentration effect is
-        const concentrationStrength = 0.5; // Controls how much to concentrate horizontally
-        const distortedAngle = uniformAngle + concentrationStrength * Math.sin(2 * uniformAngle);
+        // Step The right side of the circle is at angle 0
+        // We want to concentrate particles around this angle (wavefront)
         
-        particleAngles.push(distortedAngle);
+        // Use cosine function to concentrate particles towards 0° (right side)
+        // cos(theta) is 1 at 0°, 0 at 90° and 270°, and -1 at 180°
+        // We'll use this to weight the probability of keeping each angle
+        const rightConcentration = 0.5 * (Math.cos(uniformAngle) + 1); // Value from 0 to 1, highest at 0°
+        
+        // Only keep particles with higher probability toward the right side (wavefront)
+        // This creates 10 waves in the front, while keeping total particle count similar
+        if (Math.random() < rightConcentration) {
+          particleAngles.push(uniformAngle);
+        }
       }
       
       // Sort the angles to maintain sequential ordering around the circle
@@ -251,8 +259,8 @@ export class CanvasController {
           }
         });
 
-        // Reduce base speed by 30% as requested
-        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7; // 30% reduction
+        // Reduce base speed by an additional 30% as requested
+        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7 * 0.7; // Additional 30% reduction
         
         // Calculate how much the particle is aligned with the horizontal axis
         // cos(angle) is 1 or -1 at 0° and 180° (horizontal alignment)
@@ -279,8 +287,8 @@ export class CanvasController {
         });
         }
 
-      // Increase the base max age to make particles persist twice as long
-      const baseMaxAge = 320 * 2; // Doubled to 640 as requested
+      // Increase the base max age to make particles persist three times as long
+      const baseMaxAge = 320 * 2 * 3; // Triple the previously doubled value (640 * 3 = 1920)
       // All particles are now active blue ones, so always use the longer maxAge
       // Use the power factor for max age (keeping the same modifiers)
       const maxAge = baseMaxAge * 6 * 1.5 * 4 * particlePowerFactor;
