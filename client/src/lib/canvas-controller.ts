@@ -207,14 +207,14 @@ export class CanvasController {
     const height = this.canvas.height;
     const width = this.canvas.width;
 
-    // Generate 7 waves
+    // Generate 7 waves (odd number for symmetry)
     const numWaves = 7;
     
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
     // Generate symmetrically distributed positions
-    this.positions = [];
+    this.positions = []; // Clear previous positions
     const compressionFactor = 0.585; // Reduced by 10% from 0.65
     
     // Calculate center and offsets for symmetric distribution
@@ -229,13 +229,6 @@ export class CanvasController {
     this.positions.push(center + baseSpacing);     // Inner bottom
     this.positions.push(center + baseSpacing * 2); // Middle bottom
     this.positions.push(center + baseSpacing * 3); // Outer bottom
-    
-    for (let i = 1; i <= numWaves; i++) {
-      // Calculate position with compression toward center
-      const normalPosition = i / (numWaves + 1); // 0.1 to 0.9
-      const compressedPosition = centerY + (normalPosition - 0.5) * height * compressionFactor;
-      positions.push(compressedPosition);
-    }
 
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
@@ -244,7 +237,7 @@ export class CanvasController {
     // All particles are active since we're only generating at the activation line
     const isActive = true;
     
-    positions.forEach(y => {
+    this.positions.forEach(y => {
       // Always create active blue particles
       const intensity = 1.0;
 
