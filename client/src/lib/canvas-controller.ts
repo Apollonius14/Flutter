@@ -102,13 +102,6 @@ export class CanvasController {
   }
 
   private setupFunnelWalls() {
-    // Clean up existing walls first
-    this.funnelWalls.forEach(wall => {
-      Matter.Composite.remove(this.engine.world, wall);
-    });
-    this.funnelWalls = [];
-
-    if (!this.funnelEnabled) return;
 
     const { width, height } = this.canvas;
     const midX = width * 0.5;
@@ -138,8 +131,8 @@ export class CanvasController {
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.3,
-      frictionStatic: 0.45,
+      friction: 0.2,
+      frictionStatic: 0.2,
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -203,7 +196,7 @@ export class CanvasController {
     this.positions.push(center - baseSpacing * 3.5); // Outer top (moved further)
     this.positions.push(center - baseSpacing * 2.3); // Middle top (moved further)
     this.positions.push(center - baseSpacing * 1.1); // Inner top (moved further)
-    this.positions.push(center);                     // Center (unchanged)
+    //this.positions.push(center);                     // Center (unchanged)
     this.positions.push(center + baseSpacing * 1.1); // Inner bottom (moved further)
     this.positions.push(center + baseSpacing * 2.3); // Middle bottom (moved further)
     this.positions.push(center + baseSpacing * 3.5); // Outer bottom (moved further)
