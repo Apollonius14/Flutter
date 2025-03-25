@@ -251,17 +251,18 @@ export class CanvasController {
           }
         });
 
-        // Base speed (kept the same as before)
-        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2;
+        // Reduce base speed by 30% as requested
+        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7; // 30% reduction
         
         // Calculate how much the particle is aligned with the horizontal axis
         // cos(angle) is 1 or -1 at 0° and 180° (horizontal alignment)
         // and 0 at 90° and 270° (vertical alignment)
         const horizontalAlignment = Math.abs(Math.cos(angle));
         
-        // Boost speed for horizontally-aligned particles
-        // 1 + 0.5 * horizontalAlignment gives boost from 1.0x to 1.5x based on alignment
-        const directedSpeed = baseSpeed * (1 + 0.5 * horizontalAlignment);
+        // Boost speed for horizontally-aligned particles but by less
+        // 1 + 0.3 * horizontalAlignment gives boost from 1.0x to 1.3x based on alignment
+        // Reduced from 0.5 to 0.3 to slow down the particles a bit more
+        const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
         
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -278,9 +279,10 @@ export class CanvasController {
         });
         }
 
-      const baseMaxAge = 320; // Doubled again from 160
+      // Increase the base max age to make particles persist twice as long
+      const baseMaxAge = 320 * 2; // Doubled to 640 as requested
       // All particles are now active blue ones, so always use the longer maxAge
-      // Use the power factor for max age (from 1/3 to 7/3 of base value at power=3)
+      // Use the power factor for max age (keeping the same modifiers)
       const maxAge = baseMaxAge * 6 * 1.5 * 4 * particlePowerFactor;
 
       bubbles.push({
@@ -355,8 +357,8 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
-    // Less transparent motion blur for better performance (faster trails)
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.12)'; // Increased from 0.09 by 33%
+    // Reduce motion blur effect to make particles stay visible longer
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.06)'; // Reduced from 0.12 to 0.06 (50% reduction)
     this.ctx.fillRect(0, 0, width, height);
     
     // Draw funnel walls with smoky white fill
