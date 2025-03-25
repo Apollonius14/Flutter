@@ -61,12 +61,12 @@ export class CanvasController {
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
 
-    // Configure engine with optimized iteration parameters
+    // Configure engine with minimal iteration parameters for faster loading
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 3,  // Reduced for faster startup
-      velocityIterations: 4,  // Reduced for faster startup
-      constraintIterations: 2  // Reduced for faster startup
+      positionIterations: 2,  // Reduced by half for much faster startup
+      velocityIterations: 2,  // Reduced by half for much faster startup
+      constraintIterations: 1  // Minimum value for fastest startup
     });
 
     this.params = {
@@ -258,23 +258,12 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Create particles for blue waves
-      // Reduce initial particle count for better performance
-      // Apply a varying thickness based on position - center wave has more particles
-      const baseParticleCount = 12;  // Reduced from 20
+      // Use a fixed count of 14 particles per ring as requested
+      // No position-based modulation for simpler physics
+      const numParticlesInRing = 14;
       
-      // Calculate particle count modulation based on position (thicker in the center)
-      // Map y position to a modulation factor: center = 1.0, edges = 0.5
-      const centerY = this.canvas.height / 2;
-      const distanceFromCenter = Math.abs(y - centerY) / (this.canvas.height / 2);
-      const thicknessModulation = 1.0 - (distanceFromCenter * 0.5);
-      
-      // Apply power factor to thickness as well (more power = thicker lines)
+      // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3;
-      const thicknessFactor = thicknessModulation * Math.sqrt(particlePowerFactor);
-      
-      // Calculate final particle count, ensure minimum of 8
-      const numParticlesInRing = Math.max(8, Math.round(baseParticleCount * thicknessFactor));
       
       for (let i = 0; i < numParticlesInRing; i++) {
         const angle = (i / numParticlesInRing) * Math.PI * 2;
@@ -378,12 +367,12 @@ export class CanvasController {
   private drawFrame(progress: number) {
     // Update wall springs before physics engine
     if (this.funnelEnabled) {
-      // Spring physics parameters
-      const springConstant = 0.25; // Spring stiffness
-      const dampingFactor = 0.05; // Low damping for oscillation
-
+      // Spring physics parameters - reduced for better performance
+      const springConstant = 0.2; // Reduced from 0.25 for less calculation intensity
+      const dampingFactor = 0.06; // Increased from 0.05 for faster settling
+      
       // Maximum particle size to set max vibration amplitude
-      const maxAmplitude = 2.0; // About the size of a particle
+      const maxAmplitude = 1.8; // Reduced from 2.0 for less visual distraction
 
       // Update spring physics for walls
       const currentTime = performance.now();
@@ -421,8 +410,8 @@ export class CanvasController {
         }
       });
 
-      // Regular physics update
-      const numSubSteps = 5;
+      // Regular physics update with reduced substeps for better performance
+      const numSubSteps = 3; // Reduced from 5 for better performance
       const subStepTime = (1000 / 60) / numSubSteps;
       for (let i = 0; i < numSubSteps; i++) {
         Matter.Engine.update(this.engine, subStepTime);
@@ -430,8 +419,8 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
-    // Reduce motion blur by increasing alpha by 20%
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.09)'; // Increased from 0.075 by 20%
+    // Less transparent motion blur for better performance (faster trails)
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.12)'; // Increased from 0.09 by 33%
     this.ctx.fillRect(0, 0, width, height);
     
     // Draw funnel walls with smoky white fill
@@ -547,10 +536,16 @@ export class CanvasController {
             // Draw a glow effect for the curve first
             this.ctx.beginPath();
             const lineOpacity = opacity * 0.6; // Slightly increased opacity for better visibility
-            // Scale shadow effect by power factor
+            // Scale shadow effect by power factor with a lower base blur value
             const drawPowerFactor = this.params.power / 3;
-            this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
-            this.ctx.shadowBlur = 8 * drawPowerFactor;
+            // Only use shadow effect for higher power levels to save rendering time
+            if (this.params.power > 3) {
+              this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
+              this.ctx.shadowBlur = 5 * drawPowerFactor; // Reduced from 8 to 5
+            } else {
+              this.ctx.shadowColor = 'transparent';
+              this.ctx.shadowBlur = 0;
+            }
             this.ctx.strokeStyle = `rgba(20, 210, 255, ${lineOpacity})`;
             // Calculate line thickness based on wave position
             let thicknessFactor = 1.0;
