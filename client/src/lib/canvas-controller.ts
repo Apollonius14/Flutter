@@ -61,7 +61,7 @@ export class CanvasController {
     });
 
     this.params = {
-      power: 6, // Doubled from 3 (mid-range: 1-7)
+      power: 12, // Doubled again from 6
       frequency: 0.15  // Default frequency from home.tsx
     };
     
@@ -206,9 +206,9 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Use a fixed count of 14 particles per ring as requested
+      // Increased by 20% from 14 to 17 particles per ring
       // No position-based modulation for simpler physics
-      const numParticlesInRing = 14;
+      const numParticlesInRing = 17;
       
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3;
@@ -246,7 +246,7 @@ export class CanvasController {
         });
         }
 
-      const baseMaxAge = 160; // Doubled from 80
+      const baseMaxAge = 320; // Doubled again from 160
       // All particles are now active blue ones, so always use the longer maxAge
       // Use the power factor for max age (from 1/3 to 7/3 of base value at power=3)
       const maxAge = baseMaxAge * 6 * 1.5 * 4 * particlePowerFactor;
@@ -438,8 +438,10 @@ export class CanvasController {
           
           if (visibleParticles.length > 2) {
             // Draw a glow effect for the curve first
-            this.ctx.beginPath();
-            const lineOpacity = opacity * 0.6; // Slightly increased opacity for better visibility
+            // Add motion blur effect by drawing multiple semi-transparent layers
+            for (let blur = 3; blur >= 0; blur--) {
+              this.ctx.beginPath();
+              const lineOpacity = (opacity * 0.6) * (1 - blur * 0.2); // Fade out each blur layer
             // Scale shadow effect by power factor with a lower base blur value
             const drawPowerFactor = this.params.power / 3;
             // Only use shadow effect for higher power levels to save rendering time
@@ -492,6 +494,7 @@ export class CanvasController {
             }
             
             this.ctx.stroke();
+            }
             
             // Reset shadow effects after drawing the curve
             this.ctx.shadowColor = 'transparent';
