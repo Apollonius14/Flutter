@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Play, Pause, Languages } from "lucide-react";
+import { Play, Pause, Languages, Loader } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
 import { Switch } from "@/components/ui/switch";
 
@@ -15,7 +15,8 @@ const translations = {
     play: "Play",
     pause: "Pause",
     wallCurvature: "Wall Angle (0-90°)",
-    gapSize: "Gap Size"
+    gapSize: "Gap Size",
+    loading: "Loading Physics Engine..."
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -24,7 +25,8 @@ const translations = {
     play: "تشغيل",
     pause: "إيقاف",
     wallCurvature: "زاوية الحائط (٠-٩٠°)",
-    gapSize: "حجم الفجوة"
+    gapSize: "حجم الفجوة",
+    loading: "جاري تحميل محرك الفيزياء..."
   }
 };
 
@@ -33,6 +35,8 @@ export default function Home() {
   const [controller, setController] = useState<CanvasController | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCanvasReady, setIsCanvasReady] = useState(false);
   const t = translations[language];
   const [params, setParams] = useState({
     power: 3, // default value of 3 (middle of 1-7 range)
@@ -42,17 +46,34 @@ export default function Home() {
   const [wallAngle, setWallAngle] = useState(30); // Start with a slight angle
   const [gapSize, setGapSize] = useState(0.4);
 
+  // Separate UI initialization from physics initialization
   useEffect(() => {
-    if (!canvasRef.current) return;
-
+    // Set a flag that the UI is ready
+    setIsCanvasReady(true);
+    // Delay physics engine initialization to allow UI to render first
+    const timer = setTimeout(() => {
+      initPhysicsEngine();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  // Initialize physics engine after the UI is ready
+  const initPhysicsEngine = () => {
+    if (!canvasRef.current || !isCanvasReady) return;
+    
     try {
+      console.time('Physics Engine Initialization');
       const newController = new CanvasController(canvasRef.current);
+      console.timeEnd('Physics Engine Initialization');
       setController(newController);
+      setIsLoading(false);
       return () => newController.cleanup();
     } catch (error) {
       console.error("Failed to initialize canvas controller:", error);
+      setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!controller) return;
@@ -195,7 +216,15 @@ export default function Home() {
         </Card>
 
         <Card className="bg-gray-900 border-gray-800">
-          <CardContent className="p-6">
+          <CardContent className="p-6 relative">
+            {isLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-gray-900/80 rounded-md">
+                <Loader className="h-8 w-8 text-blue-500 animate-spin mb-4" />
+                <p className={`text-blue-400 font-medium ${language === 'ar' ? 'arabic' : ''}`}>
+                  {t.loading}
+                </p>
+              </div>
+            )}
             <canvas
               ref={canvasRef}
               width={800}

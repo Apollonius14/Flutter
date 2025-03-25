@@ -55,17 +55,18 @@ export class CanvasController {
   private positions: number[] = []; // Store wave positions
 
   constructor(canvas: HTMLCanvasElement) {
+    console.time('Canvas initialization');
     this.canvas = canvas;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false }); // Disable alpha for better performance
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
 
-    // Configure engine with better iteration parameters
+    // Configure engine with optimized iteration parameters
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 6,  // Increased from default 6
-      velocityIterations: 8,  // Increased from default 4
-      constraintIterations: 4 // Added explicit constraint iterations
+      positionIterations: 3,  // Reduced for faster startup
+      velocityIterations: 4,  // Reduced for faster startup
+      constraintIterations: 2  // Reduced for faster startup
     });
 
     this.params = {
@@ -80,8 +81,20 @@ export class CanvasController {
     this.updateSpawnInterval();
 
     this.canvas.style.backgroundColor = '#1a1a1a';
-    this.setupFunnelWalls();
     
+    // Defer wall setup slightly for faster initial loading
+    setTimeout(() => {
+      this.setupFunnelWalls();
+      
+      // Setup collision detection only after walls are created
+      this.setupCollisionDetection();
+    }, 0);
+    
+    console.timeEnd('Canvas initialization');
+  }
+  
+  // Extract collision detection setup to a separate method
+  private setupCollisionDetection() {
     // Set up collision detection to trigger spring vibrations
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       event.pairs.forEach((pair) => {
@@ -246,46 +259,60 @@ export class CanvasController {
       
       const particles: Particle[] = [];
       // Create particles for blue waves
-      // Set fixed number of particles to 20
-      const numParticlesInRing = 20;
-        for (let i = 0; i < numParticlesInRing; i++) {
-          const angle = (i / numParticlesInRing) * Math.PI * 2;
-          const particleX = x + Math.cos(angle) * fixedRadius;
-          const particleY = y + Math.sin(angle) * fixedRadius;
+      // Reduce initial particle count for better performance
+      // Apply a varying thickness based on position - center wave has more particles
+      const baseParticleCount = 12;  // Reduced from 20
+      
+      // Calculate particle count modulation based on position (thicker in the center)
+      // Map y position to a modulation factor: center = 1.0, edges = 0.5
+      const centerY = this.canvas.height / 2;
+      const distanceFromCenter = Math.abs(y - centerY) / (this.canvas.height / 2);
+      const thicknessModulation = 1.0 - (distanceFromCenter * 0.5);
+      
+      // Apply power factor to thickness as well (more power = thicker lines)
+      const particlePowerFactor = this.params.power / 3;
+      const thicknessFactor = thicknessModulation * Math.sqrt(particlePowerFactor);
+      
+      // Calculate final particle count, ensure minimum of 8
+      const numParticlesInRing = Math.max(8, Math.round(baseParticleCount * thicknessFactor));
+      
+      for (let i = 0; i < numParticlesInRing; i++) {
+        const angle = (i / numParticlesInRing) * Math.PI * 2;
+        const particleX = x + Math.cos(angle) * fixedRadius;
+        const particleY = y + Math.sin(angle) * fixedRadius;
 
-          const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
-            friction: 0.1, // Reduced friction by 50%
-            restitution: 1.0, // Perfect elasticity
-            mass: 0.1,
-            frictionAir: 0,
-            collisionFilter: {
-              category: 0x0001,
-              mask: 0x0002,
-              group: -1
-            }
-          });
+        const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
+          friction: 0.1, 
+          restitution: 1.0, // Perfect elasticity
+          mass: 0.1,
+          frictionAir: 0,
+          collisionFilter: {
+            category: 0x0001,
+            mask: 0x0002,
+            group: -1
+          }
+        });
 
-          // Doubled the previous speed
-          const speed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2;
-          Matter.Body.setVelocity(body, {
-            x: Math.cos(angle) * speed,
-            y: Math.sin(angle) * speed
-          });
+        // Doubled the previous speed
+        const speed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2;
+        Matter.Body.setVelocity(body, {
+          x: Math.cos(angle) * speed,
+          y: Math.sin(angle) * speed
+        });
 
-          Matter.Composite.add(this.engine.world, body);
-          particles.push({
-            body,
-            intensity: intensity,
-            age: 0,
-            groupId: groupId  // Assign the same group ID to all particles in this ring
-          });
+        Matter.Composite.add(this.engine.world, body);
+        particles.push({
+          body,
+          intensity: intensity,
+          age: 0,
+          groupId: groupId  // Assign the same group ID to all particles in this ring
+        });
         }
 
       const baseMaxAge = 80;
-      // Apply power factor to the max age (from 1/3 to 7/3 of base value at power=3)
-      const powerFactor = power / 3;
       // All particles are now active blue ones, so always use the longer maxAge
-      const maxAge = baseMaxAge * 6 * 1.5 * 4 * powerFactor;
+      // Use the power factor for max age (from 1/3 to 7/3 of base value at power=3)
+      const maxAge = baseMaxAge * 6 * 1.5 * 4 * particlePowerFactor;
 
       bubbles.push({
         x,
@@ -521,9 +548,9 @@ export class CanvasController {
             this.ctx.beginPath();
             const lineOpacity = opacity * 0.6; // Slightly increased opacity for better visibility
             // Scale shadow effect by power factor
-            const powerFactor = this.params.power / 3;
+            const drawPowerFactor = this.params.power / 3;
             this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
-            this.ctx.shadowBlur = 8 * powerFactor;
+            this.ctx.shadowBlur = 8 * drawPowerFactor;
             this.ctx.strokeStyle = `rgba(20, 210, 255, ${lineOpacity})`;
             // Calculate line thickness based on wave position
             let thicknessFactor = 1.0;
@@ -536,7 +563,7 @@ export class CanvasController {
             else if (distanceFromMiddle === 2) thicknessFactor = 1.05; // Middle: 5% thicker
             // Outer waves use default thickness (1.0)
             
-            this.ctx.lineWidth = 1.8 * powerFactor * thicknessFactor;
+            this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor;
             
             // Start at the first particle
             const startPos = visibleParticles[0].body.position;
