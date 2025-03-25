@@ -399,13 +399,13 @@ export class CanvasController {
       // Check if bubble is close to activation line
       const isInActiveWindow = Math.abs(bubble.x - this.activationLineX) < 5;
 
-      // Update collision filters based on active state
+      // Enable collisions for all particles with walls
       if (bubble.particles.length > 0) {
         bubble.particles.forEach(particle => {
           const collisionFilter = {
             category: 0x0001,
-            mask: isInActiveWindow ? 0x0002 : 0x0000, // Only active particles collide with walls
-            group: isInActiveWindow ? -1 : 1 // Inactive particles don't collide with anything
+            mask: 0x0002, // All particles collide with walls
+            group: -1 // All particles can collide
           };
           Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
         });
@@ -419,8 +419,8 @@ export class CanvasController {
         // For active particles, they'll be drawn with the bezier curves below
         // We skip drawing them here to avoid double-rendering
         
-        // Draw smooth bezier curves between particles for blue waves only
-        if (isInActiveWindow && bubble.particles.length > 1) {
+        // Draw all particles with bezier curves, not just those near the activation line
+        if (bubble.particles.length > 1) {
           const visibleParticles = bubble.particles
             .filter(p => {
               // Get particles that are on screen
