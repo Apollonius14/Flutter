@@ -52,6 +52,7 @@ export class CanvasController {
   private topWallAngle: number = 0; // Store angle for top wall in radians
   private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
   private currentGroupId: number = 0; // Counter for generating unique group IDs
+  private positions: number[] = []; // Store wave positions
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -213,7 +214,7 @@ export class CanvasController {
     const fixedRadius = 7.2;
 
     // Generate symmetrically distributed positions
-    const positions: number[] = [];
+    this.positions = [];
     const compressionFactor = 0.585; // Reduced by 10% from 0.65
     
     // Calculate center and offsets for symmetric distribution
@@ -221,13 +222,13 @@ export class CanvasController {
     const baseSpacing = (height * compressionFactor) / 8; // Divide space into 8 parts for 7 waves
     
     // Add positions in order from top to bottom
-    positions.push(center - baseSpacing * 3); // Outer top
-    positions.push(center - baseSpacing * 2); // Middle top
-    positions.push(center - baseSpacing);     // Inner top
-    positions.push(center);                   // Center
-    positions.push(center + baseSpacing);     // Inner bottom
-    positions.push(center + baseSpacing * 2); // Middle bottom
-    positions.push(center + baseSpacing * 3); // Outer bottom
+    this.positions.push(center - baseSpacing * 3); // Outer top
+    this.positions.push(center - baseSpacing * 2); // Middle top
+    this.positions.push(center - baseSpacing);     // Inner top
+    this.positions.push(center);                   // Center
+    this.positions.push(center + baseSpacing);     // Inner bottom
+    this.positions.push(center + baseSpacing * 2); // Middle bottom
+    this.positions.push(center + baseSpacing * 3); // Outer bottom
     
     for (let i = 1; i <= numWaves; i++) {
       // Calculate position with compression toward center
@@ -533,7 +534,7 @@ export class CanvasController {
             this.ctx.strokeStyle = `rgba(20, 210, 255, ${lineOpacity})`;
             // Calculate line thickness based on wave position
             let thicknessFactor = 1.0;
-            const waveIndex = Math.floor(positions.indexOf(bubble.y));
+            const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
             const middleIndex = 3; // Center wave index
             const distanceFromMiddle = Math.abs(waveIndex - middleIndex);
             
