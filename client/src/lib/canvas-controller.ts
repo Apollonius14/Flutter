@@ -55,9 +55,9 @@ export class CanvasController {
     // Configure engine with minimal iteration parameters for faster loading
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 3,  // Reduced by half for much faster startup
-      velocityIterations: 3,  // Reduced by half for much faster startup
-      constraintIterations: 2  // Minimum value for fastest startup
+      positionIterations: 2,  // Reduced by half for much faster startup
+      velocityIterations: 2,  // Reduced by half for much faster startup
+      constraintIterations: 1  // Minimum value for fastest startup
     });
 
     this.params = {
@@ -121,8 +121,8 @@ export class CanvasController {
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.1, // Reduced friction by 50%
-      frictionStatic: 0.1, // Reduced static friction by 50%
+      friction: 0.3, // Reduced friction by 50%
+      frictionStatic: 0.45, // Reduced static friction by 50%
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -169,10 +169,10 @@ export class CanvasController {
     const width = this.canvas.width;
 
     // Generate 7 waves (odd number for symmetry)
-    // const numWaves = 6;
+    const numWaves = 7;
     
     const bubbles: Bubble[] = [];
-    const fixedRadius = 5;
+    const fixedRadius = 7.2;
 
     // Generate symmetrically distributed positions
     this.positions = []; // Clear previous positions
@@ -186,7 +186,7 @@ export class CanvasController {
     this.positions.push(center - baseSpacing * 3); // Outer top
     this.positions.push(center - baseSpacing * 2); // Middle top
     this.positions.push(center - baseSpacing);     // Inner top
-    //this.positions.push(center);                   // Center
+    this.positions.push(center);                   // Center
     this.positions.push(center + baseSpacing);     // Inner bottom
     this.positions.push(center + baseSpacing * 2); // Middle bottom
     this.positions.push(center + baseSpacing * 3); // Outer bottom
@@ -207,10 +207,10 @@ export class CanvasController {
       
       const particles: Particle[] = [];
       // Increased by 10% from 17 to 19 particles per ring as requested
-      const numParticlesInRing = 26;
+      const numParticlesInRing = 19;
       
       // Keep track of power factor for maxAge calculation
-      const particlePowerFactor = this.params.power / 2;
+      const particlePowerFactor = this.params.power / 3;
       
       // Create an array to store the angles we'll use for particle placement
       const particleAngles: number[] = [];
@@ -220,41 +220,13 @@ export class CanvasController {
         // Step 1: Generate a uniform angle distribution
         const uniformAngle = (i / numParticlesInRing) * Math.PI * 2;
         
-        // Step 2: Apply a cosine-based transform to concentrate particles horizontally
-        // Maximum concentration at 0° and 180° (left and right of circle)
-        // We need to shift the particles toward 0° and 180° (horizontal axis)
-        // Math.cos(uniformAngle) is 1 at 0°, -1 at 180°, and 0 at 90° and 270°
-        
-        // We want to keep the same ordering of particles but shift them toward horizontal axis
-        // Using cos^2 function for smooth transition and always positive adjustment
-        const concentrationStrength = 0.5; // Increased from 0.5 to 0.7 for stronger horizontal concentration
-        
-        // This makes angles at 0° and 180° move less (stay where they are),
-        // while angles at 90° and 270° get pushed toward 0° and 180° respectively
-        let distortedAngle: number;
-        
-        // For the top half of the circle (0 to π)
-        if (uniformAngle < Math.PI) {
-          // If in first quadrant (0 to π/2), pull toward 0
-          if (uniformAngle < Math.PI/2) {
-            distortedAngle = uniformAngle * (1 - concentrationStrength * Math.pow(Math.cos(uniformAngle), 2));
-          } 
-          // If in second quadrant (π/2 to π), pull toward π
-          else {
-            distortedAngle = uniformAngle + (Math.PI - uniformAngle) * concentrationStrength * Math.pow(Math.cos(uniformAngle), 2);
-          }
-        } 
-        // For the bottom half of the circle (π to 2π)
-        else {
-          // If in third quadrant (π to 3π/2), pull toward π
-          if (uniformAngle < 3 * Math.PI/2) {
-            distortedAngle = uniformAngle - (uniformAngle - Math.PI) * concentrationStrength * Math.pow(Math.cos(uniformAngle), 2);
-          } 
-          // If in fourth quadrant (3π/2 to 2π), pull toward 2π
-          else {
-            distortedAngle = uniformAngle + (2 * Math.PI - uniformAngle) * concentrationStrength * Math.pow(Math.cos(uniformAngle), 2);
-          }
-        }
+        // Step 2: Apply a sine-based transform to concentrate particles horizontally
+        // This creates more particles at 0° and 180° (left and right sides)
+        // sin(2*theta) oscillates between -1 and 1 twice per cycle
+        // Adding 0.5 * sin(2*theta) to theta distorts the uniform distribution
+        // The 0.5 coefficient controls how strong the concentration effect is
+        const concentrationStrength = 0.5; // Controls how much to concentrate horizontally
+        const distortedAngle = uniformAngle + concentrationStrength * Math.sin(2 * uniformAngle);
         
         particleAngles.push(distortedAngle);
       }
@@ -268,7 +240,7 @@ export class CanvasController {
         const particleY = y + Math.sin(angle) * fixedRadius;
 
         const body = Matter.Bodies.circle(particleX, particleY, 0.1, {
-          friction: 0.02, 
+          friction: 0.1, 
           restitution: 1.0, // Perfect elasticity
           mass: 0.1,
           frictionAir: 0,
@@ -280,17 +252,17 @@ export class CanvasController {
         });
 
         // Reduce base speed by 30% as requested
-        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 0.7; // 30% reduction
+        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7; // 30% reduction
         
         // Calculate how much the particle is aligned with the horizontal axis
         // cos(angle) is 1 or -1 at 0° and 180° (horizontal alignment)
         // and 0 at 90° and 270° (vertical alignment)
         const horizontalAlignment = Math.abs(Math.cos(angle));
         
-        // Boost speed for horizontally-aligned particles more significantly
-        // Increasing from 0.3 to 0.7 for more pronounced horizontal movement
-        // 1 + 0.7 * horizontalAlignment gives boost from 1.0x to 1.7x for horizontal particles
-        const directedSpeed = baseSpeed * 2 * horizontalAlignment;
+        // Boost speed for horizontally-aligned particles but by less
+        // 1 + 0.3 * horizontalAlignment gives boost from 1.0x to 1.3x based on alignment
+        // Reduced from 0.5 to 0.3 to slow down the particles a bit more
+        const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
         
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -377,7 +349,7 @@ export class CanvasController {
   private drawFrame(progress: number) {
     if (this.funnelEnabled) {
       // Regular physics update with reduced substeps for better performance
-      const numSubSteps = 4; // Reduced from 5 for better performance
+      const numSubSteps = 3; // Reduced from 5 for better performance
       const subStepTime = (1000 / 60) / numSubSteps;
       for (let i = 0; i < numSubSteps; i++) {
         Matter.Engine.update(this.engine, subStepTime);
@@ -386,7 +358,7 @@ export class CanvasController {
 
     const { width, height } = this.canvas;
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.05)'; // Reduced from 0.12 to 0.06 (50% reduction)
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.06)'; // Reduced from 0.12 to 0.06 (50% reduction)
     this.ctx.fillRect(0, 0, width, height);
     
     // Draw funnel walls with smoky white fill
@@ -581,11 +553,15 @@ export class CanvasController {
               this.ctx.fill();
               
               // Add a bright white center to each particle for emphasis
+              this.ctx.beginPath();
+              this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
+              this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+              this.ctx.fill();
             });
           } else if (visibleParticles.length > 1) {
             // If we don't have enough points for a proper curve, fall back to lines
             this.ctx.beginPath();
-            const lineOpacity = opacity * 0.2;
+            const lineOpacity = opacity * 0.4;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
             this.ctx.lineWidth = 0.8;
             
@@ -609,6 +585,11 @@ export class CanvasController {
               this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
               this.ctx.fill();
               
+              // Add a bright white center
+              this.ctx.beginPath();
+              this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
+              this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+              this.ctx.fill();
             });
           }
         }
