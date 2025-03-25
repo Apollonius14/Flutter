@@ -210,8 +210,8 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Number of particles per ring (was previously 26)
-      const numParticlesInRing = 26;
+      // Changed to odd number (25) to ensure perfect symmetry with one particle at θ = 0
+      const numParticlesInRing = 25;
       
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
@@ -226,45 +226,43 @@ export class CanvasController {
       // Generate deterministic non-uniform angles to concentrate particles at the wavefront (right side)
       // First create a base array of uniformly distributed angles
       const baseAngles: number[] = [];
-      for (let i = 0; i < exactParticleCount; i++) {
-        // Generate uniform angles that go all the way around the circle
-        const uniformAngle = (i / exactParticleCount) * Math.PI * 2;
-        baseAngles.push(uniformAngle);
+      
+      // With odd number of particles, ensure one is exactly at 0°
+      // Generate angles from -π to +π to ensure symmetry around 0
+      const halfCount = Math.floor(exactParticleCount / 2);
+      
+      // Add the center particle at exactly 0° (right in the middle)
+      baseAngles.push(0);
+      
+      // Add symmetric pairs of particles on each side of 0°
+      for (let i = 1; i <= halfCount; i++) {
+        const angle = (i / halfCount) * Math.PI; // Goes from 0 to π
+        baseAngles.push(angle);    // Add positive angle (below centerline)
+        baseAngles.push(-angle);   // Add negative angle (above centerline)
       }
       
       // Now redistribute these angles using a deterministic function to
       // concentrate particles toward the right side (0 degrees)
       for (let i = 0; i < baseAngles.length; i++) {
         const angle = baseAngles[i];
-        // Map the angle to a value from 0 to 1
-        const normalizedAngle = angle / (Math.PI * 2);
         
-        // Use sine function to create a non-uniform but deterministic distribution
-        // sin(θ/2) compresses angles toward 0 and π
-        const compressionFactor = Math.sin(angle / 2);
+        // Since we're already generating angles in the -π to +π range with
+        // perfect symmetry around 0, we only need to apply the compression
         
-        // Rotate the entire angle space by π/4 (45 degrees) clockwise to align symmetry with centerline
-        // This compensates for the π/4 counterclockwise bias observed in the rendering
-        const rotationCorrection = -Math.PI/4; // Negative for clockwise rotation
-        const rotatedAngle = (angle + rotationCorrection + 2*Math.PI) % (2*Math.PI); // Add 2π before modulo to handle negative angles
+        // The compression should be symmetric around 0 and preserve the sign
+        // sin(θ/2) compresses angles toward 0, which is what we want
+        const absAngle = Math.abs(angle);
+        const compressionFactor = Math.sin(absAngle / 2);
         
-        // Create a transformed angle that concentrates particles at 0° (right side)
-        // This creates a higher density of particles in the wavefront (right side)
-        // while maintaining perfect symmetry between top and bottom
-        let transformedAngle;
+        // Compress to concentrate particles at 0° (right side)
+        // with stronger compression (75%) for a more pronounced effect
+        // Preserve sign to maintain symmetry
+        const transformedAngle = angle * (1 - 0.75 * compressionFactor);
         
-        if (rotatedAngle <= Math.PI) {
-          // First half of the circle (top): Compress toward 0
-          transformedAngle = rotatedAngle * (1 - 0.5 * compressionFactor);
-        } else {
-          // Second half of the circle (bottom): Compress toward 2π
-          transformedAngle = Math.PI + (rotatedAngle - Math.PI) * (1 + 0.5 * compressionFactor);
-        }
+        // Convert from our -π to +π space back to 0 to 2π space that the rendering uses
+        const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
         
-        // Rotate back to original coordinate space
-        transformedAngle = (transformedAngle - rotationCorrection + 2*Math.PI) % (2*Math.PI);
-        
-        particleAngles.push(transformedAngle);
+        particleAngles.push(normalizedAngle);
       }
       
       // Sort is not strictly needed since our generation is already in order,
