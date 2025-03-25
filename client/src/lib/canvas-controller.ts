@@ -115,7 +115,7 @@ export class CanvasController {
     const centerY = height * 0.5;
     const gapSize = height * this.gapSize; // Use the stored gap size
     const wallThickness = 12; // Reduced from 20 to make walls more slender
-    const wallLength = height // Increased to 0.85 for complete closure
+    const wallLength = height * 2; // Make walls much longer to ensure complete blockage at minimum gap
 
     // Set up walls as static bodies with perfect restitution
     const wallOptions = {

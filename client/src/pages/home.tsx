@@ -185,7 +185,7 @@ export default function Home() {
                 </Label>
                 <Slider
                   value={[gapSize]}
-                  min={0.1}
+                  min={0.01} /* Reduced minimum gap size to nearly zero */
                   max={0.8}
                   step={0.01}
                   onValueChange={([value]) => {
