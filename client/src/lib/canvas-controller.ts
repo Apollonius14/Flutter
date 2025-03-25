@@ -206,16 +206,28 @@ export class CanvasController {
     const height = this.canvas.height;
     const width = this.canvas.width;
 
-    // Always generate the maximum number of waves
-    const numWaves = 8; 
+    // Generate 7 waves
+    const numWaves = 7;
     
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
-    // Generate evenly spaced positions but closer to the centerline
+    // Generate symmetrically distributed positions
     const positions: number[] = [];
-    const spacing = height / (numWaves + 1);
-    const compressionFactor = 0.65; // Increased compression to bring rings much closer to center
+    const compressionFactor = 0.585; // Reduced by 10% from 0.65
+    
+    // Calculate center and offsets for symmetric distribution
+    const center = height / 2;
+    const baseSpacing = (height * compressionFactor) / 8; // Divide space into 8 parts for 7 waves
+    
+    // Add positions in order from top to bottom
+    positions.push(center - baseSpacing * 3); // Outer top
+    positions.push(center - baseSpacing * 2); // Middle top
+    positions.push(center - baseSpacing);     // Inner top
+    positions.push(center);                   // Center
+    positions.push(center + baseSpacing);     // Inner bottom
+    positions.push(center + baseSpacing * 2); // Middle bottom
+    positions.push(center + baseSpacing * 3); // Outer bottom
     
     for (let i = 1; i <= numWaves; i++) {
       // Calculate position with compression toward center
@@ -519,7 +531,18 @@ export class CanvasController {
             this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
             this.ctx.shadowBlur = 8 * powerFactor;
             this.ctx.strokeStyle = `rgba(20, 210, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 1.8 * powerFactor;
+            // Calculate line thickness based on wave position
+            let thicknessFactor = 1.0;
+            const waveIndex = Math.floor(positions.indexOf(bubble.y));
+            const middleIndex = 3; // Center wave index
+            const distanceFromMiddle = Math.abs(waveIndex - middleIndex);
+            
+            if (distanceFromMiddle === 0) thicknessFactor = 1.2; // Center: 20% thicker
+            else if (distanceFromMiddle === 1) thicknessFactor = 1.1; // Inner: 10% thicker
+            else if (distanceFromMiddle === 2) thicknessFactor = 1.05; // Middle: 5% thicker
+            // Outer waves use default thickness (1.0)
+            
+            this.ctx.lineWidth = 1.8 * powerFactor * thicknessFactor;
             
             // Start at the first particle
             const startPos = visibleParticles[0].body.position;
