@@ -10,6 +10,7 @@ interface Particle {
   intensity: number;
   age: number;
   groupId: number; // Add group ID to identify particles in the same ring
+  isOriginal: boolean; // Flag to identify original particles from the activation line
 }
 
 interface Bubble {
@@ -22,6 +23,7 @@ interface Bubble {
   intensity: number;
   particles: Particle[];
   groupId: number; // Add group ID to identify this bubble's particle group
+  isOriginalSet: boolean; // Flag to identify original particle sets from the activation line
 }
 
 export class CanvasController {
@@ -90,10 +92,25 @@ export class CanvasController {
   
   // Extract collision detection setup to a separate method
   private setupCollisionDetection() {
-    // Simple collision detection without spring effects or intensity resets
+    // Add collision handling to keep track of original vs collision-created particles
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      // Intentionally empty - no longer resetting particle intensity after collisions
-      // This ensures particles fade out naturally based on their original age/maxAge
+      // When collisions happen, mark the particles as non-original
+      // This ensures we can tell the difference between original particles and those
+      // that result from collisions
+      event.pairs.forEach(pair => {
+        const bodyA = pair.bodyA;
+        const bodyB = pair.bodyB;
+        
+        // Find the corresponding particles
+        this.bubbles.forEach(bubble => {
+          bubble.particles.forEach(particle => {
+            if (particle.body === bodyA || particle.body === bodyB) {
+              // Mark as non-original after collision
+              particle.isOriginal = false;
+            }
+          });
+        });
+      });
     });
   }
   
@@ -323,12 +340,15 @@ export class CanvasController {
         });
 
         Matter.Composite.add(this.engine.world, body);
-        particles.push({
+        // Create a properly typed particle
+        const particle: Particle = {
           body,
           intensity: intensity,
           age: 0,
-          groupId: groupId  // Assign the same group ID to all particles in this ring
-        });
+          groupId: groupId,  // Assign the same group ID to all particles in this ring
+          isOriginal: true   // Mark as an original particle from the activation line
+        };
+        particles.push(particle);
         }
 
       // We want particles to decay within 6 cycles (doubled from 3)
@@ -353,7 +373,8 @@ export class CanvasController {
         maxAge,
         intensity: intensity,
         particles,
-        groupId: groupId  // Assign the same group ID to the bubble
+        groupId: groupId,  // Assign the same group ID to the bubble
+        isOriginalSet: true  // Mark this as an original set created at the activation line
       });
     });
 
@@ -525,7 +546,22 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        const opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7;
+        // Calculate opacity - make original bubbles fade twice as slowly
+        let opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7;
+        
+        // Only draw Bezier curves for original particle sets from the activation line
+        // This prevents drawing new Bezier curves after collisions
+        if (!bubble.isOriginalSet) {
+          return true; // Skip rendering this bubble, but keep it for physics
+        }
+        
+        // Check if any particles in this bubble are still original
+        // If none are original anymore (all have collided), mark the bubble as non-original
+        const anyOriginalParticles = bubble.particles.some(p => p.isOriginal);
+        if (!anyOriginalParticles) {
+          bubble.isOriginalSet = false;
+          return true; // Skip rendering this non-original bubble
+        }
         
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
