@@ -55,9 +55,9 @@ export class CanvasController {
     // Configure engine with minimal iteration parameters for faster loading
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 2,  // Reduced by half for much faster startup
-      velocityIterations: 2,  // Reduced by half for much faster startup
-      constraintIterations: 1  // Minimum value for fastest startup
+      positionIterations: 3,  // Reduced by half for much faster startup
+      velocityIterations: 3,  // Reduced by half for much faster startup 
+      constraintIterations: 2  // Minimum value for fastest startup
     });
 
     this.params = {
@@ -117,12 +117,16 @@ export class CanvasController {
     const wallThickness = 12; // Reduced from 20 to make walls more slender
     const wallLength = height * 2; // Make walls much longer to ensure complete blockage at minimum gap
 
-    // Set up walls as static bodies with perfect restitution
+    // Set up walls as static bodies with enhanced collision properties
     const wallOptions = {
       isStatic: true,
       restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.3, // Reduced friction by 50%
-      frictionStatic: 0.45, // Reduced static friction by 50%
+      friction: 0.0,    // No friction to prevent energy loss during sliding contacts
+      frictionStatic: 0.0, // No static friction 
+      frictionAir: 0,   // No air friction
+      density: 1,       // Standard density
+      slop: 0.05,       // Reduced slop (default is 0.05) - controls overlap allowed before collision response
+      chamfer: 0,       // No chamfering of corners - keeps walls perfectly rectangular
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -276,10 +280,12 @@ export class CanvasController {
 
         // Increase particle size to prevent squeezing through walls but keep perfect elasticity
         const body = Matter.Bodies.circle(particleX, particleY, 0.5, { // Increased from 0.1 to 0.5
-          friction: 0.1, 
-          restitution: 1.0, // Perfect elasticity as requested
-          mass: 0.2, // Increased mass to make particles less likely to squeeze through
-          frictionAir: 0, // No air resistance as requested
+          friction: 0.0,     // No friction to match walls and prevent energy loss 
+          restitution: 1.0,  // Perfect elasticity (no energy loss)
+          mass: 0.2,         // Increased mass to make particles less likely to squeeze through
+          frictionAir: 0,    // No air resistance
+          slop: 0.05,        // Controls overlap allowed before collision response (same as walls)
+          density: 0.8,      // Slightly reduced density for more dynamic bounces
           collisionFilter: {
             category: 0x0001,
             mask: 0x0002,
@@ -384,9 +390,9 @@ export class CanvasController {
 
   private drawFrame(progress: number) {
     if (this.funnelEnabled) {
-      // Regular physics update with reduced substeps for better performance
-      const numSubSteps = 3; // Reduced from 5 for better performance
-      const subStepTime = (1000 / 60) / numSubSteps;
+      // Increased number of substeps for higher accuracy physics (especially for collisions)
+      const numSubSteps = 6; // Increased from 3 to 6 for more accurate simulation
+      const subStepTime = (1000 / 60) / numSubSteps; // Smaller time step for better collision handling
       for (let i = 0; i < numSubSteps; i++) {
         Matter.Engine.update(this.engine, subStepTime);
       }
