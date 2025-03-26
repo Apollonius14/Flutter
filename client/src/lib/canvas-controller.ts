@@ -621,43 +621,21 @@ export class CanvasController {
             const drawPowerFactor = this.params.power / 3;
             
             // Draw a glow effect for the curve first
-            // Add more motion blur effect by drawing multiple semi-transparent layers
-            // Increased blur layers from 7 to 9 for even more blurred trail effect
-            for (let blur = 8; blur >= 0; blur--) {
+            // Add motion blur effect by drawing multiple semi-transparent layers
+            // Added a fifth Bezier curve (blur level 4) for more fluid feel
+            for (let blur = 4; blur >= 0; blur--) {
               this.ctx.beginPath();
-              const currentOpacity = (opacity * 0.7) * (1 - blur * 0.12); // Even more gradual fade out for blur layers
+              const currentOpacity = (opacity * 0.6) * (1 - blur * 0.2); // Fade out each blur layer
               
-              // Determine color based on cycle age first
-              let baseColor;
-              const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              console.log(`Rendering bubble from cycle ${bubble.cycleNumber}, current cycle: ${this.currentCycleNumber}, diff: ${cycleDiff}`);
-              
-              if (cycleDiff === 0) {
-                // Current cycle: bright cyan
-                baseColor = [20, 230, 255];
-                console.log("Using current cycle color (cyan)");
-              } else if (cycleDiff === 1) {
-                // One cycle old: shift toward blue-purple
-                baseColor = [100, 180, 255];
-                console.log("Using one cycle old color (blue-purple)");
-              } else {
-                // Two or more cycles old: shift toward purple
-                baseColor = [150, 140, 255];
-                console.log("Using two+ cycles old color (purple)");
-              }
-
-              // Enhanced blur effects for all power levels
+              // Only use shadow effect for higher power levels to save rendering time
               if (this.params.power > 3) {
-                // Brighter glow effect for high power
-                this.ctx.shadowColor = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, 0.4)`;
-                this.ctx.shadowBlur = 9 * drawPowerFactor; // Further increased blur
+                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
+                this.ctx.shadowBlur = 5 * drawPowerFactor; // Reduced from 8 to 5
               } else {
-                // More visible blur for lower power levels
-                this.ctx.shadowColor = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, 0.25)`; 
-                this.ctx.shadowBlur = 4 * drawPowerFactor; // Doubled light blur effect
+                this.ctx.shadowColor = 'transparent';
+                this.ctx.shadowBlur = 0;
               }
-              // Use the baseColor for stroke with the current opacity
-              this.ctx.strokeStyle = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, ${currentOpacity})`;
+              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
               
               // Calculate line thickness based on wave position
               let thicknessFactor = 1.0;
@@ -679,19 +657,12 @@ export class CanvasController {
               // Scale line width using the global cycle progress and cycle age
               // This makes lines thinner as they age, instead of less opaque
               // Make lines 50% thicker at all power levels as requested
-              // Further reduced decay rate to make lines last for two full cycles
               const cycleAgeFactor = (this.currentCycleNumber - bubble.cycleNumber === 0) ? 
-                1.0 - (progress * 0.25) : // Current cycle: even slower decay (quarter of original rate)
-                (this.currentCycleNumber - bubble.cycleNumber === 1) ?
-                // One cycle old: start at 0.85 and decay very slowly
-                0.85 - (progress * 0.25) :
-                // Two cycles old: maintain constant thickness of 0.6
-                0.6;
+                1.0 - progress : // Current cycle: decrease from 1.0 to 0.0 over cycle
+                0.7 - ((this.currentCycleNumber - bubble.cycleNumber) * 0.3); // Older cycles start thinner
               
-              // Base width increased by another 50% (from 2.97 to 4.45)
-              const lineWidth = 4.45 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
-              console.log(`Line width: ${lineWidth}, age factor: ${cycleAgeFactor}, thickness factor: ${thicknessFactor}`);
-              this.ctx.lineWidth = lineWidth;
+              // Base width increased by 50% (from 1.8 to 2.7)
+              this.ctx.lineWidth = 2.7 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -808,10 +779,8 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    // Use a shorter simulation time step for smoother animation
-    // Base cycle is 6667 * 0.44 = 2933.48ms
-    // We use a slightly shorter period for smoother animation
-    const cyclePeriod = 2800; // ~2.8 seconds per cycle for smoother animation
+    // Double line speed by halving cycle time
+    const cyclePeriod = 6667 * 0.44; // Slowed down by 10% (0.4 * 1.1)
     const currentCycleTime = Math.floor(elapsed / cyclePeriod);
     
     // Check if we've started a new cycle
@@ -821,17 +790,10 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
-      // Log all the bubbles and their cycle numbers
-      console.log(`Bubbles before filtering: ${this.bubbles.map(b => b.cycleNumber).join(', ')}`);
-      
-      // Keep bubbles and particles for 3 full cycles to ensure lines last for 2 full cycles
+      // Remove bubbles and particles that are more than 2 cycles old
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within 3 cycles of current cycle
-        const keep = this.currentCycleNumber - bubble.cycleNumber <= 3;
-        if (!keep) {
-          console.log(`Removing bubble from cycle ${bubble.cycleNumber}`);
-        }
-        return keep;
+        // Keep bubble if its cycle number is within 2 cycles of current cycle
+        return this.currentCycleNumber - bubble.cycleNumber <= 2;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
