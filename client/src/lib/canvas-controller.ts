@@ -259,14 +259,16 @@ export class CanvasController {
         // perfect symmetry around 0, we only need to apply the compression
         
         // The compression should be symmetric around 0 and preserve the sign
-        // sin(θ/2) compresses angles toward 0, which is what we want
+        // Using a quadratic function for smoother compression
         const absAngle = Math.abs(angle);
-        const compressionFactor = Math.sin(absAngle / 2);
+        // Use a more gentle, smooth compression based on quadratic curve
+        // This creates a more natural funnel shape than the sharp sin(θ/2)
+        const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
         
-        // Compress to concentrate particles at 0° (right side)
-        // with stronger compression (75%) for a more pronounced effect
-        // Preserve sign to maintain symmetry
-        const transformedAngle = angle * (1 - 0.75 * compressionFactor);
+        // Apply a gentler 50% maximum compression for smoother distribution
+        // This creates more particles at intermediate angles for a funnel shape
+        // rather than the sharp V-shape from the previous 75% compression
+        const transformedAngle = angle * (1 - 0.5 * compressionFactor);
         
         // Convert from our -π to +π space back to 0 to 2π space that the rendering uses
         const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
