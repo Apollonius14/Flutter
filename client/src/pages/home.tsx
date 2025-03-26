@@ -1,34 +1,35 @@
-import { useEffect, useRef, useState, Suspense, lazy } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Play, Pause, Languages, Loader } from "lucide-react";
+import { ChevronLeft, ChevronRight, Circle, Languages, Loader } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
-import { Switch } from "@/components/ui/switch";
 
 const translations = {
   en: {
     title: "Air Flow Visualizer",
-    power: "Power (1-7)",
+    power: "Power",
     play: "Play",
     pause: "Pause",
-    wallCurvature: "Wall Angle (0-90°)",
+    wallCurvature: "Wall Angle",
     gapSize: "Gap Size",
     loading: "Loading Physics Engine...",
-    rtlMode: "Right-to-Left Mode",
-    showParticles: "Show Particles"
+    ltr: "Left to Right",
+    rtl: "Right to Left",
+    particles: "Particles"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
-    power: "القوة (١-٧)",
+    power: "القوة",
     play: "تشغيل",
     pause: "إيقاف",
-    wallCurvature: "زاوية الحائط (٠-٩٠°)",
+    wallCurvature: "زاوية الحائط",
     gapSize: "حجم الفجوة",
     loading: "جاري تحميل محرك الفيزياء...",
-    rtlMode: "وضع اليمين إلى اليسار",
-    showParticles: "إظهار الجسيمات"
+    ltr: "من اليسار إلى اليمين",
+    rtl: "من اليمين إلى اليسار",
+    particles: "الجسيمات"
   }
 };
 
@@ -234,47 +235,53 @@ export default function Home() {
                 />
               </div>
               
-              {/* Two toggles on the same line */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 w-1/2">
-                  <Label className={`text-gray-200 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
-                    {t.rtlMode}
-                  </Label>
-                  <Switch
-                    checked={isRTL}
-                    onCheckedChange={toggleRTL}
-                    className="data-[state=checked]:bg-blue-500"
-                  />
-                </div>
+              {/* Direction and particles controls in a row */}
+              <div className="flex justify-center items-center gap-4">
+                <Button
+                  size="sm"
+                  variant={!isPlaying || isRTL ? "outline" : "default"}
+                  onClick={() => {
+                    if (isRTL) {
+                      setIsRTL(false);
+                    }
+                    if (!isPlaying) {
+                      setIsPlaying(true);
+                    } else if (!isRTL) {
+                      setIsPlaying(false);
+                    }
+                  }}
+                  className={`border-gray-600 ${!isPlaying || isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
                 
-                <div className="flex items-center gap-2 w-1/2">
-                  <Label className={`text-gray-200 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
-                    {t.showParticles}
-                  </Label>
-                  <Switch
-                    checked={showParticles}
-                    onCheckedChange={toggleShowParticles}
-                    className="data-[state=checked]:bg-blue-500"
-                  />
-                </div>
+                <Button
+                  size="sm"
+                  variant={!isPlaying || !isRTL ? "outline" : "default"}
+                  onClick={() => {
+                    if (!isRTL) {
+                      setIsRTL(true);
+                    }
+                    if (!isPlaying) {
+                      setIsPlaying(true);
+                    } else if (isRTL) {
+                      setIsPlaying(false);
+                    }
+                  }}
+                  className={`border-gray-600 ${!isPlaying || !isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant={showParticles ? "default" : "outline"}
+                  onClick={toggleShowParticles}
+                  className={`border-gray-600 rounded-full ${showParticles ? 'bg-pink-500 text-white' : 'text-gray-400'}`}
+                >
+                  <Circle className="h-4 w-4" />
+                </Button>
               </div>
-            </div>
-
-            <div className="flex justify-center">
-              <Button
-                size="sm"
-                onClick={togglePlay}
-                className="w-24 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white"
-              >
-                {isPlaying ? (
-                  <Pause className="mr-1 h-3 w-3" />
-                ) : (
-                  <Play className="mr-1 h-3 w-3" />
-                )}
-                <span className={`text-sm ${language === 'ar' ? 'arabic' : ''}`}>
-                  {isPlaying ? t.pause : t.play}
-                </span>
-              </Button>
             </div>
           </CardContent>
         </Card>
