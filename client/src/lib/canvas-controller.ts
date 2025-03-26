@@ -125,8 +125,7 @@ export class CanvasController {
       frictionStatic: 0.0, // No static friction 
       frictionAir: 0,   // No air friction
       density: 1,       // Standard density
-      slop: 0.05,       // Reduced slop (default is 0.05) - controls overlap allowed before collision response
-      chamfer: 0,       // No chamfering of corners - keeps walls perfectly rectangular
+      // Using Matter.js default slop value
       collisionFilter: {
         category: 0x0002,
         mask: 0x0001
@@ -284,7 +283,6 @@ export class CanvasController {
           restitution: 1.0,  // Perfect elasticity (no energy loss)
           mass: 0.2,         // Increased mass to make particles less likely to squeeze through
           frictionAir: 0,    // No air resistance
-          slop: 0.05,        // Controls overlap allowed before collision response (same as walls)
           density: 0.8,      // Slightly reduced density for more dynamic bounces
           collisionFilter: {
             category: 0x0001,
