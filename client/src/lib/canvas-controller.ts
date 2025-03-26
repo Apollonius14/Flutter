@@ -29,6 +29,8 @@ interface Bubble {
 export class CanvasController {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private canvasWidth: number; // Store canvas width as class variable
+  private canvasHeight: number; // Store canvas height as class variable
   private params: AnimationParams;
   private animationFrame: number | null = null;
   private startTime: number | null = null;
@@ -55,6 +57,10 @@ export class CanvasController {
   constructor(canvas: HTMLCanvasElement) {
     console.time('Canvas initialization');
     this.canvas = canvas;
+    // Store canvas dimensions as class properties
+    this.canvasWidth = canvas.width;
+    this.canvasHeight = canvas.height;
+    
     const ctx = canvas.getContext("2d", { alpha: false }); // Disable alpha for better performance
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
@@ -425,6 +431,9 @@ export class CanvasController {
   }
 
   private drawFrame(progress: number) {
+    // Define width and height variables that can be used throughout this method
+    const width = this.canvas.width;
+    const height = this.canvas.height;
     // Calculate global opacity factor based on cycle progress
     // This will be used for all Bezier curves to ensure they all fade together
     const globalOpacityFactor = 1 - progress;
@@ -436,8 +445,6 @@ export class CanvasController {
         Matter.Engine.update(this.engine, subStepTime);
       }
     }
-
-    const { width, height } = this.canvas;
     
     // Apply RTL transformation if enabled
     this.ctx.save();
@@ -516,6 +523,13 @@ export class CanvasController {
     // Update previous position for next frame
     this.previousSweepLineX = timeX;
 
+    // Limit physics calculations to on-screen elements
+    const bufferMargin = 50; // Extra margin around screen to prevent abrupt changes
+    const screenBounds = {
+      min: { x: -bufferMargin, y: -bufferMargin },
+      max: { x: this.canvas.width + bufferMargin, y: this.canvas.height + bufferMargin }
+    };
+    
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
@@ -523,15 +537,38 @@ export class CanvasController {
       // Check if bubble is close to activation line
       const isInActiveWindow = Math.abs(bubble.x - this.activationLineX) < 5;
 
-      // Enable collisions for all particles with walls
+      // Optimize physics by only processing particles within or near the canvas
       if (bubble.particles.length > 0) {
         bubble.particles.forEach(particle => {
-          const collisionFilter = {
-            category: 0x0001,
-            mask: 0x0002, // All particles collide with walls
-            group: -1 // All particles can collide
-          };
-          Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
+          const pos = particle.body.position;
+          const isOnScreen = 
+            pos.x >= screenBounds.min.x && 
+            pos.x <= screenBounds.max.x && 
+            pos.y >= screenBounds.min.y && 
+            pos.y <= screenBounds.max.y;
+          
+          // Only process physics for on-screen particles
+          if (isOnScreen) {
+            // Enable collisions for on-screen particles
+            const collisionFilter = {
+              category: 0x0001,
+              mask: 0x0002, // Collide with walls
+              group: -1 // Can collide with other particles
+            };
+            Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
+            // Keep normal physics simulation for on-screen particles
+            Matter.Body.setStatic(particle.body, false);
+          } else {
+            // Disable collisions for off-screen particles to save computation
+            const collisionFilter = {
+              category: 0x0000,
+              mask: 0x0000, // Don't collide with anything
+              group: 0 // Don't allow collision with other particles
+            };
+            Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
+            // Optionally, make off-screen particles static to further reduce computation
+            // Matter.Body.setStatic(particle.body, true);
+          }
         });
       }
 
@@ -568,7 +605,7 @@ export class CanvasController {
             .filter(p => {
               // Get particles that are on screen
               const pos = p.body.position;
-              return pos.x >= 0 && pos.x <= width && pos.y >= 0 && pos.y <= height;
+              return pos.x >= 0 && pos.x <= this.canvas.width && pos.y >= 0 && pos.y <= this.canvas.height;
             })
             .sort((a, b) => {
               // Sort particles by angle around the center
@@ -585,7 +622,8 @@ export class CanvasController {
             
             // Draw a glow effect for the curve first
             // Add motion blur effect by drawing multiple semi-transparent layers
-            for (let blur = 3; blur >= 0; blur--) {
+            // Added a fifth Bezier curve (blur level 4) for more fluid feel
+            for (let blur = 4; blur >= 0; blur--) {
               this.ctx.beginPath();
               const currentOpacity = (opacity * 0.6) * (1 - blur * 0.2); // Fade out each blur layer
               
@@ -616,9 +654,15 @@ export class CanvasController {
               else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.05;  // Outer: 5% thicker
               else if (farthestPositions.includes(waveIndex)) thicknessFactor = 1.0; // Farthest: default thickness
               
-              // Scale line width using the global opacity factor as well to maintain consistency
-              // This ensures the line gets thinner as the cycle progresses
-              this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor * (0.5 + 0.5 * globalOpacityFactor);
+              // Scale line width using the global cycle progress and cycle age
+              // This makes lines thinner as they age, instead of less opaque
+              // Make lines 50% thicker at all power levels as requested
+              const cycleAgeFactor = (this.currentCycleNumber - bubble.cycleNumber === 0) ? 
+                1.0 - progress : // Current cycle: decrease from 1.0 to 0.0 over cycle
+                0.7 - ((this.currentCycleNumber - bubble.cycleNumber) * 0.3); // Older cycles start thinner
+              
+              // Base width increased by 50% (from 1.8 to 2.7)
+              this.ctx.lineWidth = 2.7 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -773,8 +817,9 @@ export class CanvasController {
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
     
-    // Update physics engine with fixed timestep for predictable behavior
-    Matter.Engine.update(this.engine, 16.67); // Use a consistent 60 FPS time step
+    // Update physics engine with a slightly shorter time step as requested
+    // Using 12.5ms instead of 16.67ms (approximately 80fps instead of 60fps)
+    Matter.Engine.update(this.engine, 12.5); // Shorter time step for more fluid simulation
     
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
