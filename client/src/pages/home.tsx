@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch";
 const translations = {
   en: {
     title: "Air Flow Visualizer",
-    frequency: "Spawn Frequency (0-1)",
     power: "Power (1-7)",
     play: "Play",
     pause: "Pause",
@@ -22,7 +21,6 @@ const translations = {
   },
   ar: {
     title: "محاكاة تدفق الهواء",
-    frequency: "معدل التوليد (٠-١)",
     power: "القوة (١-٧)",
     play: "تشغيل",
     pause: "إيقاف",
@@ -43,10 +41,8 @@ export default function Home() {
   const [isRTL, setIsRTL] = useState(false);
   const [showParticles, setShowParticles] = useState(true);
   const t = translations[language];
-  const [params, setParams] = useState({
-    power: 3, // default value of 3 (middle of 1-7 range)
-    frequency: 0.15,
-  });
+  const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
+  // Using a fixed frequency value of 0.15 since we're removing the frequency slider
   // Walls are now always enabled (no need for a state)
   const [wallAngle, setWallAngle] = useState(30); // Start with a slight angle
   const [gapSize, setGapSize] = useState(0.4);
@@ -81,10 +77,53 @@ export default function Home() {
     }
   }, []);
 
+  // Track if a cycle has started to update power only at cycle start
+  const [cycleStarted, setCycleStarted] = useState(false);
+  const lastPowerValue = useRef(powerValue);
+
+  // Effect to update power value, but only at the beginning of a cycle
   useEffect(() => {
     if (!controller) return;
-    controller.updateParams(params);
-  }, [params, controller]);
+    
+    if (!cycleStarted && isPlaying) {
+      // When animation starts playing, update with the current power value
+      controller.updateParams({
+        power: powerValue,
+        frequency: 0.15 // Fixed frequency value
+      });
+      lastPowerValue.current = powerValue;
+      setCycleStarted(true);
+    } else if (!isPlaying) {
+      // Reset cycle tracking when paused
+      setCycleStarted(false);
+    }
+  }, [controller, powerValue, isPlaying, cycleStarted]);
+  
+  // Add a listener to know when a cycle starts
+  useEffect(() => {
+    if (!controller) return;
+    
+    const handleCycleStart = () => {
+      // Only update if power value has changed since last cycle
+      if (lastPowerValue.current !== powerValue) {
+        controller.updateParams({
+          power: powerValue,
+          frequency: 0.15 // Fixed frequency value
+        });
+        lastPowerValue.current = powerValue;
+      }
+    };
+    
+    // Add cycle start event listener
+    controller.onCycleStart = handleCycleStart;
+    
+    return () => {
+      // Clean up event listener
+      if (controller) {
+        controller.onCycleStart = null;
+      }
+    };
+  }, [controller, powerValue]);
 
   useEffect(() => {
     if (!controller) return;
@@ -150,32 +189,14 @@ export default function Home() {
             <div className="grid gap-6">
               <div className="space-y-2">
                 <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
-                  {t.frequency}
-                </Label>
-                <Slider
-                  value={[params.frequency]}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, frequency: value }))
-                  }
-                  className="pt-2"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic block text-right' : ''}`}>
                   {t.power}
                 </Label>
                 <Slider
-                  value={[params.power]}
+                  value={[powerValue]}
                   min={1}
                   max={7}
                   step={0.5}
-                  onValueChange={([value]) =>
-                    setParams((p) => ({ ...p, power: value }))
-                  }
+                  onValueChange={([value]) => setPowerValue(value)}
                   className="pt-2"
                 />
               </div>
