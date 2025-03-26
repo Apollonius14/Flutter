@@ -10,7 +10,7 @@ interface Particle {
   intensity: number;
   age: number;
   groupId: number; // Add group ID to identify particles in the same ring
-  isOriginal: boolean; // Flag to identify original particles from the activation line
+  cycleNumber: number; // Which cycle this particle was created in
 }
 
 interface Bubble {
@@ -23,7 +23,7 @@ interface Bubble {
   intensity: number;
   particles: Particle[];
   groupId: number; // Add group ID to identify this bubble's particle group
-  isOriginalSet: boolean; // Flag to identify original particle sets from the activation line
+  cycleNumber: number; // Which cycle this bubble was created in
 }
 
 export class CanvasController {
@@ -47,6 +47,7 @@ export class CanvasController {
   private topWallAngle: number = 0; // Store angle for top wall in radians
   private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
   private currentGroupId: number = 0; // Counter for generating unique group IDs
+  private currentCycleNumber: number = 0; // Current cycle number
   private positions: number[] = []; // Store wave positions
   private isRTL: boolean = false; // RTL mode toggle (right-to-left for Arabic)
   private showParticles: boolean = true; // Toggle to show/hide individual particles
