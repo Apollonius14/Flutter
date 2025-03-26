@@ -38,6 +38,8 @@ export class CanvasController {
   private activationLineX: number = 0; // Will be set to 20% of canvas width
   private lastSpawnTime: number = 0;
   private spawnInterval: number = 1000; // Default spawn interval in ms
+  private lastCycleTime: number = 0;
+  public onCycleStart: (() => void) | null = null; // Callback for cycle start
   private wallCurvature: number = 0; // 0 = straight wall, 1 = max curve
   private gapSize: number = 0.4; // Normalized gap size (fraction of canvas height)
   private topWallAngle: number = 0; // Store angle for top wall in radians
@@ -329,11 +331,18 @@ export class CanvasController {
         });
         }
 
-      // Increase the base max age to make particles persist three times as long
-      const baseMaxAge = 320 * 2 * 3; // Triple the previously doubled value (640 * 3 = 1920)
-      // All particles are now active blue ones, so always use the longer maxAge
-      // Use the power factor for max age (keeping the same modifiers)
-      const maxAge = baseMaxAge * 6 * 1.5 * 4 * particlePowerFactor;
+      // We want particles to decay within 3 cycles
+      // One cycle is 6667 * 0.44 = 2933.48 ms
+      // For 3 cycles: 3 * 2933.48 = 8800.44 ms
+      // Using a base value that ensures particles don't live longer than 3 cycles
+      const cycleTime = 6667 * 0.44;
+      const maxCycles = 3;
+      const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
+      
+      // Scale maxAge based on power, but ensure it's never more than 3 cycles
+      // Use a diminishing returns formula for power scaling to prevent excessive lifetimes
+      const powerScaleFactor = 0.5 + (0.5 * Math.sqrt(particlePowerFactor / 3));
+      const maxAge = baseMaxAge * powerScaleFactor;
 
       bubbles.push({
         x,
@@ -696,6 +705,17 @@ export class CanvasController {
     const elapsed = performance.now() - this.startTime;
     // Double line speed by halving cycle time
     const cyclePeriod = 6667 * 0.44; // Slowed down by 10% (0.4 * 1.1)
+    const currentCycleTime = Math.floor(elapsed / cyclePeriod);
+    
+    // Check if we've started a new cycle
+    if (currentCycleTime > this.lastCycleTime) {
+      this.lastCycleTime = currentCycleTime;
+      // Call the cycle start callback if it exists
+      if (this.onCycleStart) {
+        this.onCycleStart();
+      }
+    }
+    
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
