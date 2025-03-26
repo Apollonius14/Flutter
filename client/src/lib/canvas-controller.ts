@@ -183,20 +183,25 @@ export class CanvasController {
     
     // Calculate center and offsets for symmetric distribution
     const center = height / 2;
-    // Change to 6 positions (even number) with no ring on centerline
-    const numPositions = 6; 
+    // Increased from 6 to 9 positions (50% more) for more planar wave appearance
+    const numPositions = 9; 
     const baseSpacing = (height * compressionFactor) / (numPositions + 1);
     
     // Calculate offset to avoid placing ring directly on centerline
     const halfSpacing = baseSpacing / 2;
     
-    // Add positions in order from top to bottom (even count, all offset from center)
-    this.positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer
-    this.positions.push(center - halfSpacing - baseSpacing);     // Upper middle
-    this.positions.push(center - halfSpacing);                   // Upper inner
-    this.positions.push(center + halfSpacing);                   // Lower inner
-    this.positions.push(center + halfSpacing + baseSpacing);     // Lower middle
-    this.positions.push(center + halfSpacing + baseSpacing * 2); // Lower outer
+    // Add positions in order from top to bottom (all offset from center)
+    // We're using 9 waves now with 4 above and 4 below the centerline (plus the offset)
+    this.positions.push(center - halfSpacing - baseSpacing * 4); // Upper outer 4
+    this.positions.push(center - halfSpacing - baseSpacing * 3); // Upper outer 3
+    this.positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer 2
+    this.positions.push(center - halfSpacing - baseSpacing);     // Upper inner
+    this.positions.push(center - halfSpacing);                   // Near-center upper
+    this.positions.push(center + halfSpacing);                   // Near-center lower
+    this.positions.push(center + halfSpacing + baseSpacing);     // Lower inner
+    this.positions.push(center + halfSpacing + baseSpacing * 2); // Lower outer 2
+    this.positions.push(center + halfSpacing + baseSpacing * 3); // Lower outer 3
+    this.positions.push(center + halfSpacing + baseSpacing * 4); // Lower outer 4
 
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
@@ -213,8 +218,9 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Changed to odd number (25) to ensure perfect symmetry with one particle at θ = 0
-      const numParticlesInRing = 25;
+      // Reduced by 30% from 25 to 17 particles per ring (still odd for symmetry)
+      // 25 * 0.7 = 17.5, rounded down to 17 to keep it odd
+      const numParticlesInRing = 17;
       
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
@@ -533,15 +539,19 @@ export class CanvasController {
               // Calculate line thickness based on wave position
               let thicknessFactor = 1.0;
               const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
-              // With 6 positions (0-5), central positions are 2 and 3
-              const centralPositions = [2, 3]; // The two positions closest to center
-              const innerPositions = [1, 4];   // The next two positions from center
-              const outerPositions = [0, 5];   // The two positions farthest from center
+              // With 9 positions (0-8), update the central, inner, and outer positions
+              const centralPositions = [4, 5]; // The two positions closest to center
+              const innerPositions = [3, 6];   // The next two positions from center
+              const middlePositions = [2, 7];  // The middle positions
+              const outerPositions = [1, 8];   // The outer positions
+              const farthestPositions = [0, 9]; // The farthest positions
               
               // Assign thickness based on position group
               if (centralPositions.includes(waveIndex)) thicknessFactor = 1.2;      // Center: 20% thicker
-              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.1;   // Inner: 10% thicker
-              else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.0;   // Outer: default thickness
+              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.15;  // Inner: 15% thicker
+              else if (middlePositions.includes(waveIndex)) thicknessFactor = 1.1;  // Middle: 10% thicker
+              else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.05;  // Outer: 5% thicker
+              else if (farthestPositions.includes(waveIndex)) thicknessFactor = 1.0; // Farthest: default thickness
               
               this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor;
               
