@@ -9,8 +9,8 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
-  groupId: number; // Group ID to identify particles in the same ring
-  isOriginal: boolean; // Required for backward compatibility with existing code
+  groupId: number; // Add group ID to identify particles in the same ring
+  isOriginal: boolean; // Flag to identify original particles from the activation line
 }
 
 interface Bubble {
@@ -22,8 +22,8 @@ interface Bubble {
   maxAge: number;
   intensity: number;
   particles: Particle[];
-  groupId: number; // Group ID to identify this bubble's particle group
-  isOriginalSet: boolean; // Required for backward compatibility with existing code
+  groupId: number; // Add group ID to identify this bubble's particle group
+  isOriginalSet: boolean; // Flag to identify original particle sets from the activation line
 }
 
 export class CanvasController {
@@ -548,10 +548,184 @@ export class CanvasController {
         });
       }
 
-      // Remove bubbles without any particles
-      if (bubble.particles.length === 0) {
-        return false;
-      }
+      if (this.funnelEnabled && bubble.particles.length > 0) {
+        // Use global opacity factor based on cycle progress instead of bubble age
+        // This ensures all Bezier curves fade together over the cycle
+        let opacity = globalOpacityFactor * 0.7;
+        
+        // Only draw Bezier curves for original particle sets from the activation line
+        // This prevents drawing new Bezier curves after collisions
+        if (!bubble.isOriginalSet) {
+          return true; // Skip rendering this bubble, but keep it for physics
+        }
+        
+        // Check if any particles in this bubble are still original
+        // If none are original anymore (all have collided), mark the bubble as non-original
+        const anyOriginalParticles = bubble.particles.some(p => p.isOriginal);
+        if (!anyOriginalParticles) {
+          bubble.isOriginalSet = false;
+          return true; // Skip rendering this non-original bubble
+        }
+        
+        // We no longer draw inactive particles - they're completely invisible
+        // Only blue particles at the activation line are visible
+        // For active particles, they'll be drawn with the bezier curves below
+        // We skip drawing them here to avoid double-rendering
+        
+        // Draw all particles with bezier curves, not just those near the activation line
+        if (bubble.particles.length > 1) {
+          const visibleParticles = bubble.particles
+            .filter(p => {
+              // Get particles that are on screen
+              const pos = p.body.position;
+              return pos.x >= 0 && pos.x <= width && pos.y >= 0 && pos.y <= height;
+            })
+            .sort((a, b) => {
+              // Sort particles by angle around the center
+              const aPos = a.body.position;
+              const bPos = b.body.position;
+              const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
+              const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
+              return aAngle - bAngle;
+            });
+          
+          if (visibleParticles.length > 2) {
+            // Calculate power factor for drawing
+            const drawPowerFactor = this.params.power / 3;
+            
+            // Draw a glow effect for the curve first
+            // Add motion blur effect by drawing multiple semi-transparent layers
+            for (let blur = 3; blur >= 0; blur--) {
+              this.ctx.beginPath();
+              const currentOpacity = (opacity * 0.6) * (1 - blur * 0.2); // Fade out each blur layer
+              
+              // Only use shadow effect for higher power levels to save rendering time
+              if (this.params.power > 3) {
+                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
+                this.ctx.shadowBlur = 5 * drawPowerFactor; // Reduced from 8 to 5
+              } else {
+                this.ctx.shadowColor = 'transparent';
+                this.ctx.shadowBlur = 0;
+              }
+              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
+              
+              // Calculate line thickness based on wave position
+              let thicknessFactor = 1.0;
+              const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
+              // With 9 positions (0-8), update the central, inner, and outer positions
+              const centralPositions = [4, 5]; // The two positions closest to center
+              const innerPositions = [3, 6];   // The next two positions from center
+              const middlePositions = [2, 7];  // The middle positions
+              const outerPositions = [1, 8];   // The outer positions
+              const farthestPositions = [0, 9]; // The farthest positions
+              
+              // Assign thickness based on position group
+              if (centralPositions.includes(waveIndex)) thicknessFactor = 1.2;      // Center: 20% thicker
+              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.15;  // Inner: 15% thicker
+              else if (middlePositions.includes(waveIndex)) thicknessFactor = 1.1;  // Middle: 10% thicker
+              else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.05;  // Outer: 5% thicker
+              else if (farthestPositions.includes(waveIndex)) thicknessFactor = 1.0; // Farthest: default thickness
+              
+              // Scale line width using the global opacity factor as well to maintain consistency
+              // This ensures the line gets thinner as the cycle progresses
+              this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor * (0.5 + 0.5 * globalOpacityFactor);
+              
+              // Start at the first particle
+              const startPos = visibleParticles[0].body.position;
+              this.ctx.moveTo(startPos.x, startPos.y);
+              
+              // Use cubic bezier curves to create a smooth path through all particles
+              for (let i = 0; i < visibleParticles.length - 1; i++) {
+                const p0 = visibleParticles[Math.max(0, i-1)].body.position;
+                const p1 = visibleParticles[i].body.position;
+                const p2 = visibleParticles[i+1].body.position;
+                const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
+                
+                // Calculate control points for the current segment (p1 to p2)
+                // Use a portion of the vector from previous to next particle
+                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
+                
+                // First control point - influenced by p0 and p2
+                const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+                const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+                
+                // Second control point - influenced by p1 and p3
+                const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+                const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+                
+                // Draw the cubic bezier curve
+                this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+              }
+              
+              this.ctx.stroke();
+            }
+            
+            // Reset shadow effects after drawing the curve
+            this.ctx.shadowColor = 'transparent';
+            this.ctx.shadowBlur = 0;
+            
+            // Create a local opacity value for particles
+            const particleOpacity = opacity * 0.6;
+            
+            // Draw particles as bright neon pink circles only if showParticles is true
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                // Calculate particle size with growth factor
+                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
+                
+                // Draw a filled circle with neon pink glow effect
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
+                this.ctx.fill();
+                
+                // Add a bright white center to each particle for emphasis
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.fill();
+              });
+            }
+          } else if (visibleParticles.length > 1) {
+            // If we don't have enough points for a proper curve, fall back to lines
+            this.ctx.beginPath();
+            const lineOpacity = opacity * 0.4;
+            this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
+            this.ctx.lineWidth = 0.8;
+            
+            for (let i = 0; i < visibleParticles.length - 1; i++) {
+              const pos1 = visibleParticles[i].body.position;
+              const pos2 = visibleParticles[i + 1].body.position;
+              this.ctx.moveTo(pos1.x, pos1.y);
+              this.ctx.lineTo(pos2.x, pos2.y);
+            }
+            
+            this.ctx.stroke();
+            
+            // Also draw the particle dots in neon pink for consistency if showParticles is true
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
+                
+                // Draw a filled circle with neon pink glow effect
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
+                this.ctx.fill();
+                
+                // Add a bright white center
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.fill();
+              });
+            }
+          }
+        }
+      } 
+      // We no longer draw non-particle bubbles at all
 
       if (bubble.age >= bubble.maxAge) {
         if (bubble.particles.length > 0) {
