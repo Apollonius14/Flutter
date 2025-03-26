@@ -533,6 +533,9 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
+      // Check if bubble is close to activation line
+      const isInActiveWindow = Math.abs(bubble.x - this.activationLineX) < 5;
+
       // Enable collisions for all particles with walls
       if (bubble.particles.length > 0) {
         bubble.particles.forEach(particle => {
@@ -560,137 +563,6 @@ export class CanvasController {
       }
       return true;
     });
-    
-    // NEW APPROACH: Direction-based particle grouping and rendering
-    if (this.funnelEnabled) {
-      // Get all particles on screen from all bubbles
-      const allParticles: Particle[] = [];
-      this.bubbles.forEach(bubble => {
-        bubble.particles.forEach(particle => {
-          const pos = particle.body.position;
-          // Only include particles that are on screen
-          if (pos.x >= 0 && pos.x <= width && pos.y >= 0 && pos.y <= height) {
-            allParticles.push(particle);
-          }
-        });
-      });
-      
-      // Skip if no particles
-      if (allParticles.length > 0) {
-        // Group particles by direction: positive X/up vs others
-        const positiveXorUpParticles: Particle[] = [];
-        const otherParticles: Particle[] = [];
-        
-        allParticles.forEach(particle => {
-          const velocity = particle.body.velocity;
-          
-          // Check if moving mostly in positive X or upward direction
-          const movingRight = velocity.x > 0;
-          const movingUp = velocity.y < 0;
-          
-          if (movingRight || movingUp) {
-            positiveXorUpParticles.push(particle);
-          } else {
-            otherParticles.push(particle);
-          }
-        });
-        
-        // Calculate thickness factors based on proportion of particles in each group
-        const totalParticles = allParticles.length;
-        const positiveXorUpThicknessFactor = positiveXorUpParticles.length / totalParticles;
-        const otherThicknessFactor = otherParticles.length / totalParticles;
-        
-        // Calculate base power factor
-        const basePowerFactor = this.params.power / 3;
-        
-        // Draw Bezier curves for each group
-        const groups = [
-          { particles: positiveXorUpParticles, thicknessFactor: positiveXorUpThicknessFactor, color: [0, 220, 255] },
-          { particles: otherParticles, thicknessFactor: otherThicknessFactor, color: [20, 180, 255] }
-        ];
-        
-        groups.forEach(group => {
-          const { particles, thicknessFactor, color } = group;
-          
-          if (particles.length > 2) {
-            // Sort particles by Y position to create smooth curves
-            const sortedParticles = [...particles].sort((a, b) => {
-              return a.body.position.y - b.body.position.y;
-            });
-            
-            // Draw a glow effect for the curve
-            // Add motion blur effect by drawing multiple semi-transparent layers
-            for (let blur = 3; blur >= 0; blur--) {
-              // Calculate opacity based on global progress
-              // This ensures all curves fade at the same rate
-              const opacity = globalOpacityFactor * 0.7;
-              const currentOpacity = (opacity * 0.6) * (1 - blur * 0.2); // Fade out each blur layer
-              
-              this.ctx.beginPath();
-              
-              // Only use shadow effect for higher power levels to save rendering time
-              if (this.params.power > 3) {
-                this.ctx.shadowColor = `rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.3)`;
-                this.ctx.shadowBlur = 5 * basePowerFactor;
-              } else {
-                this.ctx.shadowColor = 'transparent';
-                this.ctx.shadowBlur = 0;
-              }
-              this.ctx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${currentOpacity})`;
-              
-              // Line width is proportional to:
-              // 1. Base power factor (from user input)
-              // 2. Thickness factor (particles in group / total particles)
-              // 3. Global opacity factor (to ensure consistent fading)
-              this.ctx.lineWidth = 2.0 * basePowerFactor * thicknessFactor * (0.5 + 0.5 * globalOpacityFactor);
-              
-              // Start at the first particle
-              const startPos = sortedParticles[0].body.position;
-              this.ctx.moveTo(startPos.x, startPos.y);
-              
-              // Use cubic bezier curves to create a smooth path through all particles
-              for (let i = 0; i < sortedParticles.length - 1; i++) {
-                const p0 = sortedParticles[Math.max(0, i-1)].body.position;
-                const p1 = sortedParticles[i].body.position;
-                const p2 = sortedParticles[i+1].body.position;
-                const p3 = sortedParticles[Math.min(sortedParticles.length-1, i+2)].body.position;
-                
-                // Calculate control points for the current segment (p1 to p2)
-                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
-                
-                // First control point - influenced by p0 and p2
-                const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-                const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-                
-                // Second control point - influenced by p1 and p3
-                const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-                const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-                
-                // Draw curve segment
-                this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-              }
-              
-              this.ctx.stroke();
-              
-              // Reset shadow for better performance
-              this.ctx.shadowColor = 'transparent';
-              this.ctx.shadowBlur = 0;
-            }
-          }
-        });
-        
-        // Optionally render individual particles if enabled
-        if (this.showParticles) {
-          allParticles.forEach(particle => {
-            const pos = particle.body.position;
-            this.ctx.beginPath();
-            this.ctx.arc(pos.x, pos.y, 1.2, 0, Math.PI * 2);
-            this.ctx.fillStyle = `rgba(0, 200, 255, ${globalOpacityFactor * 0.7})`;
-            this.ctx.fill();
-          });
-        }
-      }
-    }
     
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
