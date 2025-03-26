@@ -621,21 +621,37 @@ export class CanvasController {
             const drawPowerFactor = this.params.power / 3;
             
             // Draw a glow effect for the curve first
-            // Add motion blur effect by drawing multiple semi-transparent layers
-            // Increased blur layers from 5 to 7 (50% more motion blur)
-            for (let blur = 6; blur >= 0; blur--) {
+            // Add more motion blur effect by drawing multiple semi-transparent layers
+            // Increased blur layers from 7 to 9 for even more blurred trail effect
+            for (let blur = 8; blur >= 0; blur--) {
               this.ctx.beginPath();
-              const currentOpacity = (opacity * 0.6) * (1 - blur * 0.15); // More gradual fade out for blur layers
+              const currentOpacity = (opacity * 0.7) * (1 - blur * 0.12); // Even more gradual fade out for blur layers
               
-              // Only use shadow effect for higher power levels to save rendering time
-              if (this.params.power > 3) {
-                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
-                this.ctx.shadowBlur = 7.5 * drawPowerFactor; // Increased blur by 50% (from 5 to 7.5)
+              // Determine color based on cycle age first
+              let baseColor;
+              if (this.currentCycleNumber - bubble.cycleNumber === 0) {
+                // Current cycle: bright cyan
+                baseColor = [20, 230, 255];
+              } else if (this.currentCycleNumber - bubble.cycleNumber === 1) {
+                // One cycle old: shift toward blue-purple
+                baseColor = [100, 180, 255];
               } else {
-                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.15)'; // Slight blur even at lower power
-                this.ctx.shadowBlur = 2 * drawPowerFactor; // Light blur effect
+                // Two or more cycles old: shift toward purple
+                baseColor = [150, 140, 255];
               }
-              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
+
+              // Enhanced blur effects for all power levels
+              if (this.params.power > 3) {
+                // Brighter glow effect for high power
+                this.ctx.shadowColor = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, 0.4)`;
+                this.ctx.shadowBlur = 9 * drawPowerFactor; // Further increased blur
+              } else {
+                // More visible blur for lower power levels
+                this.ctx.shadowColor = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, 0.25)`; 
+                this.ctx.shadowBlur = 4 * drawPowerFactor; // Doubled light blur effect
+              }
+              // Use the baseColor for stroke with the current opacity
+              this.ctx.strokeStyle = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, ${currentOpacity})`;
               
               // Calculate line thickness based on wave position
               let thicknessFactor = 1.0;
@@ -657,13 +673,17 @@ export class CanvasController {
               // Scale line width using the global cycle progress and cycle age
               // This makes lines thinner as they age, instead of less opaque
               // Make lines 50% thicker at all power levels as requested
-              // Halved decay rate for better wave superposition
+              // Further reduced decay rate to make lines last for two full cycles
               const cycleAgeFactor = (this.currentCycleNumber - bubble.cycleNumber === 0) ? 
-                1.0 - (progress * 0.5) : // Current cycle: decrease slower (halved decay rate)
-                0.85 - ((this.currentCycleNumber - bubble.cycleNumber) * 0.15); // Older cycles start thicker with slower decay
+                1.0 - (progress * 0.25) : // Current cycle: even slower decay (quarter of original rate)
+                (this.currentCycleNumber - bubble.cycleNumber === 1) ?
+                // One cycle old: start at 0.85 and decay very slowly
+                0.85 - (progress * 0.25) :
+                // Two cycles old: maintain constant thickness of 0.6
+                0.6;
               
-              // Base width increased by 10% more (from 2.7 to 2.97)
-              this.ctx.lineWidth = 2.97 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
+              // Base width increased by another 50% (from 2.97 to 4.45)
+              this.ctx.lineWidth = 4.45 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -793,10 +813,10 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
-      // Remove bubbles and particles that are more than 2 cycles old
+      // Keep bubbles and particles for 3 full cycles to ensure lines last for 2 full cycles
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within 2 cycles of current cycle
-        return this.currentCycleNumber - bubble.cycleNumber <= 2;
+        // Keep bubble if its cycle number is within 3 cycles of current cycle
+        return this.currentCycleNumber - bubble.cycleNumber <= 3;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
