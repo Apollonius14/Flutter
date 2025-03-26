@@ -17,7 +17,8 @@ const translations = {
     wallCurvature: "Wall Angle (0-90°)",
     gapSize: "Gap Size",
     loading: "Loading Physics Engine...",
-    rtlMode: "Right-to-Left Mode"
+    rtlMode: "Right-to-Left Mode",
+    showParticles: "Show Particles"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -28,7 +29,8 @@ const translations = {
     wallCurvature: "زاوية الحائط (٠-٩٠°)",
     gapSize: "حجم الفجوة",
     loading: "جاري تحميل محرك الفيزياء...",
-    rtlMode: "وضع اليمين إلى اليسار"
+    rtlMode: "وضع اليمين إلى اليسار",
+    showParticles: "إظهار الجسيمات"
   }
 };
 
@@ -39,6 +41,7 @@ export default function Home() {
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
   const [isLoading, setIsLoading] = useState(true);
   const [isRTL, setIsRTL] = useState(false);
+  const [showParticles, setShowParticles] = useState(true);
   const t = translations[language];
   const [params, setParams] = useState({
     power: 3, // default value of 3 (middle of 1-7 range)
@@ -114,10 +117,16 @@ export default function Home() {
     if (!controller) return;
     controller.setRTL(isRTL);
   }, [isRTL, controller]);
+  
+  useEffect(() => {
+    if (!controller) return;
+    controller.setShowParticles(showParticles);
+  }, [showParticles, controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
+  const toggleShowParticles = () => setShowParticles(prev => !prev);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -211,6 +220,17 @@ export default function Home() {
                 <Switch
                   checked={isRTL}
                   onCheckedChange={toggleRTL}
+                  className="data-[state=checked]:bg-blue-500"
+                />
+              </div>
+              
+              <div className="flex items-center justify-between pt-2">
+                <Label className={`text-gray-200 ${language === 'ar' ? 'arabic text-right' : ''}`}>
+                  {t.showParticles}
+                </Label>
+                <Switch
+                  checked={showParticles}
+                  onCheckedChange={toggleShowParticles}
                   className="data-[state=checked]:bg-blue-500"
                 />
               </div>

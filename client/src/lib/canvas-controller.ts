@@ -616,24 +616,26 @@ export class CanvasController {
             // Create a local opacity value for particles
             const particleOpacity = opacity * 0.6;
             
-            // Draw particles as bright neon pink circles to clearly see their positions
-            visibleParticles.forEach(particle => {
-              const pos = particle.body.position;
-              // Calculate particle size with growth factor
-              const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
-              
-              // Draw a filled circle with neon pink glow effect
-              this.ctx.beginPath();
-              this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-              this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
-              this.ctx.fill();
-              
-              // Add a bright white center to each particle for emphasis
-              this.ctx.beginPath();
-              this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-              this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-              this.ctx.fill();
-            });
+            // Draw particles as bright neon pink circles only if showParticles is true
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                // Calculate particle size with growth factor
+                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
+                
+                // Draw a filled circle with neon pink glow effect
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
+                this.ctx.fill();
+                
+                // Add a bright white center to each particle for emphasis
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.fill();
+              });
+            }
           } else if (visibleParticles.length > 1) {
             // If we don't have enough points for a proper curve, fall back to lines
             this.ctx.beginPath();
@@ -650,23 +652,25 @@ export class CanvasController {
             
             this.ctx.stroke();
             
-            // Also draw the particle dots in neon pink for consistency
-            visibleParticles.forEach(particle => {
-              const pos = particle.body.position;
-              const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
-              
-              // Draw a filled circle with neon pink glow effect
-              this.ctx.beginPath();
-              this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-              this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
-              this.ctx.fill();
-              
-              // Add a bright white center
-              this.ctx.beginPath();
-              this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-              this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-              this.ctx.fill();
-            });
+            // Also draw the particle dots in neon pink for consistency if showParticles is true
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
+                
+                // Draw a filled circle with neon pink glow effect
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
+                this.ctx.fill();
+                
+                // Add a bright white center
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.fill();
+              });
+            }
           }
         }
       } 
