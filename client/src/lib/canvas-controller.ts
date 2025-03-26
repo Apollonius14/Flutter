@@ -9,8 +9,7 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
-  groupId: number; // Add group ID to identify particles in the same ring
-  isOriginal: boolean; // Flag to identify original particles from the activation line
+  groupId: number; // Group ID to identify particles in the same ring
 }
 
 interface Bubble {
@@ -22,8 +21,7 @@ interface Bubble {
   maxAge: number;
   intensity: number;
   particles: Particle[];
-  groupId: number; // Add group ID to identify this bubble's particle group
-  isOriginalSet: boolean; // Flag to identify original particle sets from the activation line
+  groupId: number; // Group ID to identify this bubble's particle group
 }
 
 export class CanvasController {
