@@ -629,15 +629,21 @@ export class CanvasController {
               
               // Determine color based on cycle age first
               let baseColor;
-              if (this.currentCycleNumber - bubble.cycleNumber === 0) {
+              const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+              console.log(`Rendering bubble from cycle ${bubble.cycleNumber}, current cycle: ${this.currentCycleNumber}, diff: ${cycleDiff}`);
+              
+              if (cycleDiff === 0) {
                 // Current cycle: bright cyan
                 baseColor = [20, 230, 255];
-              } else if (this.currentCycleNumber - bubble.cycleNumber === 1) {
+                console.log("Using current cycle color (cyan)");
+              } else if (cycleDiff === 1) {
                 // One cycle old: shift toward blue-purple
                 baseColor = [100, 180, 255];
+                console.log("Using one cycle old color (blue-purple)");
               } else {
                 // Two or more cycles old: shift toward purple
                 baseColor = [150, 140, 255];
+                console.log("Using two+ cycles old color (purple)");
               }
 
               // Enhanced blur effects for all power levels
@@ -683,7 +689,9 @@ export class CanvasController {
                 0.6;
               
               // Base width increased by another 50% (from 2.97 to 4.45)
-              this.ctx.lineWidth = 4.45 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
+              const lineWidth = 4.45 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
+              console.log(`Line width: ${lineWidth}, age factor: ${cycleAgeFactor}, thickness factor: ${thicknessFactor}`);
+              this.ctx.lineWidth = lineWidth;
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -813,10 +821,17 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
+      // Log all the bubbles and their cycle numbers
+      console.log(`Bubbles before filtering: ${this.bubbles.map(b => b.cycleNumber).join(', ')}`);
+      
       // Keep bubbles and particles for 3 full cycles to ensure lines last for 2 full cycles
       this.bubbles = this.bubbles.filter(bubble => {
         // Keep bubble if its cycle number is within 3 cycles of current cycle
-        return this.currentCycleNumber - bubble.cycleNumber <= 3;
+        const keep = this.currentCycleNumber - bubble.cycleNumber <= 3;
+        if (!keep) {
+          console.log(`Removing bubble from cycle ${bubble.cycleNumber}`);
+        }
+        return keep;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
