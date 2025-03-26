@@ -438,6 +438,9 @@ export class CanvasController {
   }
 
   private drawFrame(progress: number) {
+    // Calculate global opacity factor based on cycle progress
+    // This will be used for all Bezier curves to ensure they all fade together
+    const globalOpacityFactor = 1 - progress;
     if (this.funnelEnabled) {
       // Increased number of substeps for higher accuracy physics (especially for collisions)
       const numSubSteps = 6; // Increased from 3 to 6 for more accurate simulation
@@ -546,8 +549,9 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        // Calculate opacity - make original bubbles fade twice as slowly
-        let opacity = (1 - (bubble.age / bubble.maxAge)) * 0.7;
+        // Use global opacity factor based on cycle progress instead of bubble age
+        // This ensures all Bezier curves fade together over the cycle
+        let opacity = globalOpacityFactor * 0.7;
         
         // Only draw Bezier curves for original particle sets from the activation line
         // This prevents drawing new Bezier curves after collisions
@@ -622,7 +626,9 @@ export class CanvasController {
               else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.05;  // Outer: 5% thicker
               else if (farthestPositions.includes(waveIndex)) thicknessFactor = 1.0; // Farthest: default thickness
               
-              this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor;
+              // Scale line width using the global opacity factor as well to maintain consistency
+              // This ensures the line gets thinner as the cycle progresses
+              this.ctx.lineWidth = 1.8 * drawPowerFactor * thicknessFactor * (0.5 + 0.5 * globalOpacityFactor);
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
