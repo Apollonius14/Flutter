@@ -45,6 +45,7 @@ export class CanvasController {
   private currentGroupId: number = 0; // Counter for generating unique group IDs
   private positions: number[] = []; // Store wave positions
   private isRTL: boolean = false; // RTL mode toggle (right-to-left for Arabic)
+  private showParticles: boolean = true; // Toggle to show/hide individual particles
 
   constructor(canvas: HTMLCanvasElement) {
     console.time('Canvas initialization');
@@ -373,6 +374,11 @@ export class CanvasController {
   setRTL(enabled: boolean) {
     this.isRTL = enabled;
     // No need to modify physics - we'll handle this in the render phase
+    this.drawFrame(0); // Force redraw to see changes immediately
+  }
+  
+  setShowParticles(show: boolean) {
+    this.showParticles = show;
     this.drawFrame(0); // Force redraw to see changes immediately
   }
 
