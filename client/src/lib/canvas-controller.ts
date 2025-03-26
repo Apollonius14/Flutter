@@ -90,10 +90,10 @@ export class CanvasController {
   
   // Extract collision detection setup to a separate method
   private setupCollisionDetection() {
-    // Simple collision detection without spring effects
+    // Simple collision detection without spring effects or intensity resets
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      // We keep the collision listener for potential future audio effects
-      // But removed all spring-related code
+      // Intentionally empty - no longer resetting particle intensity after collisions
+      // This ensures particles fade out naturally based on their original age/maxAge
     });
   }
   
@@ -331,15 +331,15 @@ export class CanvasController {
         });
         }
 
-      // We want particles to decay within 3 cycles
+      // We want particles to decay within 6 cycles (doubled from 3)
       // One cycle is 6667 * 0.44 = 2933.48 ms
-      // For 3 cycles: 3 * 2933.48 = 8800.44 ms
-      // Using a base value that ensures particles don't live longer than 3 cycles
+      // For 6 cycles: 6 * 2933.48 = 17600.88 ms
+      // Using a base value that ensures particles live longer but still eventually decay
       const cycleTime = 6667 * 0.44;
-      const maxCycles = 3;
+      const maxCycles = 6; // Doubled from 3 to 6
       const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
       
-      // Scale maxAge based on power, but ensure it's never more than 3 cycles
+      // Scale maxAge based on power, with twice the duration
       // Use a diminishing returns formula for power scaling to prevent excessive lifetimes
       const powerScaleFactor = 0.5 + (0.5 * Math.sqrt(particlePowerFactor / 3));
       const maxAge = baseMaxAge * powerScaleFactor;

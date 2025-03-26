@@ -239,24 +239,6 @@ export default function Home() {
               <div className="flex justify-center items-center gap-4">
                 <Button
                   size="sm"
-                  variant={!isPlaying || isRTL ? "outline" : "default"}
-                  onClick={() => {
-                    if (isRTL) {
-                      setIsRTL(false);
-                    }
-                    if (!isPlaying) {
-                      setIsPlaying(true);
-                    } else if (!isRTL) {
-                      setIsPlaying(false);
-                    }
-                  }}
-                  className={`border-gray-600 ${!isPlaying || isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                
-                <Button
-                  size="sm"
                   variant={!isPlaying || !isRTL ? "outline" : "default"}
                   onClick={() => {
                     if (!isRTL) {
@@ -271,6 +253,24 @@ export default function Home() {
                   className={`border-gray-600 ${!isPlaying || !isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
                 >
                   <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant={!isPlaying || isRTL ? "outline" : "default"}
+                  onClick={() => {
+                    if (isRTL) {
+                      setIsRTL(false);
+                    }
+                    if (!isPlaying) {
+                      setIsPlaying(true);
+                    } else if (!isRTL) {
+                      setIsPlaying(false);
+                    }
+                  }}
+                  className={`border-gray-600 ${!isPlaying || isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
                 
                 <Button
