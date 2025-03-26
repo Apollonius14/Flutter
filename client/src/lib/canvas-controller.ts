@@ -93,25 +93,11 @@ export class CanvasController {
   
   // Extract collision detection setup to a separate method
   private setupCollisionDetection() {
-    // Add collision handling to keep track of original vs collision-created particles
+    // With our new cycle-based approach, we don't need to track collision state changes
+    // So this method now just sets up the collision detection without modifying particle properties
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      // When collisions happen, mark the particles as non-original
-      // This ensures we can tell the difference between original particles and those
-      // that result from collisions
-      event.pairs.forEach(pair => {
-        const bodyA = pair.bodyA;
-        const bodyB = pair.bodyB;
-        
-        // Find the corresponding particles
-        this.bubbles.forEach(bubble => {
-          bubble.particles.forEach(particle => {
-            if (particle.body === bodyA || particle.body === bodyB) {
-              // Mark as non-original after collision
-              particle.isOriginal = false;
-            }
-          });
-        });
-      });
+      // We can use this event for sound effects or other collision feedback if needed
+      // But we don't need to modify particle properties here anymore
     });
   }
   
@@ -341,13 +327,13 @@ export class CanvasController {
         });
 
         Matter.Composite.add(this.engine.world, body);
-        // Create a properly typed particle
+        // Create a properly typed particle with cycle number
         const particle: Particle = {
           body,
           intensity: intensity,
           age: 0,
           groupId: groupId,  // Assign the same group ID to all particles in this ring
-          isOriginal: true   // Mark as an original particle from the activation line
+          cycleNumber: this.currentCycleNumber  // Assign current cycle number
         };
         particles.push(particle);
         }
@@ -375,7 +361,7 @@ export class CanvasController {
         intensity: intensity,
         particles,
         groupId: groupId,  // Assign the same group ID to the bubble
-        isOriginalSet: true  // Mark this as an original set created at the activation line
+        cycleNumber: this.currentCycleNumber  // Assign current cycle number
       });
     });
 
@@ -550,23 +536,26 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        // Use global opacity factor based on cycle progress instead of bubble age
-        // This ensures all Bezier curves fade together over the cycle
-        let opacity = globalOpacityFactor * 0.7;
+        // Calculate opacity based on both cycle progress and age difference between current and bubble cycle
+        // This ensures bubbles from older cycles fade out nicely
         
-        // Only draw Bezier curves for original particle sets from the activation line
-        // This prevents drawing new Bezier curves after collisions
-        if (!bubble.isOriginalSet) {
-          return true; // Skip rendering this bubble, but keep it for physics
+        // Age factor: newer cycles are more visible than older ones
+        // For current cycle (cycleNumber === this.currentCycleNumber): factor = 1.0
+        // For previous cycle (cycleNumber === this.currentCycleNumber - 1): factor = 0.5
+        // For older cycles: factor = 0
+        const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+        
+        if (cycleDiff > 2) {
+          // Particles more than 2 cycles old should not be rendered
+          return true; // Skip rendering but keep for physics until properly cleaned up
         }
         
-        // Check if any particles in this bubble are still original
-        // If none are original anymore (all have collided), mark the bubble as non-original
-        const anyOriginalParticles = bubble.particles.some(p => p.isOriginal);
-        if (!anyOriginalParticles) {
-          bubble.isOriginalSet = false;
-          return true; // Skip rendering this non-original bubble
-        }
+        // Calculate age-based opacity factor
+        // Start with 1.0 for current cycle, 0.5 for previous cycle
+        let cycleAgeFactor = cycleDiff === 0 ? 1.0 : cycleDiff === 1 ? 0.5 : 0.25;
+        
+        // Combine with global opacity factor from current cycle progress
+        let opacity = globalOpacityFactor * cycleAgeFactor * 0.7;
         
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
@@ -753,13 +742,40 @@ export class CanvasController {
     // Check if we've started a new cycle
     if (currentCycleTime > this.lastCycleTime) {
       this.lastCycleTime = currentCycleTime;
+      // Increment the cycle number
+      this.currentCycleNumber++;
+      console.log(`Starting cycle ${this.currentCycleNumber}`);
+      
+      // Remove bubbles and particles that are more than 2 cycles old
+      this.bubbles = this.bubbles.filter(bubble => {
+        // Keep bubble if its cycle number is within 2 cycles of current cycle
+        return this.currentCycleNumber - bubble.cycleNumber <= 2;
+      });
+      
+      // Remove particles from physics engine that are no longer in any bubble
+      const activeBodies = new Set(this.bubbles.flatMap(b => b.particles.map(p => p.body)));
+      Matter.Composite.allBodies(this.engine.world).forEach(body => {
+        // Skip walls and other static bodies
+        if (body.isStatic) return;
+        
+        // If the body is not in active bubbles, remove it from the world
+        if (!activeBodies.has(body)) {
+          Matter.Composite.remove(this.engine.world, body);
+        }
+      });
+      
       // Call the cycle start callback if it exists
       if (this.onCycleStart) {
         this.onCycleStart();
       }
     }
     
+    // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
+    
+    // Update physics engine with fixed timestep for predictable behavior
+    Matter.Engine.update(this.engine, 16.67); // Use a consistent 60 FPS time step
+    
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
