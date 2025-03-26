@@ -44,6 +44,7 @@ export class CanvasController {
   private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
   private currentGroupId: number = 0; // Counter for generating unique group IDs
   private positions: number[] = []; // Store wave positions
+  private isRTL: boolean = false; // RTL mode toggle (right-to-left for Arabic)
 
   constructor(canvas: HTMLCanvasElement) {
     console.time('Canvas initialization');
@@ -368,6 +369,12 @@ export class CanvasController {
       this.setupFunnelWalls();
     }
   }
+  
+  setRTL(enabled: boolean) {
+    this.isRTL = enabled;
+    // No need to modify physics - we'll handle this in the render phase
+    this.drawFrame(0); // Force redraw to see changes immediately
+  }
 
   updateParams(params: AnimationParams) {
     this.params = params;
@@ -405,6 +412,15 @@ export class CanvasController {
     }
 
     const { width, height } = this.canvas;
+    
+    // Apply RTL transformation if enabled
+    this.ctx.save();
+    if (this.isRTL) {
+      // Flip the canvas horizontally for RTL mode
+      this.ctx.scale(-1, 1);
+      this.ctx.translate(-width, 0);
+    }
+    
     // Reduce motion blur effect to make particles stay visible longer
     this.ctx.fillStyle = 'rgba(26, 26, 26, 0.06)'; // Reduced from 0.12 to 0.06 (50% reduction)
     this.ctx.fillRect(0, 0, width, height);
@@ -660,6 +676,9 @@ export class CanvasController {
       }
       return true;
     });
+    
+    // Restore canvas state (important for RTL transformation)
+    this.ctx.restore();
   }
 
   private animate() {
