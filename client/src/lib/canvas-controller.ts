@@ -162,6 +162,111 @@ export class CanvasController {
   private shouldRenderParticle(cycleDiff: number): boolean {
     return cycleDiff <= CanvasController.PARTICLE_LIFETIME_CYCLES;
   }
+  
+  /**
+   * Helper method to calculate the appropriate stroke width for a particle based on its age
+   * and the wave position. Centralizes the logic for determining bezier curve thickness.
+   */
+  private calculateStrokeWidth(
+    drawPowerFactor: number, 
+    thicknessFactor: number, 
+    cycleDiff: number, 
+    progress: number
+  ): number {
+    // Calculate the age factor for thickness
+    let cycleAgeFactor;
+    
+    if (cycleDiff === 0) {
+      // Current cycle: decrease from 1.0 to 0.0 over cycle
+      cycleAgeFactor = 1.0 - (0.5 * progress);
+    } else {
+      // More gradual thickness reduction for older cycles
+      // Start at 0.9 for previous cycle, reduce using our decay rate constant
+      cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * CanvasController.OPACITY_DECAY_RATE));
+    }
+    
+    // Use our constant for the base line width
+    return CanvasController.BASE_LINE_WIDTH * drawPowerFactor * thicknessFactor * cycleAgeFactor;
+  }
+  
+  /**
+   * Helper method to calculate the thickness factor based on the wave's position
+   * in the array of positions. This determines how thick each wave appears.
+   */
+  private calculateThicknessFactor(waveIndex: number): number {
+    // With 9 positions (0-8), identify the position groups
+    const centralPositions = [4, 5]; // The two positions closest to center
+    const innerPositions = [3, 6];   // The next two positions from center
+    const middlePositions = [2, 7];  // The middle positions
+    const outerPositions = [1, 8];   // The outer positions
+    const farthestPositions = [0, 9]; // The farthest positions
+    
+    // Assign thickness based on position group
+    if (centralPositions.includes(waveIndex)) return 1.8;      // Center: 80% thicker
+    if (innerPositions.includes(waveIndex)) return 1.6;        // Inner: 60% thicker
+    if (middlePositions.includes(waveIndex)) return 1.3;       // Middle: 30% thicker
+    if (outerPositions.includes(waveIndex)) return 1.05;       // Outer: 5% thicker
+    if (farthestPositions.includes(waveIndex)) return 1.0;     // Farthest: default thickness
+    
+    // Default fallback
+    return 1.0;
+  }
+  
+  /**
+   * Helper method to generate particle angles for a wave ring
+   * Creates a symmetric distribution focused on the forward direction
+   */
+  private generateParticleAngles(particleCount: number): number[] {
+    const particleAngles: number[] = [];
+    
+    // Generate deterministic non-uniform angles to concentrate particles at the wavefront (right side)
+    // First create a base array of uniformly distributed angles
+    const baseAngles: number[] = [];
+    
+    // With odd number of particles, ensure one is exactly at 0°
+    // Generate angles from -π to +π to ensure symmetry around 0
+    const halfCount = Math.floor(particleCount / 2);
+    
+    // Add the center particle at exactly 0° (right in the middle)
+    baseAngles.push(0);
+    
+    // Add symmetric pairs of particles on each side of 0°
+    for (let i = 1; i <= halfCount; i++) {
+      const angle = (i / halfCount) * Math.PI; // Goes from 0 to π
+      baseAngles.push(angle);    // Add positive angle (below centerline)
+      baseAngles.push(-angle);   // Add negative angle (above centerline)
+    }
+    
+    // Now redistribute these angles using a deterministic function to
+    // concentrate particles toward the right side (0 degrees)
+    for (let i = 0; i < baseAngles.length; i++) {
+      const angle = baseAngles[i];
+      
+      // Since we're already generating angles in the -π to +π range with
+      // perfect symmetry around 0, we only need to apply the compression
+      
+      // The compression should be symmetric around 0 and preserve the sign
+      // Using a quadratic function for smoother compression
+      const absAngle = Math.abs(angle);
+      // Use a more gentle, smooth compression based on quadratic curve
+      // This creates a more natural funnel shape than the sharp sin(θ/2)
+      const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
+      
+      // Apply a gentler 50% maximum compression for smoother distribution
+      // This creates more particles at intermediate angles for a funnel shape
+      // rather than the sharp V-shape from the previous 75% compression
+      const transformedAngle = angle * (1 - 0.5 * compressionFactor);
+      
+      // Convert from our -π to +π space back to 0 to 2π space that the rendering uses
+      const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
+      
+      particleAngles.push(normalizedAngle);
+    }
+    
+    // Sort is not strictly needed since our generation is already in order,
+    // but keep it for safety
+    return particleAngles.sort((a, b) => a - b);
+  }
 
   private setupFunnelWalls() {
     // Clean up existing walls first
@@ -226,40 +331,50 @@ export class CanvasController {
     Matter.Composite.add(this.engine.world, this.funnelWalls);
   }
 
-  private generateBubbles(x: number): Bubble[] {
-    const { power } = this.params;
-    const centerY = this.canvas.height / 2;
-    const height = this.canvas.height;
-    const width = this.canvas.width;
-    
-    const bubbles: Bubble[] = [];
-    const fixedRadius = CanvasController.FIXED_BUBBLE_RADIUS;
-
-    this.positions = []; // Clear previous positions
-    const compressionFactor = 0.585; // Reduced by 10% from 0.65
+  /**
+   * Helper method to calculate wave positions across the canvas height
+   * This creates the grid of starting positions for particle waves
+   */
+  private calculateWavePositions(canvasHeight: number): number[] {
+    const positions: number[] = [];
+    const compressionFactor = 0.585; // Controls vertical spacing
     
     // Calculate center and offsets for symmetric distribution
-    const center = height / 2;
+    const center = canvasHeight / 2;
     
-    // Increased from 6 to 9 positions (50% more) for more planar wave appearance
+    // Use 9 primary positions for a planar wave appearance
     const numPositions = 9; 
-    const baseSpacing = (height * compressionFactor) / (numPositions + 1);
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
     
     // Calculate offset to avoid placing ring directly on centerline
     const halfSpacing = baseSpacing / 2;
     
     // Add positions in order from top to bottom (all offset from center)
     // We're using 10 waves now with 4 above and 4 below the centerline (plus the offset)
-    this.positions.push(center - halfSpacing - baseSpacing * 4); // Upper outer 4
-    this.positions.push(center - halfSpacing - baseSpacing * 3); // Upper outer 3
-    this.positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer 2
-    this.positions.push(center - halfSpacing - baseSpacing);     // Upper inner
-    this.positions.push(center - halfSpacing);                   // Near-center upper
-    this.positions.push(center + halfSpacing);                   // Near-center lower
-    this.positions.push(center + halfSpacing + baseSpacing);     // Lower inner
-    this.positions.push(center + halfSpacing + baseSpacing * 2); // Lower outer 2
-    this.positions.push(center + halfSpacing + baseSpacing * 3); // Lower outer 3
-    this.positions.push(center + halfSpacing + baseSpacing * 4); // Lower outer 4
+    positions.push(center - halfSpacing - baseSpacing * 4); // Upper outer 4
+    positions.push(center - halfSpacing - baseSpacing * 3); // Upper outer 3
+    positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer 2
+    positions.push(center - halfSpacing - baseSpacing);     // Upper inner
+    positions.push(center - halfSpacing);                   // Near-center upper
+    positions.push(center + halfSpacing);                   // Near-center lower
+    positions.push(center + halfSpacing + baseSpacing);     // Lower inner
+    positions.push(center + halfSpacing + baseSpacing * 2); // Lower outer 2
+    positions.push(center + halfSpacing + baseSpacing * 3); // Lower outer 3
+    positions.push(center + halfSpacing + baseSpacing * 4); // Lower outer 4
+    
+    return positions;
+  }
+  
+  private generateBubbles(x: number): Bubble[] {
+    const { power } = this.params;
+    const height = this.canvas.height;
+    const width = this.canvas.width;
+    
+    const bubbles: Bubble[] = [];
+    const fixedRadius = CanvasController.FIXED_BUBBLE_RADIUS;
+
+    // Calculate wave positions using our helper method
+    this.positions = this.calculateWavePositions(height);
 
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
@@ -280,60 +395,8 @@ export class CanvasController {
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
       
-      // Create an array to store the angles we'll use for particle placement
-      const particleAngles: number[] = [];
-      
-      // Use exactly the number of particles specified (no probabilistic sampling)
-      // This ensures we always have the same number of particles in each ring
-      const exactParticleCount = numParticlesInRing;
-      
-      // Generate deterministic non-uniform angles to concentrate particles at the wavefront (right side)
-      // First create a base array of uniformly distributed angles
-      const baseAngles: number[] = [];
-      
-      // With odd number of particles, ensure one is exactly at 0°
-      // Generate angles from -π to +π to ensure symmetry around 0
-      const halfCount = Math.floor(exactParticleCount / 2);
-      
-      // Add the center particle at exactly 0° (right in the middle)
-      baseAngles.push(0);
-      
-      // Add symmetric pairs of particles on each side of 0°
-      for (let i = 1; i <= halfCount; i++) {
-        const angle = (i / halfCount) * Math.PI; // Goes from 0 to π
-        baseAngles.push(angle);    // Add positive angle (below centerline)
-        baseAngles.push(-angle);   // Add negative angle (above centerline)
-      }
-      
-      // Now redistribute these angles using a deterministic function to
-      // concentrate particles toward the right side (0 degrees)
-      for (let i = 0; i < baseAngles.length; i++) {
-        const angle = baseAngles[i];
-        
-        // Since we're already generating angles in the -π to +π range with
-        // perfect symmetry around 0, we only need to apply the compression
-        
-        // The compression should be symmetric around 0 and preserve the sign
-        // Using a quadratic function for smoother compression
-        const absAngle = Math.abs(angle);
-        // Use a more gentle, smooth compression based on quadratic curve
-        // This creates a more natural funnel shape than the sharp sin(θ/2)
-        const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-        
-        // Apply a gentler 50% maximum compression for smoother distribution
-        // This creates more particles at intermediate angles for a funnel shape
-        // rather than the sharp V-shape from the previous 75% compression
-        const transformedAngle = angle * (1 - 0.5 * compressionFactor);
-        
-        // Convert from our -π to +π space back to 0 to 2π space that the rendering uses
-        const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
-        
-        particleAngles.push(normalizedAngle);
-      }
-      
-      // Sort is not strictly needed since our generation is already in order,
-      // but keep it for safety
-      particleAngles.sort((a, b) => a - b);
+      // Generate the particle angles using our helper method
+      const particleAngles = this.generateParticleAngles(numParticlesInRing);
       
       // Create particles at the calculated angles
       for (const angle of particleAngles) {
@@ -664,39 +727,13 @@ export class CanvasController {
               }
               this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
               
-              // Calculate line thickness based on wave position
-              let thicknessFactor = 1.0;
+              // Calculate line thickness based on wave position using our helper method
               const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
-              // With 9 positions (0-8), update the central, inner, and outer positions
-              const centralPositions = [4, 5]; // The two positions closest to center
-              const innerPositions = [3, 6];   // The next two positions from center
-              const middlePositions = [2, 7];  // The middle positions
-              const outerPositions = [1, 8];   // The outer positions
-              const farthestPositions = [0, 9]; // The farthest positions
+              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
               
-              // Assign thickness based on position group
-              if (centralPositions.includes(waveIndex)) thicknessFactor = 1.8;      // Center: 20% thicker
-              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.6;  // Inner: 15% thicker
-              else if (middlePositions.includes(waveIndex)) thicknessFactor = 1.3;  // Middle: 10% thicker
-              else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.05;  // Outer: 5% thicker
-              else if (farthestPositions.includes(waveIndex)) thicknessFactor = 1.0; // Farthest: default thickness
-              
-              // Scale line width using the global cycle progress and cycle age
-              // This makes lines thinner as they age, instead of less opaque
-              // Make lines 50% thicker at all power levels as requested
-              // More gradual degradation of thickness over multiple cycles
+              // Calculate the stroke width using our helper method
               const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              
-              // Use our helper method but with a slight modification for thickness
-              // Start at 0.9 for previous cycles instead of 1.0 to create a visual distinction
-              let cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
-              if (cycleDiff > 0) {
-                // Small adjustment to make older cycles slightly thinner than current cycle
-                cycleAgeFactor = Math.max(0.1, 0.9 * cycleAgeFactor);
-              }
-              
-              // Use our constant for the base line width
-              this.ctx.lineWidth = CanvasController.BASE_LINE_WIDTH * drawPowerFactor * thicknessFactor * cycleAgeFactor;
+              this.ctx.lineWidth = this.calculateStrokeWidth(drawPowerFactor, thicknessFactor, cycleDiff, progress);
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
