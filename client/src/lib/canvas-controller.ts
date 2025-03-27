@@ -75,11 +75,11 @@ export class CanvasController {
 
     this.params = {
       power: 12, // Doubled again from 6
-      frequency: 0.15  // Default frequency from home.tsx
+      frequency: 0.3  // Default frequency from home.tsx
     };
     
     // Set the activation line at 20% of canvas width
-    this.activationLineX = canvas.width * 0.2;
+    this.activationLineX = canvas.width * 0.3;
     
     // Calculate initial spawn interval based on frequency
     this.updateSpawnInterval();
@@ -112,7 +112,7 @@ export class CanvasController {
     // Lower frequency value = less frequent spawning = higher interval
     // Base interval now increased by 1.5x, then 1.2x, then 1.5x, and now by another 1.2x
     const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2); // Increased frequency by an additional 20%
-    this.spawnInterval = baseInterval * (1 - this.params.frequency/2);
+    this.spawnInterval = baseInterval;
   }
 
   private setupFunnelWalls() {
@@ -138,7 +138,6 @@ export class CanvasController {
       friction: 0.0,    // No friction to prevent energy loss during sliding contacts
       frictionStatic: 0.0, // No static friction 
       frictionAir: 0,   // No air friction
-      density: 1,       // Standard density
       // Using Matter.js default slop value
       collisionFilter: {
         category: 0x0002,
@@ -184,19 +183,16 @@ export class CanvasController {
     const centerY = this.canvas.height / 2;
     const height = this.canvas.height;
     const width = this.canvas.width;
-
-    // Generate 7 waves (odd number for symmetry)
-    const numWaves = 7;
     
     const bubbles: Bubble[] = [];
     const fixedRadius = 7.2;
 
-    // Generate symmetrically distributed positions with even number of rings
     this.positions = []; // Clear previous positions
     const compressionFactor = 0.585; // Reduced by 10% from 0.65
     
     // Calculate center and offsets for symmetric distribution
     const center = height / 2;
+    
     // Increased from 6 to 9 positions (50% more) for more planar wave appearance
     const numPositions = 9; 
     const baseSpacing = (height * compressionFactor) / (numPositions + 1);
@@ -205,7 +201,7 @@ export class CanvasController {
     const halfSpacing = baseSpacing / 2;
     
     // Add positions in order from top to bottom (all offset from center)
-    // We're using 9 waves now with 4 above and 4 below the centerline (plus the offset)
+    // We're using 10 waves now with 4 above and 4 below the centerline (plus the offset)
     this.positions.push(center - halfSpacing - baseSpacing * 4); // Upper outer 4
     this.positions.push(center - halfSpacing - baseSpacing * 3); // Upper outer 3
     this.positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer 2
@@ -221,12 +217,10 @@ export class CanvasController {
     // This ensures particles only appear at the activation line
     x = this.activationLineX;
     
-    // All particles are active since we're only generating at the activation line
-    const isActive = true;
     
     this.positions.forEach(y => {
       // Always create active blue particles
-      const intensity = 1.0;
+      const intensity = 2.0;
 
       // Generate a unique group ID for this ring of particles
       const groupId = this.currentGroupId++;
@@ -305,7 +299,6 @@ export class CanvasController {
           restitution: 1.0,  // Perfect elasticity (no energy loss)
           mass: 0.2,         // Increased mass to make particles less likely to squeeze through
           frictionAir: 0,    // No air resistance
-          density: 0.8,      // Slightly reduced density for more dynamic bounces
           collisionFilter: {
             category: 0x0001,
             mask: 0x0002,
@@ -313,17 +306,9 @@ export class CanvasController {
           }
         });
 
-        // Reduce base speed by an additional 30% as requested (total 51% reduction from original)
-        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7 * 0.7 * 0.7; // Additional 30% reduction
-        
-        // Calculate how much the particle is aligned with the horizontal axis
-        // cos(angle) is 1 or -1 at 0° and 180° (horizontal alignment)
-        // and 0 at 90° and 270° (vertical alignment)
+        const baseSpeed = 2; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
         
-        // Boost speed for horizontally-aligned particles but by less
-        // 1 + 0.3 * horizontalAlignment gives boost from 1.0x to 1.3x based on alignment
-        // Reduced from 0.5 to 0.3 to slow down the particles a bit more
         const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
         
         // Set velocity - still using the original angle, but with adjusted speed
@@ -436,7 +421,7 @@ export class CanvasController {
     const height = this.canvas.height;
     // Calculate global opacity factor based on cycle progress
     // This will be used for all Bezier curves to ensure they all fade together
-    const globalOpacityFactor = 1 - progress;
+    const globalOpacityFactor = (1 - (0.05 * progress));
     if (this.funnelEnabled) {
       // Increased number of substeps for higher accuracy physics (especially for collisions)
       const numSubSteps = 6; // Increased from 3 to 6 for more accurate simulation
@@ -534,8 +519,6 @@ export class CanvasController {
     this.bubbles = this.bubbles.filter(bubble => {
       bubble.age++;
 
-      // Check if bubble is close to activation line
-      const isInActiveWindow = Math.abs(bubble.x - this.activationLineX) < 5;
 
       // Optimize physics by only processing particles within or near the canvas
       if (bubble.particles.length > 0) {
@@ -598,7 +581,7 @@ export class CanvasController {
         
         // Combine with global opacity factor from current cycle progress
         // Reduce the fade rate by 50% by multiplying by 0.35 instead of 0.7
-        let opacity = globalOpacityFactor * cycleAgeFactor * 0.35;
+        let opacity = globalOpacityFactor * cycleAgeFactor * 0.7;
         
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
@@ -629,14 +612,14 @@ export class CanvasController {
             // Draw a glow effect for the curve first
             // Add motion blur effect by drawing multiple semi-transparent layers
             // Added a fifth Bezier curve (blur level 4) for more fluid feel
-            for (let blur = 4; blur >= 0; blur--) {
+            for (let blur = 6; blur >= 0; blur--) {
               this.ctx.beginPath();
-              const currentOpacity = (opacity * 0.6) * (1 - blur * 0.2); // Fade out each blur layer
+              const currentOpacity = (opacity * 0.9) * (1 - blur * 0.2); // Fade out each blur layer
               
               // Only use shadow effect for higher power levels to save rendering time
               if (this.params.power > 3) {
                 this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
-                this.ctx.shadowBlur = 5 * drawPowerFactor; // Reduced from 8 to 5
+                this.ctx.shadowBlur = 8 * drawPowerFactor; // Reduced from 8 to 5
               } else {
                 this.ctx.shadowColor = 'transparent';
                 this.ctx.shadowBlur = 0;
@@ -654,9 +637,9 @@ export class CanvasController {
               const farthestPositions = [0, 9]; // The farthest positions
               
               // Assign thickness based on position group
-              if (centralPositions.includes(waveIndex)) thicknessFactor = 1.2;      // Center: 20% thicker
-              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.15;  // Inner: 15% thicker
-              else if (middlePositions.includes(waveIndex)) thicknessFactor = 1.1;  // Middle: 10% thicker
+              if (centralPositions.includes(waveIndex)) thicknessFactor = 1.8;      // Center: 20% thicker
+              else if (innerPositions.includes(waveIndex)) thicknessFactor = 1.6;  // Inner: 15% thicker
+              else if (middlePositions.includes(waveIndex)) thicknessFactor = 1.3;  // Middle: 10% thicker
               else if (outerPositions.includes(waveIndex)) thicknessFactor = 1.05;  // Outer: 5% thicker
               else if (farthestPositions.includes(waveIndex)) thicknessFactor = 1.0; // Farthest: default thickness
               
@@ -669,7 +652,7 @@ export class CanvasController {
               
               if (cycleDiff === 0) {
                 // Current cycle: decrease from 1.0 to 0.0 over cycle
-                cycleAgeFactor = 1.0 - progress;
+                cycleAgeFactor = 1.0 - (0.5* progress);
               } else {
                 // More gradual thickness reduction for older cycles
                 // Start at 0.9 for previous cycle, reduce by 0.1 per cycle for a more gradual fade
@@ -713,8 +696,7 @@ export class CanvasController {
             this.ctx.shadowColor = 'transparent';
             this.ctx.shadowBlur = 0;
             
-            // Create a local opacity value for particles
-            const particleOpacity = opacity * 0.6;
+            
             
             // Draw particles as bright neon pink circles only if showParticles is true
             if (this.showParticles) {
