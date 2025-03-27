@@ -27,6 +27,24 @@ interface Bubble {
 }
 
 export class CanvasController {
+  // Core timing constants
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.44; // Cycle duration in milliseconds
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 12; // How many cycles particles live
+  private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
+  
+  // Layout constants
+  private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
+  private static readonly DEFAULT_GAP_SIZE: number = 0.4; // Default gap size (fraction of canvas height)
+  private static readonly WALL_THICKNESS: number = 12; // Thickness of the funnel walls
+  
+  // Particle appearance constants
+  private static readonly OPACITY_DECAY_RATE: number = 0.1; // How much opacity decreases per cycle
+  private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
+  private static readonly PARTICLES_PER_RING: number = 17; // Number of particles in each ring
+  private static readonly PARTICLE_RADIUS: number = 0.5; // Physics body radius for particles
+  private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
+  
+  // State variables
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private canvasWidth: number; // Store canvas width as class variable
@@ -39,13 +57,13 @@ export class CanvasController {
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
   private previousSweepLineX: number = 0; // Track previous position of sweep line
-  private activationLineX: number = 0; // Will be set to 20% of canvas width
+  private activationLineX: number = 0; // Will be set based on ACTIVATION_LINE_POSITION
   private lastSpawnTime: number = 0;
   private spawnInterval: number = 1000; // Default spawn interval in ms
   private lastCycleTime: number = 0;
   public onCycleStart: (() => void) | null = null; // Callback for cycle start
   private wallCurvature: number = 0; // 0 = straight wall, 1 = max curve
-  private gapSize: number = 0.4; // Normalized gap size (fraction of canvas height)
+  private gapSize: number = CanvasController.DEFAULT_GAP_SIZE; // Normalized gap size
   private topWallAngle: number = 0; // Store angle for top wall in radians
   private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
   private currentGroupId: number = 0; // Counter for generating unique group IDs
@@ -78,8 +96,8 @@ export class CanvasController {
       frequency: 0.3  // Default frequency from home.tsx
     };
     
-    // Set the activation line at 20% of canvas width
-    this.activationLineX = canvas.width * 0.3;
+    // Set the activation line based on our constant
+    this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     
     // Calculate initial spawn interval based on frequency
     this.updateSpawnInterval();
@@ -128,7 +146,7 @@ export class CanvasController {
     const midX = width * 0.5;
     const centerY = height * 0.5;
     const gapSize = height * this.gapSize; // Use the stored gap size
-    const wallThickness = 12; // Reduced from 20 to make walls more slender
+    const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant
     const wallLength = height * 2; // Make walls much longer to ensure complete blockage at minimum gap
 
     // Set up walls as static bodies with enhanced collision properties
@@ -185,7 +203,7 @@ export class CanvasController {
     const width = this.canvas.width;
     
     const bubbles: Bubble[] = [];
-    const fixedRadius = 7.2;
+    const fixedRadius = CanvasController.FIXED_BUBBLE_RADIUS;
 
     this.positions = []; // Clear previous positions
     const compressionFactor = 0.585; // Reduced by 10% from 0.65
@@ -226,9 +244,8 @@ export class CanvasController {
       const groupId = this.currentGroupId++;
       
       const particles: Particle[] = [];
-      // Reduced by 30% from 25 to 17 particles per ring (still odd for symmetry)
-      // 25 * 0.7 = 17.5, rounded down to 17 to keep it odd
-      const numParticlesInRing = 17;
+      // Use our constant for the number of particles per ring
+      const numParticlesInRing = CanvasController.PARTICLES_PER_RING;
       
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
@@ -293,8 +310,8 @@ export class CanvasController {
         const particleX = x + Math.cos(angle) * fixedRadius;
         const particleY = y + Math.sin(angle) * fixedRadius;
 
-        // Increase particle size to prevent squeezing through walls but keep perfect elasticity
-        const body = Matter.Bodies.circle(particleX, particleY, 0.5, { // Increased from 0.1 to 0.5
+        // Create physics body with size from our constant
+        const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
           friction: 0.0,     // No friction to match walls and prevent energy loss 
           restitution: 1.0,  // Perfect elasticity (no energy loss)
           mass: 0.2,         // Increased mass to make particles less likely to squeeze through
@@ -329,11 +346,9 @@ export class CanvasController {
         particles.push(particle);
         }
 
-      // We want particles to decay within 24 cycles (doubled from 12)
-      // One cycle is 6667 * 0.44 = 2933.48 ms
-      // For 24 cycles: 24 * 2933.48 = 70403.52 ms
-      // Using a base value that ensures particles live longer but still eventually decay
-      const cycleTime = 6667 * 0.44;
+      // We want particles to decay within 24 cycles
+      // Using our constant for cycle period
+      const cycleTime = CanvasController.CYCLE_PERIOD_MS;
       const maxCycles = 24; // Doubled from 12 to 24
       const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
       
@@ -423,9 +438,9 @@ export class CanvasController {
     // This will be used for all Bezier curves to ensure they all fade together
     const globalOpacityFactor = (1 - (0.05 * progress));
     if (this.funnelEnabled) {
-      // Increased number of substeps for higher accuracy physics (especially for collisions)
-      const numSubSteps = 6; // Increased from 3 to 6 for more accurate simulation
-      const subStepTime = (1000 / 60) / numSubSteps; // Smaller time step for better collision handling
+      // Use multiple smaller substeps for higher accuracy physics (especially for collisions)
+      const numSubSteps = 6; 
+      const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps; // Split our timestep for better collision handling
       for (let i = 0; i < numSubSteps; i++) {
         Matter.Engine.update(this.engine, subStepTime);
       }
@@ -565,8 +580,8 @@ export class CanvasController {
         // For older cycles: factor = 0
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         
-        if (cycleDiff > 12) {
-          // Particles more than 12 cycles old should not be rendered
+        if (cycleDiff > CanvasController.PARTICLE_LIFETIME_CYCLES) {
+          // Particles older than our lifetime threshold should not be rendered
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
         
@@ -574,9 +589,9 @@ export class CanvasController {
         // Start with 1.0 for current cycle, with gradual reductions for older cycles
         let cycleAgeFactor = 1.0;
         if (cycleDiff > 0) {
-          // Even more gradual reduction: 0.9, 0.8, 0.7, 0.6, etc. for cycles 1-8
+          // Gradual reduction based on our opacity decay rate constant
           // This creates a slower opacity decay over time
-          cycleAgeFactor = Math.max(0.1, 1.0 - (cycleDiff * 0.1));
+          cycleAgeFactor = Math.max(0.1, 1.0 - (cycleDiff * CanvasController.OPACITY_DECAY_RATE));
         }
         
         // Combine with global opacity factor from current cycle progress
@@ -655,12 +670,12 @@ export class CanvasController {
                 cycleAgeFactor = 1.0 - (0.5* progress);
               } else {
                 // More gradual thickness reduction for older cycles
-                // Start at 0.9 for previous cycle, reduce by 0.1 per cycle for a more gradual fade
-                cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * 0.1));
+                // Start at 0.9 for previous cycle, reduce using our decay rate constant for a more gradual fade
+                cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * CanvasController.OPACITY_DECAY_RATE));
               }
               
-              // Base width increased by 50% (from 1.8 to 2.7)
-              this.ctx.lineWidth = 2.7 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
+              // Use our constant for the base line width
+              this.ctx.lineWidth = CanvasController.BASE_LINE_WIDTH * drawPowerFactor * thicknessFactor * cycleAgeFactor;
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -776,8 +791,8 @@ export class CanvasController {
   private animate() {
     if (!this.startTime) return;
     const elapsed = performance.now() - this.startTime;
-    // Double line speed by halving cycle time
-    const cyclePeriod = 6667 * 0.44; // Slowed down by 10% (0.4 * 1.1)
+    // Use our constant for cycle period
+    const cyclePeriod = CanvasController.CYCLE_PERIOD_MS;
     const currentCycleTime = Math.floor(elapsed / cyclePeriod);
     
     // Check if we've started a new cycle
@@ -787,11 +802,11 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
-      // Remove bubbles and particles that are more than 12 cycles old (increased from 8)
-      // This ensures particles live through more cycles
+      // Remove bubbles and particles that are older than our lifetime threshold
+      // This ensures particles live through multiple cycles
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within 12 cycles of current cycle
-        return this.currentCycleNumber - bubble.cycleNumber <= 12;
+        // Keep bubble if its cycle number is within our lifetime threshold
+        return this.currentCycleNumber - bubble.cycleNumber <= CanvasController.PARTICLE_LIFETIME_CYCLES;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
@@ -815,9 +830,9 @@ export class CanvasController {
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
     
-    // Update physics engine with a slightly shorter time step as requested
-    // Using 12.5ms instead of 16.67ms (approximately 80fps instead of 60fps)
-    Matter.Engine.update(this.engine, 12.5); // Shorter time step for more fluid simulation
+    // Update physics engine with our defined time step
+    // Using a shorter time step for more accurate simulation
+    Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
     
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
@@ -873,7 +888,7 @@ export class CanvasController {
       }
     } else {
       // Draw rectangular walls for straight walls
-      const wallThickness = 12; // Match the thickness from setupFunnelWalls
+      const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant for wall thickness
       
       // Get wall positions
       const topWallPos = topWall.position;
