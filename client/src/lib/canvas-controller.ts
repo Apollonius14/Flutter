@@ -9,8 +9,8 @@ interface Particle {
   body: Matter.Body;
   intensity: number;
   age: number;
-  groupId: number; // Add group ID to identify particles in the same ring
-  cycleNumber: number; // Which cycle this particle was created in
+  groupId: number;
+  cycleNumber: number;
 }
 
 interface Bubble {
@@ -22,8 +22,8 @@ interface Bubble {
   maxAge: number;
   intensity: number;
   particles: Particle[];
-  groupId: number; // Add group ID to identify this bubble's particle group
-  cycleNumber: number; // Which cycle this bubble was created in
+  groupId: number;
+  cycleNumber: number;
 }
 
 export class CanvasController {
@@ -47,8 +47,8 @@ export class CanvasController {
   // State variables
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private canvasWidth: number; // Store canvas width as class variable
-  private canvasHeight: number; // Store canvas height as class variable
+  private canvasWidth: number;
+  private canvasHeight: number;
   private params: AnimationParams;
   private animationFrame: number | null = null;
   private startTime: number | null = null;
@@ -56,116 +56,84 @@ export class CanvasController {
   private funnelEnabled: boolean = true;
   private engine: Matter.Engine;
   private funnelWalls: Matter.Body[] = [];
-  private previousSweepLineX: number = 0; // Track previous position of sweep line
-  private activationLineX: number = 0; // Will be set based on ACTIVATION_LINE_POSITION
+  private previousSweepLineX: number = 0;
+  private activationLineX: number = 0;
   private lastSpawnTime: number = 0;
-  private spawnInterval: number = 1000; // Default spawn interval in ms
+  private spawnInterval: number = 1000;
   private lastCycleTime: number = 0;
-  public onCycleStart: (() => void) | null = null; // Callback for cycle start
-  private wallCurvature: number = 0; // 0 = straight wall, 1 = max curve
-  private gapSize: number = CanvasController.DEFAULT_GAP_SIZE; // Normalized gap size
-  private topWallAngle: number = 0; // Store angle for top wall in radians
-  private bottomWallAngle: number = 0; // Store angle for bottom wall in radians
-  private currentGroupId: number = 0; // Counter for generating unique group IDs
-  private currentCycleNumber: number = 0; // Current cycle number
-  private positions: number[] = []; // Store wave positions
-  private isRTL: boolean = false; // RTL mode toggle (right-to-left for Arabic)
-  private showParticles: boolean = true; // Toggle to show/hide individual particles
+  public onCycleStart: (() => void) | null = null;
+  private wallCurvature: number = 0;
+  private gapSize: number = CanvasController.DEFAULT_GAP_SIZE;
+  private topWallAngle: number = 0;
+  private bottomWallAngle: number = 0;
+  private currentGroupId: number = 0;
+  private currentCycleNumber: number = 0;
+  private positions: number[] = [];
+  private isRTL: boolean = false;
+  private showParticles: boolean = true;
 
   constructor(canvas: HTMLCanvasElement) {
-    console.time('Canvas initialization');
     this.canvas = canvas;
-    // Store canvas dimensions as class properties
     this.canvasWidth = canvas.width;
     this.canvasHeight = canvas.height;
     
-    const ctx = canvas.getContext("2d", { alpha: false }); // Disable alpha for better performance
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
 
-    // Configure engine with minimal iteration parameters for faster loading
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 3,  // Reduced by half for much faster startup
-      velocityIterations: 3,  // Reduced by half for much faster startup 
-      constraintIterations: 2  // Minimum value for fastest startup
+      positionIterations: 3,
+      velocityIterations: 3,
+      constraintIterations: 2
     });
 
     this.params = {
-      power: 12, // Doubled again from 6
-      frequency: 0.3  // Default frequency from home.tsx
+      power: 12,
+      frequency: 0.3
     };
     
-    // Set the activation line based on our constant
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
-    
-    // Calculate initial spawn interval based on frequency
     this.updateSpawnInterval();
-
     this.canvas.style.backgroundColor = '#1a1a1a';
     
-    // Defer wall setup slightly for faster initial loading
     setTimeout(() => {
       this.setupFunnelWalls();
-      
-      // Setup collision detection only after walls are created
-      this.setupCollisionDetection();
     }, 0);
-    
-    console.timeEnd('Canvas initialization');
   }
   
-  // Extract collision detection setup to a separate method
-  private setupCollisionDetection() {
-    // With our new cycle-based approach, we don't need to track collision state changes
-    // So this method now just sets up the collision detection without modifying particle properties
-    Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      // We can use this event for sound effects or other collision feedback if needed
-      // But we don't need to modify particle properties here anymore
-    });
-  }
-  
-  // Helper method to update spawn interval based on frequency
   private updateSpawnInterval() {
-    // Lower frequency value = less frequent spawning = higher interval
-    // Base interval now increased by 1.5x, then 1.2x, then 1.5x, and now by another 1.2x
-    const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2); // Increased frequency by an additional 20%
+    const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2);
     this.spawnInterval = baseInterval;
   }
   
   /**
-   * Helper method to calculate the lifecycle factor for a particle based on its age.
-   * Returns a value between 0 and 1 representing the "liveness" of the particle.
-   * 0 means the particle should be removed, 1 means it's at full strength.
+   * Calculate the lifecycle factor for a particle (0-1)
    */
   private calculateParticleLifecycleFactor(
     cycleDiff: number, 
     progress: number = 0
   ): number {
-    // If the particle is too old, it should be removed
     if (cycleDiff > CanvasController.PARTICLE_LIFETIME_CYCLES) {
       return 0;
     }
     
-    // For current cycle particles, factor decreases over the cycle
     if (cycleDiff === 0) {
       return 1.0 - (0.5 * progress);
     }
     
-    // For older particles, decrease by our opacity decay rate for each cycle
     return Math.max(0.1, 1.0 - (cycleDiff * CanvasController.OPACITY_DECAY_RATE));
   }
   
   /**
-   * Helper method to determine if a particle should be rendered based on its age
+   * Determine if a particle should be rendered based on its age
    */
   private shouldRenderParticle(cycleDiff: number): boolean {
     return cycleDiff <= CanvasController.PARTICLE_LIFETIME_CYCLES;
   }
   
   /**
-   * Helper method to calculate the appropriate stroke width for a particle based on its age
-   * and the wave position. Centralizes the logic for determining bezier curve thickness.
+   * Calculate the appropriate stroke width for a particle
    */
   private calculateStrokeWidth(
     drawPowerFactor: number, 
@@ -173,98 +141,64 @@ export class CanvasController {
     cycleDiff: number, 
     progress: number
   ): number {
-    // Calculate the age factor for thickness
     let cycleAgeFactor;
     
     if (cycleDiff === 0) {
-      // Current cycle: decrease from 1.0 to 0.0 over cycle
       cycleAgeFactor = 1.0 - (0.5 * progress);
     } else {
-      // More gradual thickness reduction for older cycles
-      // Start at 0.9 for previous cycle, reduce using our decay rate constant
       cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * CanvasController.OPACITY_DECAY_RATE));
     }
     
-    // Use our constant for the base line width
     return CanvasController.BASE_LINE_WIDTH * drawPowerFactor * thicknessFactor * cycleAgeFactor;
   }
   
   /**
-   * Helper method to calculate the thickness factor based on the wave's position
-   * in the array of positions. This determines how thick each wave appears.
+   * Calculate thickness factor based on wave position
    */
   private calculateThicknessFactor(waveIndex: number): number {
-    // With 9 positions (0-8), identify the position groups
-    const centralPositions = [4, 5]; // The two positions closest to center
-    const innerPositions = [3, 6];   // The next two positions from center
-    const middlePositions = [2, 7];  // The middle positions
-    const outerPositions = [1, 8];   // The outer positions
-    const farthestPositions = [0, 9]; // The farthest positions
+    const centralPositions = [4, 5];
+    const innerPositions = [3, 6];
+    const middlePositions = [2, 7];
+    const outerPositions = [1, 8];
+    const farthestPositions = [0, 9];
     
-    // Assign thickness based on position group
-    if (centralPositions.includes(waveIndex)) return 1.8;      // Center: 80% thicker
-    if (innerPositions.includes(waveIndex)) return 1.6;        // Inner: 60% thicker
-    if (middlePositions.includes(waveIndex)) return 1.3;       // Middle: 30% thicker
-    if (outerPositions.includes(waveIndex)) return 1.05;       // Outer: 5% thicker
-    if (farthestPositions.includes(waveIndex)) return 1.0;     // Farthest: default thickness
+    if (centralPositions.includes(waveIndex)) return 1.8;
+    if (innerPositions.includes(waveIndex)) return 1.6;
+    if (middlePositions.includes(waveIndex)) return 1.3;
+    if (outerPositions.includes(waveIndex)) return 1.05;
+    if (farthestPositions.includes(waveIndex)) return 1.0;
     
-    // Default fallback
     return 1.0;
   }
   
   /**
-   * Helper method to generate particle angles for a wave ring
-   * Creates a symmetric distribution focused on the forward direction
+   * Generate particle angles for a wave ring with a forward-focused distribution
    */
   private generateParticleAngles(particleCount: number): number[] {
     const particleAngles: number[] = [];
-    
-    // Generate deterministic non-uniform angles to concentrate particles at the wavefront (right side)
-    // First create a base array of uniformly distributed angles
     const baseAngles: number[] = [];
-    
-    // With odd number of particles, ensure one is exactly at 0°
-    // Generate angles from -π to +π to ensure symmetry around 0
     const halfCount = Math.floor(particleCount / 2);
     
-    // Add the center particle at exactly 0° (right in the middle)
+    // Add center particle at 0°
     baseAngles.push(0);
     
-    // Add symmetric pairs of particles on each side of 0°
+    // Add symmetric pairs of particles
     for (let i = 1; i <= halfCount; i++) {
-      const angle = (i / halfCount) * Math.PI; // Goes from 0 to π
-      baseAngles.push(angle);    // Add positive angle (below centerline)
-      baseAngles.push(-angle);   // Add negative angle (above centerline)
+      const angle = (i / halfCount) * Math.PI;
+      baseAngles.push(angle);
+      baseAngles.push(-angle);
     }
     
-    // Now redistribute these angles using a deterministic function to
-    // concentrate particles toward the right side (0 degrees)
-    for (let i = 0; i < baseAngles.length; i++) {
-      const angle = baseAngles[i];
-      
-      // Since we're already generating angles in the -π to +π range with
-      // perfect symmetry around 0, we only need to apply the compression
-      
-      // The compression should be symmetric around 0 and preserve the sign
-      // Using a quadratic function for smoother compression
+    // Apply compression to focus particles toward the front
+    for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
-      // Use a more gentle, smooth compression based on quadratic curve
-      // This creates a more natural funnel shape than the sharp sin(θ/2)
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      
-      // Apply a gentler 50% maximum compression for smoother distribution
-      // This creates more particles at intermediate angles for a funnel shape
-      // rather than the sharp V-shape from the previous 75% compression
       const transformedAngle = angle * (1 - 0.5 * compressionFactor);
-      
-      // Convert from our -π to +π space back to 0 to 2π space that the rendering uses
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
       
       particleAngles.push(normalizedAngle);
     }
     
-    // Sort is not strictly needed since our generation is already in order,
-    // but keep it for safety
     return particleAngles.sort((a, b) => a - b);
   }
 
@@ -332,35 +266,27 @@ export class CanvasController {
   }
 
   /**
-   * Helper method to calculate wave positions across the canvas height
-   * This creates the grid of starting positions for particle waves
+   * Calculate wave positions across the canvas height
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.585; // Controls vertical spacing
-    
-    // Calculate center and offsets for symmetric distribution
+    const compressionFactor = 0.585;
     const center = canvasHeight / 2;
-    
-    // Use 9 primary positions for a planar wave appearance
     const numPositions = 9; 
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
-    
-    // Calculate offset to avoid placing ring directly on centerline
     const halfSpacing = baseSpacing / 2;
     
-    // Add positions in order from top to bottom (all offset from center)
-    // We're using 10 waves now with 4 above and 4 below the centerline (plus the offset)
-    positions.push(center - halfSpacing - baseSpacing * 4); // Upper outer 4
-    positions.push(center - halfSpacing - baseSpacing * 3); // Upper outer 3
-    positions.push(center - halfSpacing - baseSpacing * 2); // Upper outer 2
-    positions.push(center - halfSpacing - baseSpacing);     // Upper inner
-    positions.push(center - halfSpacing);                   // Near-center upper
-    positions.push(center + halfSpacing);                   // Near-center lower
-    positions.push(center + halfSpacing + baseSpacing);     // Lower inner
-    positions.push(center + halfSpacing + baseSpacing * 2); // Lower outer 2
-    positions.push(center + halfSpacing + baseSpacing * 3); // Lower outer 3
-    positions.push(center + halfSpacing + baseSpacing * 4); // Lower outer 4
+    // Add positions from top to bottom, offset from center
+    positions.push(center - halfSpacing - baseSpacing * 4);
+    positions.push(center - halfSpacing - baseSpacing * 3);
+    positions.push(center - halfSpacing - baseSpacing * 2);
+    positions.push(center - halfSpacing - baseSpacing);
+    positions.push(center - halfSpacing);
+    positions.push(center + halfSpacing);
+    positions.push(center + halfSpacing + baseSpacing);
+    positions.push(center + halfSpacing + baseSpacing * 2);
+    positions.push(center + halfSpacing + baseSpacing * 3);
+    positions.push(center + halfSpacing + baseSpacing * 4);
     
     return positions;
   }
