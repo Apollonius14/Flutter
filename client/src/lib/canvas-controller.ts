@@ -344,12 +344,12 @@ export class CanvasController {
         particles.push(particle);
         }
 
-      // We want particles to decay within 6 cycles (doubled from 3)
+      // We want particles to decay within 12 cycles (doubled from 6)
       // One cycle is 6667 * 0.44 = 2933.48 ms
-      // For 6 cycles: 6 * 2933.48 = 17600.88 ms
+      // For 12 cycles: 12 * 2933.48 = 35201.76 ms
       // Using a base value that ensures particles live longer but still eventually decay
       const cycleTime = 6667 * 0.44;
-      const maxCycles = 6; // Doubled from 3 to 6
+      const maxCycles = 12; // Doubled from 6 to 12
       const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
       
       // Scale maxAge based on power, with twice the duration
@@ -582,14 +582,18 @@ export class CanvasController {
         // For older cycles: factor = 0
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         
-        if (cycleDiff > 2) {
-          // Particles more than 2 cycles old should not be rendered
+        if (cycleDiff > 4) {
+          // Particles more than 4 cycles old should not be rendered
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
         
-        // Calculate age-based opacity factor
-        // Start with 1.0 for current cycle, 0.5 for previous cycle
-        let cycleAgeFactor = cycleDiff === 0 ? 1.0 : cycleDiff === 1 ? 0.5 : 0.25;
+        // Calculate age-based opacity factor with more gradual degradation for longer display
+        // Start with 1.0 for current cycle, with gradual reductions for older cycles
+        let cycleAgeFactor = 1.0;
+        if (cycleDiff > 0) {
+          // More gradual reduction: 0.8, 0.6, 0.4, 0.2 for cycles 1-4
+          cycleAgeFactor = Math.max(0.2, 1.0 - (cycleDiff * 0.2));
+        }
         
         // Combine with global opacity factor from current cycle progress
         let opacity = globalOpacityFactor * cycleAgeFactor * 0.7;
@@ -657,9 +661,18 @@ export class CanvasController {
               // Scale line width using the global cycle progress and cycle age
               // This makes lines thinner as they age, instead of less opaque
               // Make lines 50% thicker at all power levels as requested
-              const cycleAgeFactor = (this.currentCycleNumber - bubble.cycleNumber === 0) ? 
-                1.0 - progress : // Current cycle: decrease from 1.0 to 0.0 over cycle
-                0.7 - ((this.currentCycleNumber - bubble.cycleNumber) * 0.3); // Older cycles start thinner
+              // More gradual degradation of thickness over multiple cycles
+              const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+              let cycleAgeFactor;
+              
+              if (cycleDiff === 0) {
+                // Current cycle: decrease from 1.0 to 0.0 over cycle
+                cycleAgeFactor = 1.0 - progress;
+              } else {
+                // More gradual thickness reduction for older cycles
+                // Start at 0.8 for previous cycle, reduce by 0.15 per cycle
+                cycleAgeFactor = Math.max(0.2, 0.8 - ((cycleDiff - 1) * 0.15));
+              }
               
               // Base width increased by 50% (from 1.8 to 2.7)
               this.ctx.lineWidth = 2.7 * drawPowerFactor * thicknessFactor * cycleAgeFactor;
@@ -790,10 +803,10 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
-      // Remove bubbles and particles that are more than 2 cycles old
+      // Remove bubbles and particles that are more than 4 cycles old (doubled from 2)
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within 2 cycles of current cycle
-        return this.currentCycleNumber - bubble.cycleNumber <= 2;
+        // Keep bubble if its cycle number is within 4 cycles of current cycle
+        return this.currentCycleNumber - bubble.cycleNumber <= 4;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
