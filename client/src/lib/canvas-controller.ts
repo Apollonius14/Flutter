@@ -313,8 +313,8 @@ export class CanvasController {
           }
         });
 
-        // Reduce base speed by an additional 30% as requested
-        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7 * 0.7; // Additional 30% reduction
+        // Reduce base speed by an additional 30% as requested (total 51% reduction from original)
+        const baseSpeed = 0.67 * 1.3 * 1.5 * 1.2 * 1.5 * 2 * 0.7 * 0.7 * 0.7; // Additional 30% reduction
         
         // Calculate how much the particle is aligned with the horizontal axis
         // cos(angle) is 1 or -1 at 0° and 180° (horizontal alignment)
@@ -344,12 +344,12 @@ export class CanvasController {
         particles.push(particle);
         }
 
-      // We want particles to decay within 12 cycles (doubled from 6)
+      // We want particles to decay within 24 cycles (doubled from 12)
       // One cycle is 6667 * 0.44 = 2933.48 ms
-      // For 12 cycles: 12 * 2933.48 = 35201.76 ms
+      // For 24 cycles: 24 * 2933.48 = 70403.52 ms
       // Using a base value that ensures particles live longer but still eventually decay
       const cycleTime = 6667 * 0.44;
-      const maxCycles = 12; // Doubled from 6 to 12
+      const maxCycles = 24; // Doubled from 12 to 24
       const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
       
       // Scale maxAge based on power, with twice the duration
@@ -455,7 +455,7 @@ export class CanvasController {
     }
     
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.06)'; // Reduced from 0.12 to 0.06 (50% reduction)
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.03)'; // Reduced from 0.06 to 0.03 (another 50% reduction)
     this.ctx.fillRect(0, 0, width, height);
     
     // Draw funnel walls with smoky white fill
@@ -582,8 +582,8 @@ export class CanvasController {
         // For older cycles: factor = 0
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         
-        if (cycleDiff > 4) {
-          // Particles more than 4 cycles old should not be rendered
+        if (cycleDiff > 8) {
+          // Particles more than 8 cycles old should not be rendered
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
         
@@ -591,12 +591,14 @@ export class CanvasController {
         // Start with 1.0 for current cycle, with gradual reductions for older cycles
         let cycleAgeFactor = 1.0;
         if (cycleDiff > 0) {
-          // More gradual reduction: 0.8, 0.6, 0.4, 0.2 for cycles 1-4
-          cycleAgeFactor = Math.max(0.2, 1.0 - (cycleDiff * 0.2));
+          // Even more gradual reduction: 0.9, 0.8, 0.7, 0.6, etc. for cycles 1-8
+          // This creates a slower opacity decay over time
+          cycleAgeFactor = Math.max(0.1, 1.0 - (cycleDiff * 0.1));
         }
         
         // Combine with global opacity factor from current cycle progress
-        let opacity = globalOpacityFactor * cycleAgeFactor * 0.7;
+        // Reduce the fade rate by 50% by multiplying by 0.35 instead of 0.7
+        let opacity = globalOpacityFactor * cycleAgeFactor * 0.35;
         
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
@@ -670,8 +672,8 @@ export class CanvasController {
                 cycleAgeFactor = 1.0 - progress;
               } else {
                 // More gradual thickness reduction for older cycles
-                // Start at 0.8 for previous cycle, reduce by 0.15 per cycle
-                cycleAgeFactor = Math.max(0.2, 0.8 - ((cycleDiff - 1) * 0.15));
+                // Start at 0.9 for previous cycle, reduce by 0.1 per cycle for a more gradual fade
+                cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * 0.1));
               }
               
               // Base width increased by 50% (from 1.8 to 2.7)
@@ -803,10 +805,10 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
-      // Remove bubbles and particles that are more than 4 cycles old (doubled from 2)
+      // Remove bubbles and particles that are more than 8 cycles old (doubled from 4)
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within 4 cycles of current cycle
-        return this.currentCycleNumber - bubble.cycleNumber <= 4;
+        // Keep bubble if its cycle number is within 8 cycles of current cycle
+        return this.currentCycleNumber - bubble.cycleNumber <= 8;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
