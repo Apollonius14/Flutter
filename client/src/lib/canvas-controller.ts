@@ -132,6 +132,36 @@ export class CanvasController {
     const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2); // Increased frequency by an additional 20%
     this.spawnInterval = baseInterval;
   }
+  
+  /**
+   * Helper method to calculate the lifecycle factor for a particle based on its age.
+   * Returns a value between 0 and 1 representing the "liveness" of the particle.
+   * 0 means the particle should be removed, 1 means it's at full strength.
+   */
+  private calculateParticleLifecycleFactor(
+    cycleDiff: number, 
+    progress: number = 0
+  ): number {
+    // If the particle is too old, it should be removed
+    if (cycleDiff > CanvasController.PARTICLE_LIFETIME_CYCLES) {
+      return 0;
+    }
+    
+    // For current cycle particles, factor decreases over the cycle
+    if (cycleDiff === 0) {
+      return 1.0 - (0.5 * progress);
+    }
+    
+    // For older particles, decrease by our opacity decay rate for each cycle
+    return Math.max(0.1, 1.0 - (cycleDiff * CanvasController.OPACITY_DECAY_RATE));
+  }
+  
+  /**
+   * Helper method to determine if a particle should be rendered based on its age
+   */
+  private shouldRenderParticle(cycleDiff: number): boolean {
+    return cycleDiff <= CanvasController.PARTICLE_LIFETIME_CYCLES;
+  }
 
   private setupFunnelWalls() {
     // Clean up existing walls first
@@ -580,22 +610,15 @@ export class CanvasController {
         // For older cycles: factor = 0
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         
-        if (cycleDiff > CanvasController.PARTICLE_LIFETIME_CYCLES) {
-          // Particles older than our lifetime threshold should not be rendered
+        // Use our helper method to check if we should render this particle
+        if (!this.shouldRenderParticle(cycleDiff)) {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
         
-        // Calculate age-based opacity factor with more gradual degradation for longer display
-        // Start with 1.0 for current cycle, with gradual reductions for older cycles
-        let cycleAgeFactor = 1.0;
-        if (cycleDiff > 0) {
-          // Gradual reduction based on our opacity decay rate constant
-          // This creates a slower opacity decay over time
-          cycleAgeFactor = Math.max(0.1, 1.0 - (cycleDiff * CanvasController.OPACITY_DECAY_RATE));
-        }
+        // Use our helper method to calculate the lifecycle factor
+        const cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
         
         // Combine with global opacity factor from current cycle progress
-        // Reduce the fade rate by 50% by multiplying by 0.35 instead of 0.7
         let opacity = globalOpacityFactor * cycleAgeFactor * 0.7;
         
         // We no longer draw inactive particles - they're completely invisible
@@ -663,15 +686,13 @@ export class CanvasController {
               // Make lines 50% thicker at all power levels as requested
               // More gradual degradation of thickness over multiple cycles
               const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              let cycleAgeFactor;
               
-              if (cycleDiff === 0) {
-                // Current cycle: decrease from 1.0 to 0.0 over cycle
-                cycleAgeFactor = 1.0 - (0.5* progress);
-              } else {
-                // More gradual thickness reduction for older cycles
-                // Start at 0.9 for previous cycle, reduce using our decay rate constant for a more gradual fade
-                cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * CanvasController.OPACITY_DECAY_RATE));
+              // Use our helper method but with a slight modification for thickness
+              // Start at 0.9 for previous cycles instead of 1.0 to create a visual distinction
+              let cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
+              if (cycleDiff > 0) {
+                // Small adjustment to make older cycles slightly thinner than current cycle
+                cycleAgeFactor = Math.max(0.1, 0.9 * cycleAgeFactor);
               }
               
               // Use our constant for the base line width
@@ -805,8 +826,9 @@ export class CanvasController {
       // Remove bubbles and particles that are older than our lifetime threshold
       // This ensures particles live through multiple cycles
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within our lifetime threshold
-        return this.currentCycleNumber - bubble.cycleNumber <= CanvasController.PARTICLE_LIFETIME_CYCLES;
+        // Use our helper method to determine if bubbles should be kept
+        const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+        return this.shouldRenderParticle(cycleDiff);
       });
       
       // Remove particles from physics engine that are no longer in any bubble
