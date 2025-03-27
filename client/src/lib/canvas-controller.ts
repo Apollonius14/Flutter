@@ -565,8 +565,8 @@ export class CanvasController {
         // For older cycles: factor = 0
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         
-        if (cycleDiff > 8) {
-          // Particles more than 8 cycles old should not be rendered
+        if (cycleDiff > 12) {
+          // Particles more than 12 cycles old should not be rendered
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
         
@@ -787,10 +787,11 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
       
-      // Remove bubbles and particles that are more than 8 cycles old (doubled from 4)
+      // Remove bubbles and particles that are more than 12 cycles old (increased from 8)
+      // This ensures particles live through more cycles
       this.bubbles = this.bubbles.filter(bubble => {
-        // Keep bubble if its cycle number is within 8 cycles of current cycle
-        return this.currentCycleNumber - bubble.cycleNumber <= 8;
+        // Keep bubble if its cycle number is within 12 cycles of current cycle
+        return this.currentCycleNumber - bubble.cycleNumber <= 12;
       });
       
       // Remove particles from physics engine that are no longer in any bubble
