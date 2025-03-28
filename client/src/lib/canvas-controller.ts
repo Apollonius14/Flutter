@@ -96,10 +96,6 @@ export class CanvasController {
   }
 
   
-  private shouldRenderParticle(cycleDiff: number): boolean {
-    return cycleDiff <= CanvasController.PARTICLE_LIFETIME_CYCLES;
-  }
-
   private calculateStrokeWidth(
     drawPowerFactor: number, 
     thicknessFactor: number, 
@@ -565,16 +561,13 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
+        // Use energy for opacity control
+        let opacity = bubble.energy / bubble.initialEnergy;
         
-        const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-
-        // Use our helper method to check if we should render this particle
-        if (!this.shouldRenderParticle(cycleDiff)) {
+        // Skip rendering if no energy left
+        if (opacity <= 0) {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
-
-        // Use only energy for opacity
-        let opacity = bubble.energy / bubble.initialEnergy;
 
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
