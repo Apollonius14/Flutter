@@ -654,15 +654,15 @@ export class CanvasController {
 
             // Draw a glow effect for the curve first
             // Add motion blur effect by drawing multiple semi-transparent layers
-            // Added a fifth Bezier curve (blur level 4) for more fluid feel
             for (let blur = 6; blur >= 0; blur--) {
               this.ctx.beginPath();
-              const currentOpacity = (opacity * 0.9) * (1 - blur * 0.2); // Fade out each blur layer
+              const baseOpacity = bubble.energy / bubble.initialEnergy;
+              const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
 
               // Only use shadow effect for higher power levels to save rendering time
               if (this.params.power > 3) {
                 this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
-                this.ctx.shadowBlur = 8 * drawPowerFactor; // Reduced from 8 to 5
+                this.ctx.shadowBlur = 8 * drawPowerFactor;
               } else {
                 this.ctx.shadowColor = 'transparent';
                 this.ctx.shadowBlur = 0;
@@ -724,20 +724,22 @@ export class CanvasController {
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink with energy-dependent opacity
+                const baseOpacity = bubble.energy / bubble.initialEnergy;
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${baseOpacity * 0.6})`; // Neon pink with energy-dependent opacity
                 this.ctx.fill();
 
                 // Add a bright white center to each particle for emphasis
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.8})`; // Bright white with energy-dependent opacity
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity * 0.8})`; // Bright white with energy-dependent opacity
                 this.ctx.fill();
               });
             }
           } else if (visibleParticles.length > 1) {
             // If we don't have enough points for a proper curve, fall back to lines
             this.ctx.beginPath();
-            const lineOpacity = opacity * 0.4;
+            const baseOpacity = bubble.energy / bubble.initialEnergy;
+            const lineOpacity = baseOpacity * 0.4;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
             this.ctx.lineWidth = 0.8;
 
