@@ -359,7 +359,7 @@ export class CanvasController {
   }
 
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.01));
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.005));
   }
 
   setFunnelEnabled(enabled: boolean) {
