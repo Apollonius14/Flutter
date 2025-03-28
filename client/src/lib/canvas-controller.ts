@@ -73,25 +73,21 @@ export class CanvasController {
     this.canvas = canvas;
     this.canvasWidth = canvas.width;
     this.canvasHeight = canvas.height;
-
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
-
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
       positionIterations: 3,
       velocityIterations: 3,
       constraintIterations: 2
-    });
-
+    }; 
     this.params = {
       power: 12,
       frequency: 0.3
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
-    this.updateSpawnInterval();
     this.canvas.style.backgroundColor = '#1a1a1a';
 
     setTimeout(() => {
@@ -413,7 +409,6 @@ export class CanvasController {
 
   updateParams(params: AnimationParams) {
     this.params = params;
-    this.updateSpawnInterval();
     this.drawFrame(0);
   }
 
