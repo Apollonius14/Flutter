@@ -304,7 +304,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 2; 
+        const baseSpeed = 1.2; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
         const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
@@ -359,7 +359,7 @@ export class CanvasController {
   }
 
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.005));
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
 
   setFunnelEnabled(enabled: boolean) {
