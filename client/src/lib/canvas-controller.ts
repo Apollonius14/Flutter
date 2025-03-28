@@ -32,8 +32,6 @@ export class CanvasController {
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
-  private static readonly DEFAULT_GAP_SIZE: number = 0.4; // Default gap size (fraction of canvas height)
-  private static readonly WALL_THICKNESS: number = 12; // Thickness of the funnel walls
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
@@ -50,19 +48,13 @@ export class CanvasController {
   private animationFrame: number | null = null;
   private startTime: number | null = null;
   private bubbles: Bubble[] = [];
-  private funnelEnabled: boolean = true;
   private engine: Matter.Engine;
-  private funnelWalls: Matter.Body[] = [];
   private previousSweepLineX: number = 0;
   private activationLineX: number = 0;
   private lastSpawnTime: number = 0;
   private spawnInterval: number = 1000;
   private lastCycleTime: number = 0;
   public onCycleStart: (() => void) | null = null;
-  private wallCurvature: number = 0;
-  private gapSize: number = CanvasController.DEFAULT_GAP_SIZE;
-  private topWallAngle: number = 0;
-  private bottomWallAngle: number = 0;
   private currentGroupId: number = 0;
   private currentCycleNumber: number = 0;
   private positions: number[] = [];
@@ -89,10 +81,6 @@ export class CanvasController {
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
-
-    setTimeout(() => {
-      this.setupFunnelWalls();
-    }, 0);
   }
 
   
@@ -148,69 +136,7 @@ export class CanvasController {
     return particleAngles.sort((a, b) => a - b);
   }
 
-  private setupFunnelWalls() {
-    // Clean up existing walls first
-    this.funnelWalls.forEach(wall => {
-      Matter.Composite.remove(this.engine.world, wall);
-    });
-    this.funnelWalls = [];
 
-    if (!this.funnelEnabled) return;
-
-    const { width, height } = this.canvas;
-    const midX = width * 0.5;
-    const centerY = height * 0.5;
-    const gapSize = height * this.gapSize; // Use the stored gap size
-    const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant
-    const wallLength = height * 2; // Make walls much longer to ensure complete blockage at minimum gap
-
-    // Set up walls as static bodies with enhanced collision properties
-    const wallOptions = {
-      isStatic: true,
-      restitution: 1.0, // Perfect elasticity (no energy loss)
-      friction: 0.0,    // No friction to prevent energy loss during sliding contacts
-      frictionStatic: 0.0, // No static friction 
-      frictionAir: 0,   // No air friction
-      slop: 0.02,
-      // Using Matter.js default slop value
-      collisionFilter: {
-        category: 0x0002,
-        mask: 0x0001
-      }
-    };
-
-    // Calculate wall angles - this is key for the angle-based rotation
-    const wallAngleRadians = (this.wallCurvature * 90) * (Math.PI / 180);
-    this.topWallAngle = -wallAngleRadians;
-    this.bottomWallAngle = wallAngleRadians;
-
-    // Create the walls
-    const topWall = Matter.Bodies.rectangle(
-      midX,
-      centerY - gapSize/2 - wallLength/2,
-      wallThickness,
-      wallLength,
-      wallOptions
-    );
-
-    const bottomWall = Matter.Bodies.rectangle(
-      midX,
-      centerY + gapSize/2 + wallLength/2,
-      wallThickness,
-      wallLength,
-      wallOptions
-    );
-
-    // Apply rotation to the walls directly
-    Matter.Body.setAngle(topWall, this.topWallAngle);
-    Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
-
-    // Store walls for reference
-    this.funnelWalls = [topWall, bottomWall];
-
-    // Add walls to the physics world
-    Matter.Composite.add(this.engine.world, this.funnelWalls);
-  }
 
   /**
    * Calculate wave positions across the canvas height
@@ -278,13 +204,13 @@ export class CanvasController {
 
         // Create physics body with size from our constant
         const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
-          friction: 0.0,     // No friction to match walls and prevent energy loss 
+          friction: 0.0,     // No friction to prevent energy loss 
           restitution: 1.0,  // Perfect elasticity (no energy loss)
-          mass: 0.2,         // Increased mass to make particles less likely to squeeze through
+          mass: 0.2,         // Standard mass
           frictionAir: 0,    // No air resistance
           collisionFilter: {
             category: 0x0001,
-            mask: 0x0002,
+            mask: 0x0001,    // Only collide with other particles
             group: -1
           }
         });
@@ -347,25 +273,7 @@ export class CanvasController {
     bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
 
-  setFunnelEnabled(enabled: boolean) {
-    this.funnelEnabled = enabled;
-    this.setupFunnelWalls();
-  }
 
-  setWallCurvature(angle: number) {
-    // Convert 0-90 angle to 0-1 normalized value for internal use
-    this.wallCurvature = angle / 90;
-    if (this.funnelEnabled) {
-      this.setupFunnelWalls();
-    }
-  }
-
-  setGapSize(size: number) {
-    this.gapSize = size;
-    if (this.funnelEnabled) {
-      this.setupFunnelWalls();
-    }
-  }
 
   setRTL(enabled: boolean) {
     this.isRTL = enabled;
@@ -418,11 +326,6 @@ export class CanvasController {
     // Reduce motion blur effect to make particles stay visible longer
     this.ctx.fillStyle = 'rgba(26, 26, 26, 0.03)'; // Reduced from 0.06 to 0.03 (another 50% reduction)
     this.ctx.fillRect(0, 0, width, height);
-
-    // Draw funnel walls with smoky white fill
-    if (this.funnelEnabled) {
-      this.drawFunnelWalls();
-    }
 
     const timeX = width * progress;
 
@@ -507,7 +410,7 @@ export class CanvasController {
             // Enable collisions for on-screen particles
             const collisionFilter = {
               category: 0x0001,
-              mask: 0x0002, // Collide with walls
+              mask: 0x0001, // Only collide with other particles
               group: -1 // Can collide with other particles
             };
             Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
@@ -527,7 +430,7 @@ export class CanvasController {
         });
       }
 
-      if (this.funnelEnabled && bubble.particles.length > 0) {
+      if (bubble.particles.length > 0) {
         // Use energy for opacity control
         let opacity = bubble.energy / bubble.initialEnergy;
         
@@ -719,84 +622,14 @@ export class CanvasController {
   }
 
   private updatePhysics(timestamp: number) {
-    // Update physics engine with appropriate resolution
-    if (this.funnelEnabled) {
-      // Use multiple smaller substeps for higher accuracy physics (especially for collisions)
-      const numSubSteps = 6; 
-      const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
-      for (let i = 0; i < numSubSteps; i++) {
-        Matter.Engine.update(this.engine, subStepTime);
-      }
-    } else {
-      // Standard physics update when funnel is disabled
-      Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
+    // Use multiple smaller substeps for higher accuracy physics
+    const numSubSteps = 6; 
+    const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
+    for (let i = 0; i < numSubSteps; i++) {
+      Matter.Engine.update(this.engine, subStepTime);
     }
 
     // Update bubble energies
     this.bubbles.forEach(bubble => this.updateBubbleEnergy(bubble));
   }
-
-  private drawFunnelWalls() {
-    if (this.funnelWalls.length !== 2) return;
-
-    const [topWall, bottomWall] = this.funnelWalls;
-      // Draw rectangular walls for straight walls
-      const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant for wall thickness
-
-      // Get wall positions
-      const topWallPos = topWall.position;
-      const bottomWallPos = bottomWall.position;
-
-      // Get wall dimensions
-      const topWallBounds = topWall.bounds;
-      const bottomWallBounds = bottomWall.bounds;
-      const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
-      const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
-
-      // Draw top wall at its current position with rotation
-      this.ctx.save();
-      this.ctx.translate(topWallPos.x, topWallPos.y);
-      this.ctx.rotate(topWall.angle); // Use the Matter.js body's current angle
-
-      this.ctx.beginPath();
-      this.ctx.rect(
-        -wallThickness/2,
-        -topWallHeight/2,
-        wallThickness,
-        topWallHeight
-      );
-
-      // Smoky white fill
-      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      this.ctx.fill();
-
-      // White border
-      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      this.ctx.lineWidth = 1;
-      this.ctx.stroke();
-      this.ctx.restore();
-
-      // Draw bottom wall at its current position with rotation
-      this.ctx.save();
-      this.ctx.translate(bottomWallPos.x, bottomWallPos.y);
-      this.ctx.rotate(bottomWall.angle); // Use the Matter.js body's current angle
-
-      this.ctx.beginPath();
-      this.ctx.rect(
-        -wallThickness/2,
-        -bottomWallHeight/2,
-        wallThickness,
-        bottomWallHeight
-      );
-
-      // Smoky white fill
-      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      this.ctx.fill();
-
-      // White border
-      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      this.ctx.lineWidth = 1;
-      this.ctx.stroke();
-      this.ctx.restore();
-    }
-  }
+}

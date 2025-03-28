@@ -12,8 +12,6 @@ const translations = {
     power: "Power",
     play: "Play",
     pause: "Pause",
-    wallCurvature: "Wall Angle",
-    gapSize: "Gap Size",
     loading: "Loading Physics Engine...",
     ltr: "Left to Right",
     rtl: "Right to Left",
@@ -24,8 +22,6 @@ const translations = {
     power: "القوة",
     play: "تشغيل",
     pause: "إيقاف",
-    wallCurvature: "زاوية الحائط",
-    gapSize: "حجم الفجوة",
     loading: "جاري تحميل محرك الفيزياء...",
     ltr: "من اليسار إلى اليمين",
     rtl: "من اليمين إلى اليسار",
@@ -44,9 +40,6 @@ export default function Home() {
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
-  // Walls are now always enabled (no need for a state)
-  const [wallAngle, setWallAngle] = useState(30); // Start with a slight angle
-  const [gapSize, setGapSize] = useState(0.4);
 
   // Initialize physics engine when the component is mounted
   useEffect(() => {
@@ -135,23 +128,7 @@ export default function Home() {
     }
   }, [isPlaying, controller]);
 
-  // Removed funnelEnabled effect since it's always true now
-  
-  useEffect(() => {
-    if (!controller) return;
-    controller.setWallCurvature(wallAngle);
-  }, [wallAngle, controller]);
-  
-  useEffect(() => {
-    if (!controller) return;
-    controller.setGapSize(gapSize);
-  }, [gapSize, controller]);
 
-  useEffect(() => {
-    if (!controller) return;
-    // Always maintain funnelEnabled as true
-    controller.setFunnelEnabled(true);
-  }, [controller]);
   
   useEffect(() => {
     if (!controller) return;
@@ -203,37 +180,7 @@ export default function Home() {
                 />
               </div>
               
-              <div className="flex items-center gap-4">
-                <Label className={`text-gray-200 w-1/5 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
-                  {t.wallCurvature}
-                </Label>
-                <Slider
-                  value={[wallAngle]}
-                  min={0}
-                  max={90}
-                  step={1}
-                  onValueChange={([value]) => {
-                    setWallAngle(value);
-                  }}
-                  className="flex-1"
-                />
-              </div>
-              
-              <div className="flex items-center gap-4">
-                <Label className={`text-gray-200 w-1/5 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
-                  {t.gapSize}
-                </Label>
-                <Slider
-                  value={[gapSize]}
-                  min={0.01}
-                  max={0.8}
-                  step={0.01}
-                  onValueChange={([value]) => {
-                    setGapSize(value);
-                  }}
-                  className="flex-1"
-                />
-              </div>
+
               
               {/* Direction and particles controls in a row */}
               <div className="flex justify-center items-center gap-4">
