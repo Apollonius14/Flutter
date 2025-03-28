@@ -27,13 +27,15 @@ interface Bubble {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.44; // Cycle duration in milliseconds
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 12; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
-  private static readonly PARTICLES_PER_RING: number = 25; // Number of particles in each ring
+  private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
+  private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
+  private static readonly PARTICLES_PER_RING: number = 17; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.5; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -125,7 +127,7 @@ export class CanvasController {
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 + 0.5 * compressionFactor);
+      const transformedAngle = angle * (1 - 0.5 * compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
 
       particleAngles.push(normalizedAngle);
@@ -141,23 +143,23 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 1;
+    const compressionFactor = 0.585;
     const center = canvasHeight / 2;
     const numPositions = 9; 
-    const baseSpacing = (canvasHeight * compressionFactor) / (2 * numPositions + 1);
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
+    positions.push(center - halfSpacing - baseSpacing * 4);
     positions.push(center - halfSpacing - baseSpacing * 3);
     positions.push(center - halfSpacing - baseSpacing * 2);
-    positions.push(center - halfSpacing - baseSpacing * 1.5);
     positions.push(center - halfSpacing - baseSpacing);
     positions.push(center - halfSpacing);
     positions.push(center + halfSpacing);
     positions.push(center + halfSpacing + baseSpacing);
-    positions.push(center + halfSpacing + baseSpacing * 1.5);
     positions.push(center + halfSpacing + baseSpacing * 2);
     positions.push(center + halfSpacing + baseSpacing * 3);
+    positions.push(center + halfSpacing + baseSpacing * 4);
 
     return positions;
   }
@@ -208,15 +210,15 @@ export class CanvasController {
           frictionAir: 0,    // No air resistance
           collisionFilter: {
             category: 0x0001,
-            mask: 0x0002,    // Only collide with other particles
+            mask: 0x0001,    // Only collide with other particles
             group: -1
           }
         });
 
-        const baseSpeed = 1.8; 
+        const baseSpeed = 1.5; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 - 0.1 * horizontalAlignment);
+        const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -268,7 +270,7 @@ export class CanvasController {
   }
 
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.001));
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
 
 
@@ -333,7 +335,7 @@ export class CanvasController {
     this.ctx.moveTo(timeX - 3, 0);
     this.ctx.lineTo(timeX - 3, height);
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-    this.ctx.lineWidth = 4;
+    this.ctx.lineWidth = 6;
     this.ctx.stroke();
 
     // Second blur layer, closer to main line
@@ -341,7 +343,7 @@ export class CanvasController {
     this.ctx.moveTo(timeX - 1.5, 0);
     this.ctx.lineTo(timeX - 1.5, height);
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-    this.ctx.lineWidth = 1;
+    this.ctx.lineWidth = 4;
     this.ctx.stroke();
 
     // Main sweep line - thicker and brighter
@@ -408,7 +410,7 @@ export class CanvasController {
             // Enable collisions for on-screen particles
             const collisionFilter = {
               category: 0x0001,
-              mask: 0x0002,
+              mask: 0x0001, // Only collide with other particles
               group: -1 // Can collide with other particles
             };
             Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
@@ -437,6 +439,11 @@ export class CanvasController {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
 
+        // We no longer draw inactive particles - they're completely invisible
+        // Only blue particles at the activation line are visible
+        // For active particles, they'll be drawn with the bezier curves below
+        // We skip drawing them here to avoid double-rendering
+
         // Draw all particles with bezier curves, not just those near the activation line
         if (bubble.particles.length > 1) {
           const visibleParticles = bubble.particles
@@ -462,17 +469,7 @@ export class CanvasController {
             // Add motion blur effect by drawing multiple semi-transparent layers
             for (let blur = 6; blur >= 0; blur--) {
               this.ctx.beginPath();
-              
-              // Calculate sinusoidal opacity based on cycle progression
-              const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              const cycleProgress = cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES;
-              
-              // Apply sin function that goes from 0 to 1 and back to 0 over the particle lifetime
-              // sin(0) = 0, sin(π/2) = 1, sin(π) = 0
-              const sinOpacity = Math.sin(cycleProgress * Math.PI);
-              
-              // Combine sin opacity with energy-based opacity for a more dynamic effect
-              const baseOpacity = (bubble.energy / bubble.initialEnergy) * sinOpacity;
+              const baseOpacity = bubble.energy / bubble.initialEnergy;
               const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
 
               // Only use shadow effect for higher power levels to save rendering time
@@ -485,9 +482,8 @@ export class CanvasController {
               }
               this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
 
-              // Calculate thickness based on wave position and cycle progression
-              // Use the same sin function for thickness to match opacity
-              const energyFactor = sinOpacity;
+              // Calculate thickness based on wave position and energy
+              const energyFactor = bubble.energy / bubble.initialEnergy;
               
               // Get position index from positions array
               const waveIndex = this.positions.indexOf(bubble.y);
@@ -509,7 +505,7 @@ export class CanvasController {
 
                 // Calculate control points for the current segment (p1 to p2)
                 // Use a portion of the vector from previous to next particle
-                const controlPointFactor = 0.1; // Adjust this for tighter/looser curves
+                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
 
                 // First control point - influenced by p0 and p2
                 const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
@@ -535,16 +531,10 @@ export class CanvasController {
           } else if (visibleParticles.length > 1) {
             // If we don't have enough points for a proper curve, fall back to lines
             this.ctx.beginPath();
-            
-            // Calculate sinusoidal opacity for fallback lines
-            const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-            const cycleProgress = cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES;
-            const sinOpacity = Math.sin(cycleProgress * Math.PI);
-            
-            const baseOpacity = (bubble.energy / bubble.initialEnergy) * sinOpacity;
+            const baseOpacity = bubble.energy / bubble.initialEnergy;
             const lineOpacity = baseOpacity * 0.4;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 0.8 * sinOpacity;
+            this.ctx.lineWidth = 0.8;
 
             for (let i = 0; i < visibleParticles.length - 1; i++) {
               const pos1 = visibleParticles[i].body.position;
@@ -562,15 +552,10 @@ export class CanvasController {
                 const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
                 const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
 
-                // Calculate sinusoidal opacity for particles
-                const pCycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-                const pCycleProgress = pCycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES;
-                const pSinOpacity = Math.sin(pCycleProgress * Math.PI);
-                
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${pSinOpacity * 0.6})`; // Neon pink, decays
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
                 this.ctx.fill();
 
               });
@@ -638,7 +623,7 @@ export class CanvasController {
 
   private updatePhysics(timestamp: number) {
     // Use multiple smaller substeps for higher accuracy physics
-    const numSubSteps = 2; 
+    const numSubSteps = 6; 
     const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
     for (let i = 0; i < numSubSteps; i++) {
       Matter.Engine.update(this.engine, subStepTime);
