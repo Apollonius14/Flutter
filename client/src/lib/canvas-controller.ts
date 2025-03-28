@@ -80,8 +80,8 @@ export class CanvasController {
       gravity: { x: 0, y: 0 },
       positionIterations: 3,
       velocityIterations: 3,
-      constraintIterations: 2
-    }; 
+      constraintIterations: 2,
+    }); 
     this.params = {
       power: 12,
       frequency: 0.3
@@ -593,7 +593,7 @@ export class CanvasController {
               const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
 
               // Only use shadow effect for higher power levels to save rendering time
-              if (this.params.power > 3) {
+              if (this.params.power > 1) {
                 this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
                 this.ctx.shadowBlur = 8 * drawPowerFactor;
               } else {
@@ -603,12 +603,10 @@ export class CanvasController {
               this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
 
               // Calculate line thickness based on wave position using our helper method
-              const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
-              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+              const thicknessFactor = bubble.energy / bubble.initialEnergy;
 
               // Calculate the stroke width using our helper method
-              const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              this.ctx.lineWidth = this.calculateStrokeWidth(drawPowerFactor, thicknessFactor, cycleDiff, progress)*2;
+              this.ctx.lineWidth = bubble.energy / bubble.initialEnergy;
 
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -713,10 +711,6 @@ export class CanvasController {
       console.log(`Starting cycle ${this.currentCycleNumber}`);
 
       // Kill bubbles and their particles if they're too old
-      this.bubbles = this.bubbles.filter(bubble => {
-        const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-        return this.shouldRenderParticle(cycleDiff);
-      });
 
       // Remove particles from physics engine that are no longer in any bubble
       const activeBodies = new Set(this.bubbles.flatMap(b => b.particles.map(p => p.body)));
