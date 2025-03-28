@@ -21,6 +21,8 @@ interface Bubble {
   particles: Particle[];
   groupId: number;
   cycleNumber: number;
+  energy: number;
+  initialEnergy: number;
 }
 
 export class CanvasController {
@@ -379,11 +381,32 @@ export class CanvasController {
         intensity: intensity,
         particles,
         groupId: groupId,  // Assign the same group ID to the bubble
-        cycleNumber: this.currentCycleNumber  // Assign current cycle number
+        cycleNumber: this.currentCycleNumber,  // Assign current cycle number
+        energy: this.params.power,
+        initialEnergy: this.params.power
       });
     });
 
     return bubbles;
+  }
+
+  private initializeBubble(x: number, y: number, intensity: number): Bubble {
+    return {
+      x,
+      y,
+      radius: CanvasController.FIXED_BUBBLE_RADIUS,
+      initialRadius: CanvasController.FIXED_BUBBLE_RADIUS,
+      intensity,
+      particles: [],
+      groupId: this.currentGroupId++,
+      cycleNumber: this.currentCycleNumber,
+      energy: this.params.power,
+      initialEnergy: this.params.power,
+    };
+  }
+
+  private updateBubbleEnergy(bubble: Bubble) {
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.01));
   }
 
   setFunnelEnabled(enabled: boolean) {
@@ -601,7 +624,7 @@ export class CanvasController {
         const cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
 
         // Combine with global opacity factor from current cycle progress
-        let opacity = globalOpacityFactor * cycleAgeFactor;
+        let opacity = globalOpacityFactor * cycleAgeFactor * bubble.energy / bubble.initialEnergy;
 
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
@@ -701,13 +724,13 @@ export class CanvasController {
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink with energy-dependent opacity
                 this.ctx.fill();
 
                 // Add a bright white center to each particle for emphasis
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.8})`; // Bright white with energy-dependent opacity
                 this.ctx.fill();
               });
             }
@@ -737,13 +760,13 @@ export class CanvasController {
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink with energy-dependent opacity
                 this.ctx.fill();
 
                 // Add a bright white center
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.8})`; // Bright white with energy-dependent opacity
                 this.ctx.fill();
               });
             }
@@ -812,10 +835,18 @@ export class CanvasController {
 
     // Update physics engine with our defined time step
     // Using a shorter time step for more accurate simulation
-    Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
+    this.updatePhysics(elapsed);
 
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
+  }
+
+  private updatePhysics(timestamp: number) {
+    // Update physics engine
+    Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
+
+    // Update bubble energies
+    this.bubbles.forEach(bubble => this.updateBubbleEnergy(bubble));
   }
 
   private drawFunnelWalls() {
