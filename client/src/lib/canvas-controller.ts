@@ -707,10 +707,11 @@ export class CanvasController {
               // Group particles by their direction based on dot product with positive x-axis
               const directionGroups: {[key: string]: Particle[]} = {};
               
-              // Define non-linear bucket boundaries for horizontal motion emphasis
-              // More buckets near horizontal (±1) and fewer in the middle (near 0)
+              // Define boundaries with more focus on the right-moving particles
+              // We'll have more fine-grained buckets for positive x velocities (0.5 to 1.0)
+              // and fewer buckets for other directions
               const bucketBoundaries = [
-                -1.0, -0.95, -0.85, -0.70, -0.5, -0.2, 0.2, 0.5, 0.70, 0.85, 0.95, 1.0
+                -1.0, -0.5, 0, 0.5, 0.7, 0.8, 0.85, 0.9, 0.95, 0.98, 1.0
               ];
               
               // Debug info for particle count
@@ -780,15 +781,58 @@ export class CanvasController {
                 console.log(`Buckets: ${Object.keys(directionGroups).map(k => `${k}:${directionGroups[k].length}`).join(', ')}`);
               }
               
-              // Draw each direction group as a separate Bézier curve
+              // Special handling for horizontally moving particles
+              // Identify buckets with particles moving mainly horizontally (close to 1.0 dot product)
+              const horizontalBucketKeys = Object.keys(directionGroups).filter(key => {
+                // Consider numerical bucket keys that correspond to positive x movement
+                const numKey = parseInt(key);
+                return !isNaN(numKey) && numKey >= 4; // Corresponds to dot product >= 0.5
+              });
+              
+              // Log information about horizontal buckets if in debug mode
+              if (this.showParticles && (this.currentCycleNumber !== bubble.cycleNumber)) {
+                console.log(`Horizontal buckets: ${horizontalBucketKeys.join(', ')}`);
+                console.log(`Horizontal particles: ${horizontalBucketKeys.reduce((sum, key) => 
+                  sum + directionGroups[key].length, 0)}`);
+              }
+              
+              // Collect all horizontal particles into a single array
+              const allHorizontalParticles: Particle[] = [];
+              // Manually push each particle from horizontal buckets
+              horizontalBucketKeys.forEach(key => {
+                const particles = directionGroups[key];
+                for (let i = 0; i < particles.length; i++) {
+                  allHorizontalParticles.push(particles[i]);
+                }
+              });
+              
+              // Draw all horizontal particles as one connected curve if there are enough of them
+              if (allHorizontalParticles.length > 3) {
+                // Sort horizontal particles by x position for smoother curves
+                const sortedHorizontalParticles = allHorizontalParticles.sort((a, b) =>
+                  a.body.position.x - b.body.position.x
+                );
+                
+                // Draw with enhanced thickness and glow
+                this.ctx.shadowColor = 'rgba(0, 180, 255, 0.6)';
+                this.ctx.shadowBlur = 8;
+                this.drawBezierCurve(sortedHorizontalParticles, bubble);
+              }
+              
+              // Draw other direction groups as separate curves
               Object.entries(directionGroups).forEach(([bucketKey, particles]) => {
+                // Skip horizontal particles as they've already been processed
+                if (horizontalBucketKeys.includes(bucketKey)) return;
+                
                 if (particles.length > 2) {
-                  // Sort particles by y-position (top to bottom)
+                  // For non-horizontal particles, sort by y-position
                   const sortedParticles = particles.sort((a, b) => 
                     a.body.position.y - b.body.position.y
                   );
                   
-                  // Draw the curve using our helper method
+                  // Draw the curve with normal settings
+                  this.ctx.shadowColor = 'rgba(0, 150, 220, 0.3)';
+                  this.ctx.shadowBlur = 4;
                   this.drawBezierCurve(sortedParticles, bubble);
                 }
               });
