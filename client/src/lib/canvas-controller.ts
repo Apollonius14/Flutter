@@ -99,14 +99,6 @@ export class CanvasController {
     }, 0);
   }
 
-  private updateSpawnInterval() {
-    const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2);
-    this.spawnInterval = baseInterval;
-  }
-
-  /**
-   * Calculate the lifecycle factor for a particle (0-1)
-   */
   private calculateParticleLifecycleFactor(
     cycleDiff: number, 
     progress: number = 0
