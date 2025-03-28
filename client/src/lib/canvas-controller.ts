@@ -68,7 +68,6 @@ export class CanvasController {
   private positions: number[] = [];
   private isRTL: boolean = false;
   private showParticles: boolean = true;
-  private curveLogic: 'ByBubble' | 'ByDirection' = 'ByBubble';
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -348,71 +347,6 @@ export class CanvasController {
     bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
 
-  /**
-   * Helper method to draw a Bézier curve through a set of particles
-   */
-  private drawBezierCurve(particles: Particle[], bubble: Bubble) {
-    // Calculate power factor for drawing
-    const drawPowerFactor = this.params.power / 3;
-
-    // Draw a glow effect for the curve first
-    // Add motion blur effect by drawing multiple semi-transparent layers
-    for (let blur = 6; blur >= 0; blur--) {
-      this.ctx.beginPath();
-      const baseOpacity = bubble.energy / bubble.initialEnergy;
-      const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
-
-      // Only use shadow effect for higher power levels to save rendering time
-      if (this.params.power > 1) {
-        this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
-        this.ctx.shadowBlur = 8 * drawPowerFactor;
-      } else {
-        this.ctx.shadowColor = 'transparent';
-        this.ctx.shadowBlur = 0;
-      }
-      this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
-
-      // Calculate thickness based on wave position and energy
-      const energyFactor = bubble.energy / bubble.initialEnergy;
-      
-      // Get position index from positions array
-      const waveIndex = this.positions.indexOf(bubble.y);
-      const thicknessFactor = this.calculateThicknessFactor(waveIndex);
-
-      // Apply both factors to stroke width
-      this.ctx.lineWidth = energyFactor * thicknessFactor;
-
-      // Start at the first particle
-      const startPos = particles[0].body.position;
-      this.ctx.moveTo(startPos.x, startPos.y);
-
-      // Use cubic bezier curves to create a smooth path through all particles
-      for (let i = 0; i < particles.length - 1; i++) {
-        const p0 = particles[Math.max(0, i-1)].body.position;
-        const p1 = particles[i].body.position;
-        const p2 = particles[i+1].body.position;
-        const p3 = particles[Math.min(particles.length-1, i+2)].body.position;
-
-        // Calculate control points for the current segment (p1 to p2)
-        // Use a portion of the vector from previous to next particle
-        const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
-
-        // First control point - influenced by p0 and p2
-        const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-        const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-
-        // Second control point - influenced by p1 and p3
-        const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-        const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-
-        // Draw the cubic bezier curve
-        this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-      }
-
-      this.ctx.stroke();
-    }
-  }
-
   setFunnelEnabled(enabled: boolean) {
     this.funnelEnabled = enabled;
     this.setupFunnelWalls();
@@ -441,12 +375,6 @@ export class CanvasController {
 
   setShowParticles(show: boolean) {
     this.showParticles = show;
-    console.log(`Toggled particle visibility: ${show ? 'visible' : 'hidden'}`);
-    this.drawFrame(0); // Force redraw to see changes immediately
-  }
-  
-  setCurveLogic(logic: 'ByBubble' | 'ByDirection') {
-    this.curveLogic = logic;
     this.drawFrame(0); // Force redraw to see changes immediately
   }
 
@@ -472,70 +400,6 @@ export class CanvasController {
     this.pause();
     Matter.Engine.clear(this.engine);
     Matter.World.clear(this.engine.world, false);
-  }
-
-  private drawFunnelWalls() {
-    if (this.funnelWalls.length !== 2) return;
-
-    const [topWall, bottomWall] = this.funnelWalls;
-      // Draw rectangular walls for straight walls
-      const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant for wall thickness
-
-      // Get wall positions
-      const topWallPos = topWall.position;
-      const bottomWallPos = bottomWall.position;
-
-      // Get wall dimensions
-      const topWallBounds = topWall.bounds;
-      const bottomWallBounds = bottomWall.bounds;
-      const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
-      const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
-
-      // Draw top wall at its current position with rotation
-      this.ctx.save();
-      this.ctx.translate(topWallPos.x, topWallPos.y);
-      this.ctx.rotate(topWall.angle); // Use the Matter.js body's current angle
-
-      this.ctx.beginPath();
-      this.ctx.rect(
-        -wallThickness/2,
-        -topWallHeight/2,
-        wallThickness,
-        topWallHeight
-      );
-
-      // Smoky white fill
-      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      this.ctx.fill();
-
-      // White border
-      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      this.ctx.lineWidth = 1;
-      this.ctx.stroke();
-      this.ctx.restore();
-
-      // Draw bottom wall at its current position with rotation
-      this.ctx.save();
-      this.ctx.translate(bottomWallPos.x, bottomWallPos.y);
-      this.ctx.rotate(bottomWall.angle); // Use the Matter.js body's current angle
-
-      this.ctx.beginPath();
-      this.ctx.rect(
-        -wallThickness/2,
-        -bottomWallHeight/2,
-        wallThickness,
-        bottomWallHeight
-      );
-
-      // Smoky white fill
-      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      this.ctx.fill();
-
-      // White border
-      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      this.ctx.lineWidth = 1;
-      this.ctx.stroke();
-      this.ctx.restore();
   }
 
   private drawFrame(progress: number) {
@@ -677,170 +541,90 @@ export class CanvasController {
         // For active particles, they'll be drawn with the bezier curves below
         // We skip drawing them here to avoid double-rendering
 
-        // Draw particles with bezier curves using selected logic approach
+        // Draw all particles with bezier curves, not just those near the activation line
         if (bubble.particles.length > 1) {
-          // First filter for visible particles regardless of curve logic
           const visibleParticles = bubble.particles
             .filter(p => {
               // Get particles that are on screen
               const pos = p.body.position;
               return pos.x >= 0 && pos.x <= this.canvas.width && pos.y >= 0 && pos.y <= this.canvas.height;
+            })
+            .sort((a, b) => {
+              // Sort particles by angle around the center
+              const aPos = a.body.position;
+              const bPos = b.body.position;
+              const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
+              const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
+              return aAngle - bAngle;
             });
 
           if (visibleParticles.length > 2) {
-            // Logic for drawing curves by bubble (original approach)
-            if (this.curveLogic === 'ByBubble') {
-              // Sort particles by angle around the bubble center (original approach)
-              const sortedParticles = visibleParticles.sort((a, b) => {
-                // Sort particles by angle around the center
-                const aPos = a.body.position;
-                const bPos = b.body.position;
-                const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
-                const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
-                return aAngle - bAngle;
-              });
+            // Calculate power factor for drawing
+            const drawPowerFactor = this.params.power / 3;
 
-              this.drawBezierCurve(sortedParticles, bubble);
-            } 
-            // Logic for drawing curves by direction (new approach)
-            else if (this.curveLogic === 'ByDirection') {
-              // Group particles by their direction based on dot product with positive x-axis
-              const directionGroups: {[key: string]: Particle[]} = {};
-              
-              // Define boundaries with more focus on the right-moving particles
-              // We'll have more fine-grained buckets for positive x velocities (0.5 to 1.0)
-              // and fewer buckets for other directions
-              const bucketBoundaries = [
-                -1.0, -0.5, 0, 0.5, 0.7, 0.8, 0.85, 0.9, 0.95, 0.98, 1.0
-              ];
-              
-              // Debug info for particle count
-              let totalParticlesProcessed = 0;
-              let particlesAssigned = 0;
-              
-              visibleParticles.forEach(particle => {
-                const pos = particle.body.position;
-                const vel = particle.body.velocity;
-                totalParticlesProcessed++;
-                
-                // Calculate dot product with positive x direction (1,0)
-                // Normalize to get value between -1 and 1
-                const magnitude = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-                if (magnitude < 0.001) { // Very small threshold for stationary
-                  // Put near-stationary particles in a special bucket
-                  const bucketKey = "stationary";
-                  if (!directionGroups[bucketKey]) {
-                    directionGroups[bucketKey] = [];
-                  }
-                  directionGroups[bucketKey].push(particle);
-                  particlesAssigned++;
-                  return;
-                }
-                
-                const dotProduct = vel.x / magnitude; // Dot product with (1,0) is just the x component
-                
-                // Find which bucket this particle belongs to
-                let bucketIndex = bucketBoundaries.length - 2; // Default to last bucket (0.95 to 1.0)
-                
-                for (let i = 0; i < bucketBoundaries.length - 1; i++) {
-                  if (dotProduct >= bucketBoundaries[i] && dotProduct < bucketBoundaries[i + 1]) {
-                    bucketIndex = i;
-                    break;
-                  }
-                }
-                
-                // Ensure all particles get a bucket even if they're exactly at a boundary
-                if (dotProduct === 1.0) {
-                  bucketIndex = bucketBoundaries.length - 2; // Last bucket
-                } else if (dotProduct === -1.0) {
-                  bucketIndex = 0; // First bucket
-                }
-                
-                // If we fall through somehow, use a fallback direction-based bucketing
-                if (bucketIndex < 0 || bucketIndex >= bucketBoundaries.length - 1) {
-                  // This should never happen, but as fallback:
-                  if (dotProduct > 0) {
-                    bucketIndex = Math.floor((dotProduct * 5) + 5); // 5-10 buckets for 0 to 1
-                  } else {
-                    bucketIndex = Math.floor((dotProduct * 5) + 5); // 0-5 buckets for -1 to 0
-                  }
-                }
-                
-                const bucketKey = bucketIndex.toString();
-                particlesAssigned++;
-                
-                if (!directionGroups[bucketKey]) {
-                  directionGroups[bucketKey] = [];
-                }
-                directionGroups[bucketKey].push(particle);
-              });
-              
-              // If in debug mode and this is the first frame of a cycle, log info
-              if (this.showParticles && (this.currentCycleNumber !== bubble.cycleNumber)) {
-                console.log(`Direction groups stats: Total=${totalParticlesProcessed}, Assigned=${particlesAssigned}`);
-                console.log(`Buckets: ${Object.keys(directionGroups).map(k => `${k}:${directionGroups[k].length}`).join(', ')}`);
+            // Draw a glow effect for the curve first
+            // Add motion blur effect by drawing multiple semi-transparent layers
+            for (let blur = 6; blur >= 0; blur--) {
+              this.ctx.beginPath();
+              const baseOpacity = bubble.energy / bubble.initialEnergy;
+              const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
+
+              // Only use shadow effect for higher power levels to save rendering time
+              if (this.params.power > 1) {
+                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
+                this.ctx.shadowBlur = 8 * drawPowerFactor;
+              } else {
+                this.ctx.shadowColor = 'transparent';
+                this.ctx.shadowBlur = 0;
               }
+              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
+
+              // Calculate thickness based on wave position and energy
+              const energyFactor = bubble.energy / bubble.initialEnergy;
               
-              // Special handling for horizontally moving particles
-              // Identify buckets with particles moving mainly horizontally (close to 1.0 dot product)
-              const horizontalBucketKeys = Object.keys(directionGroups).filter(key => {
-                // Consider numerical bucket keys that correspond to positive x movement
-                const numKey = parseInt(key);
-                return !isNaN(numKey) && numKey >= 4; // Corresponds to dot product >= 0.5
-              });
-              
-              // Log information about horizontal buckets if in debug mode
-              if (this.showParticles && (this.currentCycleNumber !== bubble.cycleNumber)) {
-                console.log(`Horizontal buckets: ${horizontalBucketKeys.join(', ')}`);
-                console.log(`Horizontal particles: ${horizontalBucketKeys.reduce((sum, key) => 
-                  sum + directionGroups[key].length, 0)}`);
+              // Get position index from positions array
+              const waveIndex = this.positions.indexOf(bubble.y);
+              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+
+              // Apply both factors to stroke width
+              this.ctx.lineWidth = energyFactor * thicknessFactor;
+
+              // Start at the first particle
+              const startPos = visibleParticles[0].body.position;
+              this.ctx.moveTo(startPos.x, startPos.y);
+
+              // Use cubic bezier curves to create a smooth path through all particles
+              for (let i = 0; i < visibleParticles.length - 1; i++) {
+                const p0 = visibleParticles[Math.max(0, i-1)].body.position;
+                const p1 = visibleParticles[i].body.position;
+                const p2 = visibleParticles[i+1].body.position;
+                const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
+
+                // Calculate control points for the current segment (p1 to p2)
+                // Use a portion of the vector from previous to next particle
+                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
+
+                // First control point - influenced by p0 and p2
+                const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+                const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+
+                // Second control point - influenced by p1 and p3
+                const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+                const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+
+                // Draw the cubic bezier curve
+                this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
               }
-              
-              // Collect all horizontal particles into a single array
-              const allHorizontalParticles: Particle[] = [];
-              // Manually push each particle from horizontal buckets
-              horizontalBucketKeys.forEach(key => {
-                const particles = directionGroups[key];
-                for (let i = 0; i < particles.length; i++) {
-                  allHorizontalParticles.push(particles[i]);
-                }
-              });
-              
-              // Draw all horizontal particles as one connected curve if there are enough of them
-              if (allHorizontalParticles.length > 3) {
-                // Sort horizontal particles by x position for smoother curves
-                const sortedHorizontalParticles = allHorizontalParticles.sort((a, b) =>
-                  a.body.position.x - b.body.position.x
-                );
-                
-                // Draw with enhanced thickness and glow
-                this.ctx.shadowColor = 'rgba(0, 180, 255, 0.6)';
-                this.ctx.shadowBlur = 8;
-                this.drawBezierCurve(sortedHorizontalParticles, bubble);
-              }
-              
-              // Draw other direction groups as separate curves
-              Object.entries(directionGroups).forEach(([bucketKey, particles]) => {
-                // Skip horizontal particles as they've already been processed
-                if (horizontalBucketKeys.includes(bucketKey)) return;
-                
-                if (particles.length > 2) {
-                  // For non-horizontal particles, sort by y-position
-                  const sortedParticles = particles.sort((a, b) => 
-                    a.body.position.y - b.body.position.y
-                  );
-                  
-                  // Draw the curve with normal settings
-                  this.ctx.shadowColor = 'rgba(0, 150, 220, 0.3)';
-                  this.ctx.shadowBlur = 4;
-                  this.drawBezierCurve(sortedParticles, bubble);
-                }
-              });
+
+              this.ctx.stroke();
             }
 
-            // Reset shadow effects after drawing all curves
+            // Reset shadow effects after drawing the curve
             this.ctx.shadowColor = 'transparent';
             this.ctx.shadowBlur = 0;
+
+            // Draw particles as bright neon pink circles only if showParticles is true
+            
           } else if (visibleParticles.length > 1) {
             // If we don't have enough points for a proper curve, fall back to lines
             this.ctx.beginPath();
@@ -857,31 +641,22 @@ export class CanvasController {
             }
 
             this.ctx.stroke();
-          }
 
-          // Draw particles as bright neon pink circles if showParticles is true
-          if (this.showParticles && visibleParticles.length > 0) {
-            visibleParticles.forEach(particle => {
-              const pos = particle.body.position;
-              const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              // Increased size for better visibility
-              const particleSize = 2 + (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.5;
+            // Also draw the particle dots in neon pink for consistency if showParticles is true
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+                const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
 
-              // Add a glow effect with shadow
-              this.ctx.shadowColor = 'rgba(255, 0, 255, 0.7)';
-              this.ctx.shadowBlur = 5;
-              
-              // Draw a filled circle with neon pink glow effect
-              this.ctx.beginPath();
-              this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-              const opacity = bubble.energy / bubble.initialEnergy;
-              this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.9})`; // Brighter neon pink
-              this.ctx.fill();
-              
-              // Reset shadow for other rendering
-              this.ctx.shadowColor = 'transparent';
-              this.ctx.shadowBlur = 0;
-            });
+                // Draw a filled circle with neon pink glow effect
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
+                this.ctx.fill();
+
+              });
+            }
           }
         }
       } 
@@ -960,4 +735,68 @@ export class CanvasController {
     // Update bubble energies
     this.bubbles.forEach(bubble => this.updateBubbleEnergy(bubble));
   }
-}
+
+  private drawFunnelWalls() {
+    if (this.funnelWalls.length !== 2) return;
+
+    const [topWall, bottomWall] = this.funnelWalls;
+      // Draw rectangular walls for straight walls
+      const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant for wall thickness
+
+      // Get wall positions
+      const topWallPos = topWall.position;
+      const bottomWallPos = bottomWall.position;
+
+      // Get wall dimensions
+      const topWallBounds = topWall.bounds;
+      const bottomWallBounds = bottomWall.bounds;
+      const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
+      const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
+
+      // Draw top wall at its current position with rotation
+      this.ctx.save();
+      this.ctx.translate(topWallPos.x, topWallPos.y);
+      this.ctx.rotate(topWall.angle); // Use the Matter.js body's current angle
+
+      this.ctx.beginPath();
+      this.ctx.rect(
+        -wallThickness/2,
+        -topWallHeight/2,
+        wallThickness,
+        topWallHeight
+      );
+
+      // Smoky white fill
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      this.ctx.fill();
+
+      // White border
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      this.ctx.lineWidth = 1;
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      // Draw bottom wall at its current position with rotation
+      this.ctx.save();
+      this.ctx.translate(bottomWallPos.x, bottomWallPos.y);
+      this.ctx.rotate(bottomWall.angle); // Use the Matter.js body's current angle
+
+      this.ctx.beginPath();
+      this.ctx.rect(
+        -wallThickness/2,
+        -bottomWallHeight/2,
+        wallThickness,
+        bottomWallHeight
+      );
+
+      // Smoky white fill
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      this.ctx.fill();
+
+      // White border
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      this.ctx.lineWidth = 1;
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+  }
