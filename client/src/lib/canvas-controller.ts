@@ -602,11 +602,15 @@ export class CanvasController {
               }
               this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
 
-              // Calculate line thickness based on wave position using our helper method
-              const thicknessFactor = bubble.energy / bubble.initialEnergy;
+              // Calculate thickness based on wave position and energy
+              const energyFactor = bubble.energy / bubble.initialEnergy;
+              
+              // Get position index from positions array
+              const waveIndex = this.positions.indexOf(bubble.y);
+              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
 
-              // Calculate the stroke width using our helper method
-              this.ctx.lineWidth = bubble.energy / bubble.initialEnergy;
+              // Apply both factors to stroke width
+              this.ctx.lineWidth = energyFactor * thicknessFactor;
 
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
