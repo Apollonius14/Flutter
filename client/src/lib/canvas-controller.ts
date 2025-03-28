@@ -731,9 +731,9 @@ export class CanvasController {
               // Draw each direction group as a separate Bézier curve
               Object.values(directionGroups).forEach(particles => {
                 if (particles.length > 2) {
-                  // Sort particles by x-position for a more natural curve
+                  // Sort particles by y-position (top to bottom)
                   const sortedParticles = particles.sort((a, b) => 
-                    a.body.position.x - b.body.position.x
+                    a.body.position.y - b.body.position.y
                   );
                   
                   // Draw the curve using our helper method
