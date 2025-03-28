@@ -96,23 +96,6 @@ export class CanvasController {
   }
 
   
-  private calculateStrokeWidth(
-    drawPowerFactor: number, 
-    thicknessFactor: number, 
-    cycleDiff: number, 
-    progress: number
-  ): number {
-    let cycleAgeFactor;
-
-    if (cycleDiff === 0) {
-      cycleAgeFactor = 1.0 - (0.5 * progress);
-    } else {
-      cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * CanvasController.OPACITY_DECAY_RATE));
-    }
-
-    return CanvasController.BASE_LINE_WIDTH * drawPowerFactor * thicknessFactor * cycleAgeFactor;
-  }
-
   /**
    * Calculate thickness factor based on wave position
    */
@@ -421,14 +404,6 @@ export class CanvasController {
     // Define width and height variables that can be used throughout this method
     const width = this.canvas.width;
     const height = this.canvas.height
-    if (this.funnelEnabled) {
-      // Use multiple smaller substeps for higher accuracy physics (especially for collisions)
-      const numSubSteps = 6; 
-      const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
-      for (let i = 0; i < numSubSteps; i++) {
-        Matter.Engine.update(this.engine, subStepTime);
-      }
-    }
 
     // Apply RTL transformation if enabled
     this.ctx.save();
@@ -742,8 +717,18 @@ export class CanvasController {
   }
 
   private updatePhysics(timestamp: number) {
-    // Update physics engine
-    Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
+    // Update physics engine with appropriate resolution
+    if (this.funnelEnabled) {
+      // Use multiple smaller substeps for higher accuracy physics (especially for collisions)
+      const numSubSteps = 6; 
+      const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
+      for (let i = 0; i < numSubSteps; i++) {
+        Matter.Engine.update(this.engine, subStepTime);
+      }
+    } else {
+      // Standard physics update when funnel is disabled
+      Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
+    }
 
     // Update bubble energies
     this.bubbles.forEach(bubble => this.updateBubbleEnergy(bubble));
