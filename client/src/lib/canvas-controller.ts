@@ -434,14 +434,11 @@ export class CanvasController {
   private drawFrame(progress: number) {
     // Define width and height variables that can be used throughout this method
     const width = this.canvas.width;
-    const height = this.canvas.height;
-    // Calculate global opacity factor based on cycle progress
-    // This will be used for all Bezier curves to ensure they all fade together
-    const globalOpacityFactor = (1 - (0.05 * progress));
+    const height = this.canvas.height
     if (this.funnelEnabled) {
       // Use multiple smaller substeps for higher accuracy physics (especially for collisions)
       const numSubSteps = 6; 
-      const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps; // Split our timestep for better collision handling
+      const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
       for (let i = 0; i < numSubSteps; i++) {
         Matter.Engine.update(this.engine, subStepTime);
       }
@@ -518,14 +515,11 @@ export class CanvasController {
       this.bubbles.push(...newBubbles);
     }
 
-    // No more regular time-based spawning for white particles
-    // We're now only spawning particles at the activation line
-
     // Update previous position for next frame
     this.previousSweepLineX = timeX;
 
     // Limit physics calculations to on-screen elements
-    const bufferMargin = 50; // Extra margin around screen to prevent abrupt changes
+    const bufferMargin = 20; // Extra margin around screen to prevent abrupt changes
     const screenBounds = {
       min: { x: -bufferMargin, y: -bufferMargin },
       max: { x: this.canvas.width + bufferMargin, y: this.canvas.height + bufferMargin }
@@ -534,7 +528,6 @@ export class CanvasController {
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
       //bubble.age++;
-
 
       // Optimize physics by only processing particles within or near the canvas
       if (bubble.particles.length > 0) {
@@ -572,13 +565,7 @@ export class CanvasController {
       }
 
       if (this.funnelEnabled && bubble.particles.length > 0) {
-        // Calculate opacity based on both cycle progress and age difference between current and bubble cycle
-        // This ensures bubbles from older cycles fade out nicely
-
-        // Age factor: newer cycles are more visible than older ones
-        // For current cycle (cycleNumber === this.currentCycleNumber): factor = 1.0
-        // For previous cycle (cycleNumber === this.currentCycleNumber - 1): factor = 0.5
-        // For older cycles: factor = 0
+        
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
 
         // Use our helper method to check if we should render this particle
