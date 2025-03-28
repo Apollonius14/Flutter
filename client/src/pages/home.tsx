@@ -3,7 +3,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Circle, Languages, Loader } from "lucide-react";
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Circle, 
+  Languages, 
+  Loader, 
+  GitBranch, 
+  GitBranchPlus 
+} from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
 
 const translations = {
@@ -17,7 +25,10 @@ const translations = {
     loading: "Loading Physics Engine...",
     ltr: "Left to Right",
     rtl: "Right to Left",
-    particles: "Particles"
+    particles: "Particles",
+    curveLogic: "Curve Logic",
+    byBubble: "By Bubble",
+    byDirection: "By Direction"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -29,7 +40,10 @@ const translations = {
     loading: "جاري تحميل محرك الفيزياء...",
     ltr: "من اليسار إلى اليمين",
     rtl: "من اليمين إلى اليسار",
-    particles: "الجسيمات"
+    particles: "الجسيمات",
+    curveLogic: "منطق المنحنى",
+    byBubble: "حسب الفقاعة",
+    byDirection: "حسب الاتجاه"
   }
 };
 
@@ -41,6 +55,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRTL, setIsRTL] = useState(false);
   const [showParticles, setShowParticles] = useState(true);
+  const [curveLogic, setCurveLogic] = useState<'ByBubble' | 'ByDirection'>('ByBubble');
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
@@ -162,11 +177,17 @@ export default function Home() {
     if (!controller) return;
     controller.setShowParticles(showParticles);
   }, [showParticles, controller]);
+  
+  useEffect(() => {
+    if (!controller) return;
+    controller.setCurveLogic(curveLogic);
+  }, [curveLogic, controller]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
   const toggleShowParticles = () => setShowParticles(prev => !prev);
+  const toggleCurveLogic = () => setCurveLogic(logic => logic === 'ByBubble' ? 'ByDirection' : 'ByBubble');
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -235,6 +256,35 @@ export default function Home() {
                 />
               </div>
               
+              {/* Curve Logic control with label */}
+              <div className="flex items-center gap-4">
+                <Label className={`text-gray-200 w-1/5 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
+                  {t.curveLogic}
+                </Label>
+                <div className="flex-1 flex items-center">
+                  <div className="flex gap-2 border border-gray-700 rounded-md p-1">
+                    <Button
+                      size="sm"
+                      variant={curveLogic === 'ByBubble' ? "default" : "outline"}
+                      onClick={() => setCurveLogic('ByBubble')}
+                      className={`flex-1 ${curveLogic === 'ByBubble' ? 'bg-green-600 text-white' : 'text-gray-400'}`}
+                    >
+                      <GitBranch className="h-4 w-4 mr-1" />
+                      {t.byBubble}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={curveLogic === 'ByDirection' ? "default" : "outline"}
+                      onClick={() => setCurveLogic('ByDirection')}
+                      className={`flex-1 ${curveLogic === 'ByDirection' ? 'bg-green-600 text-white' : 'text-gray-400'}`}
+                    >
+                      <GitBranchPlus className="h-4 w-4 mr-1" />
+                      {t.byDirection}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               {/* Direction and particles controls in a row */}
               <div className="flex justify-center items-center gap-4">
                 <Button
