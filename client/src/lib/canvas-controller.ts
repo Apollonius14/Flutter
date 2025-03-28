@@ -326,17 +326,6 @@ export class CanvasController {
         particles.push(particle);
         }
 
-      // We want particles to decay within 24 cycles
-      // Using our constant for cycle period
-      const cycleTime = CanvasController.CYCLE_PERIOD_MS;
-      const maxCycles = 24; // Doubled from 12 to 24
-      const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
-
-      // Scale maxAge based on power, with twice the duration
-      // Use a diminishing returns formula for power scaling to prevent excessive lifetimes
-      const powerScaleFactor = 0.5 + (0.5 * Math.sqrt(particlePowerFactor / 3));
-      const maxAge = baseMaxAge * powerScaleFactor;
-
       bubbles.push({
         x,
         y,
