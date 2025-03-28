@@ -287,7 +287,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 1.2; 
+        const baseSpeed = 1.5; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
         const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
