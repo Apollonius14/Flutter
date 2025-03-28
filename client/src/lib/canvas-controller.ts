@@ -28,7 +28,6 @@ export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.44; // Cycle duration in milliseconds
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 12; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
-
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   private static readonly DEFAULT_GAP_SIZE: number = 0.4; // Default gap size (fraction of canvas height)
