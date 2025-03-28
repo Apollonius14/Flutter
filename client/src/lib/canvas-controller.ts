@@ -591,11 +591,8 @@ export class CanvasController {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
 
-        // Use our helper method to calculate the lifecycle factor
-        const cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
-
-        // Combine with global opacity factor from current cycle progress
-        let opacity = globalOpacityFactor * cycleAgeFactor * bubble.energy / bubble.initialEnergy;
+        // Use only energy for opacity
+        let opacity = bubble.energy / bubble.initialEnergy;
 
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
