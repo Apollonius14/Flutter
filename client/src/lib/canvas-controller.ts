@@ -608,7 +608,7 @@ export class CanvasController {
         const cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
         
         // Combine with global opacity factor from current cycle progress
-        let opacity = globalOpacityFactor * cycleAgeFactor * 0.7;
+        let opacity = globalOpacityFactor * cycleAgeFactor;
         
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
@@ -645,7 +645,7 @@ export class CanvasController {
               
               // Only use shadow effect for higher power levels to save rendering time
               if (this.params.power > 3) {
-                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.3)';
+                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
                 this.ctx.shadowBlur = 8 * drawPowerFactor; // Reduced from 8 to 5
               } else {
                 this.ctx.shadowColor = 'transparent';
@@ -659,7 +659,7 @@ export class CanvasController {
               
               // Calculate the stroke width using our helper method
               const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              this.ctx.lineWidth = this.calculateStrokeWidth(drawPowerFactor, thicknessFactor, cycleDiff, progress);
+              this.ctx.lineWidth = this.calculateStrokeWidth(drawPowerFactor, thicknessFactor, cycleDiff, progress)*2;
               
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
@@ -827,51 +827,6 @@ export class CanvasController {
     if (this.funnelWalls.length !== 2) return;
     
     const [topWall, bottomWall] = this.funnelWalls;
-    
-    // Draw wall shapes based on the actual physics bodies
-    const useCurvedWalls = this.wallCurvature > 0;
-    
-    // Get wall positions and vertices from the actual physics bodies
-    if (useCurvedWalls) {
-      // Draw curved walls using the vertices from Matter.js bodies
-      if (topWall.vertices && topWall.vertices.length > 0) {
-        // Draw top wall
-        this.ctx.beginPath();
-        this.ctx.moveTo(topWall.vertices[0].x, topWall.vertices[0].y);
-        for (let i = 1; i < topWall.vertices.length; i++) {
-          this.ctx.lineTo(topWall.vertices[i].x, topWall.vertices[i].y);
-        }
-        this.ctx.closePath();
-        
-        // Smoky white fill
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        this.ctx.fill();
-        
-        // White border
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        this.ctx.lineWidth = 1;
-        this.ctx.stroke();
-      }
-      
-      if (bottomWall.vertices && bottomWall.vertices.length > 0) {
-        // Draw bottom wall
-        this.ctx.beginPath();
-        this.ctx.moveTo(bottomWall.vertices[0].x, bottomWall.vertices[0].y);
-        for (let i = 1; i < bottomWall.vertices.length; i++) {
-          this.ctx.lineTo(bottomWall.vertices[i].x, bottomWall.vertices[i].y);
-        }
-        this.ctx.closePath();
-        
-        // Smoky white fill
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        this.ctx.fill();
-        
-        // White border
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        this.ctx.lineWidth = 1;
-        this.ctx.stroke();
-      }
-    } else {
       // Draw rectangular walls for straight walls
       const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant for wall thickness
       
@@ -932,4 +887,3 @@ export class CanvasController {
       this.ctx.restore();
     }
   }
-}
