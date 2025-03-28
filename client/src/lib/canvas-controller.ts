@@ -706,6 +706,12 @@ export class CanvasController {
               // Group particles by their direction based on dot product with positive x-axis
               const directionGroups: {[key: string]: Particle[]} = {};
               
+              // Define non-linear bucket boundaries for horizontal motion emphasis
+              // More buckets near horizontal (±1) and fewer in the middle (near 0)
+              const bucketBoundaries = [
+                -1.0, -0.95, -0.85, -0.70, -0.5, -0.2, 0.2, 0.5, 0.70, 0.85, 0.95, 1.0
+              ];
+              
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
                 const vel = particle.body.velocity;
@@ -717,9 +723,20 @@ export class CanvasController {
                 
                 const dotProduct = vel.x / magnitude; // Dot product with (1,0) is just the x component
                 
-                // Group into 8 direction buckets (-1.0 to 1.0 range divided into 8 segments)
-                const bucketSize = 2 / 8; // 8 buckets across -1 to 1 range
-                const bucketIndex = Math.floor((dotProduct + 1) / bucketSize);
+                // Find which bucket this particle belongs to
+                let bucketIndex = 0;
+                for (let i = 0; i < bucketBoundaries.length - 1; i++) {
+                  if (dotProduct >= bucketBoundaries[i] && dotProduct < bucketBoundaries[i + 1]) {
+                    bucketIndex = i;
+                    break;
+                  }
+                }
+                
+                // Handle edge case for exactly 1.0
+                if (dotProduct === 1.0) {
+                  bucketIndex = bucketBoundaries.length - 2;
+                }
+                
                 const bucketKey = bucketIndex.toString();
                 
                 if (!directionGroups[bucketKey]) {
