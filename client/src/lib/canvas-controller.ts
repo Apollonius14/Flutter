@@ -99,20 +99,7 @@ export class CanvasController {
     }, 0);
   }
 
-  private calculateParticleLifecycleFactor(
-    cycleDiff: number, 
-    progress: number = 0
-  ): number {
-    if (cycleDiff > CanvasController.PARTICLE_LIFETIME_CYCLES) {
-      return 0;
-    }
-
-    if (cycleDiff === 0) {
-      return 1.0 - (0.5 * progress);
-    }
-
-    return Math.max(0.1, 1.0 - (cycleDiff * CanvasController.OPACITY_DECAY_RATE));
-  }
+  
 
   /**
    * Determine if a particle should be rendered based on its age
