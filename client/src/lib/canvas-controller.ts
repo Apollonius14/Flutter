@@ -186,6 +186,7 @@ export class CanvasController {
       friction: 0.0,    // No friction to prevent energy loss during sliding contacts
       frictionStatic: 0.0, // No static friction 
       frictionAir: 0,   // No air friction
+      slop: 0.02,
       // Using Matter.js default slop value
       collisionFilter: {
         category: 0x0002,
@@ -269,7 +270,7 @@ export class CanvasController {
 
 
     this.positions.forEach(y => {
-      // Always create active blue particles
+      
       const intensity = 2.0;
 
       // Generate a unique group ID for this ring of particles
