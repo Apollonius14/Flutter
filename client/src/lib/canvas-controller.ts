@@ -34,9 +34,8 @@ export class CanvasController {
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   private static readonly DEFAULT_GAP_SIZE: number = 0.4; // Default gap size (fraction of canvas height)
   private static readonly WALL_THICKNESS: number = 12; // Thickness of the funnel walls
-
   // Particle appearance constants
-  private static readonly OPACITY_DECAY_RATE: number = 0.1; // How much opacity decreases per cycle
+  private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
   private static readonly PARTICLES_PER_RING: number = 17; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.5; // Physics body radius for particles
@@ -711,30 +710,8 @@ export class CanvasController {
             this.ctx.shadowColor = 'transparent';
             this.ctx.shadowBlur = 0;
 
-
-
             // Draw particles as bright neon pink circles only if showParticles is true
-            if (this.showParticles) {
-              visibleParticles.forEach(particle => {
-                const pos = particle.body.position;
-                // Calculate particle size with growth factor
-                const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4);
-
-                // Draw a filled circle with neon pink glow effect
-                this.ctx.beginPath();
-                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-                const baseOpacity = bubble.energy / bubble.initialEnergy;
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${baseOpacity * 0.6})`; // Neon pink with energy-dependent opacity
-                this.ctx.fill();
-
-                // Add a bright white center to each particle for emphasis
-                this.ctx.beginPath();
-                this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity * 0.8})`; // Bright white with energy-dependent opacity
-                this.ctx.fill();
-              });
-            }
+            
           } else if (visibleParticles.length > 1) {
             // If we don't have enough points for a proper curve, fall back to lines
             this.ctx.beginPath();
@@ -757,25 +734,20 @@ export class CanvasController {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
                 const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4);
+                const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
 
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink with energy-dependent opacity
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
                 this.ctx.fill();
 
-                // Add a bright white center
-                this.ctx.beginPath();
-                this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.8})`; // Bright white with energy-dependent opacity
-                this.ctx.fill();
               });
             }
           }
         }
       } 
-      // We no longer draw non-particle bubbles at all
+
 
       if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
         if (bubble.particles.length > 0) {
@@ -794,22 +766,20 @@ export class CanvasController {
 
   private animate() {
     if (!this.startTime) return;
+
+    // Calculate time elapsed since last frame
     const elapsed = performance.now() - this.startTime;
-    // Use our constant for cycle period
     const cyclePeriod = CanvasController.CYCLE_PERIOD_MS;
     const currentCycleTime = Math.floor(elapsed / cyclePeriod);
 
-    // Check if we've started a new cycle
+    // Incrament Cycles
     if (currentCycleTime > this.lastCycleTime) {
       this.lastCycleTime = currentCycleTime;
-      // Increment the cycle number
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
 
-      // Remove bubbles and particles that are older than our lifetime threshold
-      //      // This ensures particles live through multiple cycles
+      // Kill bubbles and their particles if they're too old
       this.bubbles = this.bubbles.filter(bubble => {
-        // Use our helper method to determine if bubbles should be kept
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         return this.shouldRenderParticle(cycleDiff);
       });
@@ -834,11 +804,7 @@ export class CanvasController {
 
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
-
-    // Update physics engine with our defined time step
-    // Using a shorter time step for more accurate simulation
     this.updatePhysics(elapsed);
-
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
@@ -915,4 +881,3 @@ export class CanvasController {
       this.ctx.restore();
     }
   }
-}
