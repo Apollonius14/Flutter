@@ -98,6 +98,7 @@ export class CanvasController {
   
   /**
    * Calculate thickness factor based on wave position
+   * Enhanced to make differences between waves more pronounced
    */
   private calculateThicknessFactor(waveIndex: number): number {
     const centralPositions = [4, 5];
@@ -106,13 +107,14 @@ export class CanvasController {
     const outerPositions = [1, 8];
     const farthestPositions = [0, 9];
 
-    if (centralPositions.includes(waveIndex)) return 1.8;
-    if (innerPositions.includes(waveIndex)) return 1.6;
-    if (middlePositions.includes(waveIndex)) return 1.3;
-    if (outerPositions.includes(waveIndex)) return 1.05;
-    if (farthestPositions.includes(waveIndex)) return 1.0;
+    // Increased thickness factors for more visual distinction between waves
+    if (centralPositions.includes(waveIndex)) return 3.0;    // Was 1.8
+    if (innerPositions.includes(waveIndex)) return 2.4;      // Was 1.6
+    if (middlePositions.includes(waveIndex)) return 1.8;     // Was 1.3
+    if (outerPositions.includes(waveIndex)) return 1.2;      // Was 1.05
+    if (farthestPositions.includes(waveIndex)) return 0.8;   // Was 1.0
 
-    return 1.0;
+    return 0.8;
   }
 
   /**
