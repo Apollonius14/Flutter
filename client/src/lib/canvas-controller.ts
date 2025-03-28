@@ -8,7 +8,6 @@ interface AnimationParams {
 interface Particle {
   body: Matter.Body;
   intensity: number;
-  age: number;
   groupId: number;
   cycleNumber: number;
 }
@@ -18,8 +17,6 @@ interface Bubble {
   y: number;
   radius: number;
   initialRadius: number;
-  age: number;
-  maxAge: number;
   intensity: number;
   particles: Particle[];
   groupId: number;
@@ -31,19 +28,19 @@ export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.44; // Cycle duration in milliseconds
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 12; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
-  
+
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   private static readonly DEFAULT_GAP_SIZE: number = 0.4; // Default gap size (fraction of canvas height)
   private static readonly WALL_THICKNESS: number = 12; // Thickness of the funnel walls
-  
+
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.1; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
   private static readonly PARTICLES_PER_RING: number = 17; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.5; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
-  
+
   // State variables
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -76,7 +73,7 @@ export class CanvasController {
     this.canvas = canvas;
     this.canvasWidth = canvas.width;
     this.canvasHeight = canvas.height;
-    
+
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
@@ -92,21 +89,21 @@ export class CanvasController {
       power: 12,
       frequency: 0.3
     };
-    
+
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     this.updateSpawnInterval();
     this.canvas.style.backgroundColor = '#1a1a1a';
-    
+
     setTimeout(() => {
       this.setupFunnelWalls();
     }, 0);
   }
-  
+
   private updateSpawnInterval() {
     const baseInterval = 4000 / (1.5 * 1.2 * 1.9 * 1.2);
     this.spawnInterval = baseInterval;
   }
-  
+
   /**
    * Calculate the lifecycle factor for a particle (0-1)
    */
@@ -117,21 +114,21 @@ export class CanvasController {
     if (cycleDiff > CanvasController.PARTICLE_LIFETIME_CYCLES) {
       return 0;
     }
-    
+
     if (cycleDiff === 0) {
       return 1.0 - (0.5 * progress);
     }
-    
+
     return Math.max(0.1, 1.0 - (cycleDiff * CanvasController.OPACITY_DECAY_RATE));
   }
-  
+
   /**
    * Determine if a particle should be rendered based on its age
    */
   private shouldRenderParticle(cycleDiff: number): boolean {
     return cycleDiff <= CanvasController.PARTICLE_LIFETIME_CYCLES;
   }
-  
+
   /**
    * Calculate the appropriate stroke width for a particle
    */
@@ -142,16 +139,16 @@ export class CanvasController {
     progress: number
   ): number {
     let cycleAgeFactor;
-    
+
     if (cycleDiff === 0) {
       cycleAgeFactor = 1.0 - (0.5 * progress);
     } else {
       cycleAgeFactor = Math.max(0.1, 0.9 - ((cycleDiff - 1) * CanvasController.OPACITY_DECAY_RATE));
     }
-    
+
     return CanvasController.BASE_LINE_WIDTH * drawPowerFactor * thicknessFactor * cycleAgeFactor;
   }
-  
+
   /**
    * Calculate thickness factor based on wave position
    */
@@ -161,16 +158,16 @@ export class CanvasController {
     const middlePositions = [2, 7];
     const outerPositions = [1, 8];
     const farthestPositions = [0, 9];
-    
+
     if (centralPositions.includes(waveIndex)) return 1.8;
     if (innerPositions.includes(waveIndex)) return 1.6;
     if (middlePositions.includes(waveIndex)) return 1.3;
     if (outerPositions.includes(waveIndex)) return 1.05;
     if (farthestPositions.includes(waveIndex)) return 1.0;
-    
+
     return 1.0;
   }
-  
+
   /**
    * Generate particle angles for a wave ring with a forward-focused distribution
    */
@@ -178,27 +175,27 @@ export class CanvasController {
     const particleAngles: number[] = [];
     const baseAngles: number[] = [];
     const halfCount = Math.floor(particleCount / 2);
-    
+
     // Add center particle at 0°
     baseAngles.push(0);
-    
+
     // Add symmetric pairs of particles
     for (let i = 1; i <= halfCount; i++) {
       const angle = (i / halfCount) * Math.PI;
       baseAngles.push(angle);
       baseAngles.push(-angle);
     }
-    
+
     // Apply compression to focus particles toward the front
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
       const transformedAngle = angle * (1 - 0.5 * compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
-      
+
       particleAngles.push(normalizedAngle);
     }
-    
+
     return particleAngles.sort((a, b) => a - b);
   }
 
@@ -245,7 +242,7 @@ export class CanvasController {
       wallLength,
       wallOptions
     );
-    
+
     const bottomWall = Matter.Bodies.rectangle(
       midX,
       centerY + gapSize/2 + wallLength/2,
@@ -257,7 +254,7 @@ export class CanvasController {
     // Apply rotation to the walls directly
     Matter.Body.setAngle(topWall, this.topWallAngle);
     Matter.Body.setAngle(bottomWall, this.bottomWallAngle);
-    
+
     // Store walls for reference
     this.funnelWalls = [topWall, bottomWall];
 
@@ -275,7 +272,7 @@ export class CanvasController {
     const numPositions = 9; 
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
     const halfSpacing = baseSpacing / 2;
-    
+
     // Add positions from top to bottom, offset from center
     positions.push(center - halfSpacing - baseSpacing * 4);
     positions.push(center - halfSpacing - baseSpacing * 3);
@@ -287,15 +284,15 @@ export class CanvasController {
     positions.push(center + halfSpacing + baseSpacing * 2);
     positions.push(center + halfSpacing + baseSpacing * 3);
     positions.push(center + halfSpacing + baseSpacing * 4);
-    
+
     return positions;
   }
-  
+
   private generateBubbles(x: number): Bubble[] {
     const { power } = this.params;
     const height = this.canvas.height;
     const width = this.canvas.width;
-    
+
     const bubbles: Bubble[] = [];
     const fixedRadius = CanvasController.FIXED_BUBBLE_RADIUS;
 
@@ -305,25 +302,25 @@ export class CanvasController {
     // Always use the activation line position for spawning particles
     // This ensures particles only appear at the activation line
     x = this.activationLineX;
-    
-    
+
+
     this.positions.forEach(y => {
       // Always create active blue particles
       const intensity = 2.0;
 
       // Generate a unique group ID for this ring of particles
       const groupId = this.currentGroupId++;
-      
+
       const particles: Particle[] = [];
       // Use our constant for the number of particles per ring
       const numParticlesInRing = CanvasController.PARTICLES_PER_RING;
-      
+
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
-      
+
       // Generate the particle angles using our helper method
       const particleAngles = this.generateParticleAngles(numParticlesInRing);
-      
+
       // Create particles at the calculated angles
       for (const angle of particleAngles) {
         const particleX = x + Math.cos(angle) * fixedRadius;
@@ -344,9 +341,9 @@ export class CanvasController {
 
         const baseSpeed = 2; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
-        
+
         const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
-        
+
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
           x: Math.cos(angle) * directedSpeed,
@@ -358,7 +355,6 @@ export class CanvasController {
         const particle: Particle = {
           body,
           intensity: intensity,
-          age: 0,
           groupId: groupId,  // Assign the same group ID to all particles in this ring
           cycleNumber: this.currentCycleNumber  // Assign current cycle number
         };
@@ -370,7 +366,7 @@ export class CanvasController {
       const cycleTime = CanvasController.CYCLE_PERIOD_MS;
       const maxCycles = 24; // Doubled from 12 to 24
       const baseMaxAge = cycleTime * maxCycles / 16.67; // Convert ms to frames (assuming 60fps)
-      
+
       // Scale maxAge based on power, with twice the duration
       // Use a diminishing returns formula for power scaling to prevent excessive lifetimes
       const powerScaleFactor = 0.5 + (0.5 * Math.sqrt(particlePowerFactor / 3));
@@ -381,8 +377,6 @@ export class CanvasController {
         y,
         radius: fixedRadius,
         initialRadius: fixedRadius,
-        age: 0,
-        maxAge,
         intensity: intensity,
         particles,
         groupId: groupId,  // Assign the same group ID to the bubble
@@ -397,7 +391,7 @@ export class CanvasController {
     this.funnelEnabled = enabled;
     this.setupFunnelWalls();
   }
-  
+
   setWallCurvature(angle: number) {
     // Convert 0-90 angle to 0-1 normalized value for internal use
     this.wallCurvature = angle / 90;
@@ -405,20 +399,20 @@ export class CanvasController {
       this.setupFunnelWalls();
     }
   }
-  
+
   setGapSize(size: number) {
     this.gapSize = size;
     if (this.funnelEnabled) {
       this.setupFunnelWalls();
     }
   }
-  
+
   setRTL(enabled: boolean) {
     this.isRTL = enabled;
     // No need to modify physics - we'll handle this in the render phase
     this.drawFrame(0); // Force redraw to see changes immediately
   }
-  
+
   setShowParticles(show: boolean) {
     this.showParticles = show;
     this.drawFrame(0); // Force redraw to see changes immediately
@@ -464,7 +458,7 @@ export class CanvasController {
         Matter.Engine.update(this.engine, subStepTime);
       }
     }
-    
+
     // Apply RTL transformation if enabled
     this.ctx.save();
     if (this.isRTL) {
@@ -472,11 +466,11 @@ export class CanvasController {
       this.ctx.scale(-1, 1);
       this.ctx.translate(-width, 0);
     }
-    
+
     // Reduce motion blur effect to make particles stay visible longer
     this.ctx.fillStyle = 'rgba(26, 26, 26, 0.03)'; // Reduced from 0.06 to 0.03 (another 50% reduction)
     this.ctx.fillRect(0, 0, width, height);
-    
+
     // Draw funnel walls with smoky white fill
     if (this.funnelEnabled) {
       this.drawFunnelWalls();
@@ -492,7 +486,7 @@ export class CanvasController {
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
     this.ctx.lineWidth = 6;
     this.ctx.stroke();
-    
+
     // Second blur layer, closer to main line
     this.ctx.beginPath();
     this.ctx.moveTo(timeX - 1.5, 0);
@@ -500,7 +494,7 @@ export class CanvasController {
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
     this.ctx.lineWidth = 4;
     this.ctx.stroke();
-    
+
     // Main sweep line - thicker and brighter
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
@@ -517,7 +511,7 @@ export class CanvasController {
     this.ctx.strokeStyle = "rgba(0, 220, 255, 0.03)";
     this.ctx.lineWidth = 4;
     this.ctx.stroke();
-    
+
     // Main activation line
     this.ctx.beginPath();
     this.ctx.moveTo(this.activationLineX, 0);
@@ -529,16 +523,16 @@ export class CanvasController {
     // Check if the sweep line has crossed the activation line (left to right only)
     const hasPassedActivationLine = 
       (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX);
-    
+
     // Activation line spawning - create blue particles when sweep line crosses activation line
     if (hasPassedActivationLine) {
       const newBubbles = this.generateBubbles(this.activationLineX);
       this.bubbles.push(...newBubbles);
     }
-    
+
     // No more regular time-based spawning for white particles
     // We're now only spawning particles at the activation line
-    
+
     // Update previous position for next frame
     this.previousSweepLineX = timeX;
 
@@ -548,10 +542,10 @@ export class CanvasController {
       min: { x: -bufferMargin, y: -bufferMargin },
       max: { x: this.canvas.width + bufferMargin, y: this.canvas.height + bufferMargin }
     };
-    
+
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
-      bubble.age++;
+      //bubble.age++;
 
 
       // Optimize physics by only processing particles within or near the canvas
@@ -563,7 +557,7 @@ export class CanvasController {
             pos.x <= screenBounds.max.x && 
             pos.y >= screenBounds.min.y && 
             pos.y <= screenBounds.max.y;
-          
+
           // Only process physics for on-screen particles
           if (isOnScreen) {
             // Enable collisions for on-screen particles
@@ -592,29 +586,29 @@ export class CanvasController {
       if (this.funnelEnabled && bubble.particles.length > 0) {
         // Calculate opacity based on both cycle progress and age difference between current and bubble cycle
         // This ensures bubbles from older cycles fade out nicely
-        
+
         // Age factor: newer cycles are more visible than older ones
         // For current cycle (cycleNumber === this.currentCycleNumber): factor = 1.0
         // For previous cycle (cycleNumber === this.currentCycleNumber - 1): factor = 0.5
         // For older cycles: factor = 0
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-        
+
         // Use our helper method to check if we should render this particle
         if (!this.shouldRenderParticle(cycleDiff)) {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
-        
+
         // Use our helper method to calculate the lifecycle factor
         const cycleAgeFactor = this.calculateParticleLifecycleFactor(cycleDiff, progress);
-        
+
         // Combine with global opacity factor from current cycle progress
         let opacity = globalOpacityFactor * cycleAgeFactor;
-        
+
         // We no longer draw inactive particles - they're completely invisible
         // Only blue particles at the activation line are visible
         // For active particles, they'll be drawn with the bezier curves below
         // We skip drawing them here to avoid double-rendering
-        
+
         // Draw all particles with bezier curves, not just those near the activation line
         if (bubble.particles.length > 1) {
           const visibleParticles = bubble.particles
@@ -631,18 +625,18 @@ export class CanvasController {
               const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
               return aAngle - bAngle;
             });
-          
+
           if (visibleParticles.length > 2) {
             // Calculate power factor for drawing
             const drawPowerFactor = this.params.power / 3;
-            
+
             // Draw a glow effect for the curve first
             // Add motion blur effect by drawing multiple semi-transparent layers
             // Added a fifth Bezier curve (blur level 4) for more fluid feel
             for (let blur = 6; blur >= 0; blur--) {
               this.ctx.beginPath();
               const currentOpacity = (opacity * 0.9) * (1 - blur * 0.2); // Fade out each blur layer
-              
+
               // Only use shadow effect for higher power levels to save rendering time
               if (this.params.power > 3) {
                 this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
@@ -652,64 +646,65 @@ export class CanvasController {
                 this.ctx.shadowBlur = 0;
               }
               this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
-              
+
               // Calculate line thickness based on wave position using our helper method
               const waveIndex = Math.floor(this.positions.indexOf(bubble.y));
               const thicknessFactor = this.calculateThicknessFactor(waveIndex);
-              
+
               // Calculate the stroke width using our helper method
               const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
               this.ctx.lineWidth = this.calculateStrokeWidth(drawPowerFactor, thicknessFactor, cycleDiff, progress)*2;
-              
+
               // Start at the first particle
               const startPos = visibleParticles[0].body.position;
               this.ctx.moveTo(startPos.x, startPos.y);
-              
+
               // Use cubic bezier curves to create a smooth path through all particles
               for (let i = 0; i < visibleParticles.length - 1; i++) {
                 const p0 = visibleParticles[Math.max(0, i-1)].body.position;
                 const p1 = visibleParticles[i].body.position;
                 const p2 = visibleParticles[i+1].body.position;
                 const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
-                
+
                 // Calculate control points for the current segment (p1 to p2)
                 // Use a portion of the vector from previous to next particle
                 const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
-                
+
                 // First control point - influenced by p0 and p2
                 const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
                 const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-                
+
                 // Second control point - influenced by p1 and p3
                 const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
                 const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-                
+
                 // Draw the cubic bezier curve
                 this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
               }
-              
+
               this.ctx.stroke();
             }
-            
+
             // Reset shadow effects after drawing the curve
             this.ctx.shadowColor = 'transparent';
             this.ctx.shadowBlur = 0;
-            
-            
-            
+
+
+
             // Draw particles as bright neon pink circles only if showParticles is true
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
                 // Calculate particle size with growth factor
-                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
-                
+                const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4);
+
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
                 this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
                 this.ctx.fill();
-                
+
                 // Add a bright white center to each particle for emphasis
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
@@ -723,28 +718,29 @@ export class CanvasController {
             const lineOpacity = opacity * 0.4;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
             this.ctx.lineWidth = 0.8;
-            
+
             for (let i = 0; i < visibleParticles.length - 1; i++) {
               const pos1 = visibleParticles[i].body.position;
               const pos2 = visibleParticles[i + 1].body.position;
               this.ctx.moveTo(pos1.x, pos1.y);
               this.ctx.lineTo(pos2.x, pos2.y);
             }
-            
+
             this.ctx.stroke();
-            
+
             // Also draw the particle dots in neon pink for consistency if showParticles is true
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (particle.age / bubble.maxAge) * 0.4);
-                
+                const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+                const particleSize = 1.5 * 1.2 * 1.2 * (1 + (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4);
+
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
                 this.ctx.fillStyle = 'rgba(255, 50, 200, 0.6)'; // Neon pink
                 this.ctx.fill();
-                
+
                 // Add a bright white center
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.3, 0, Math.PI * 2);
@@ -757,7 +753,7 @@ export class CanvasController {
       } 
       // We no longer draw non-particle bubbles at all
 
-      if (bubble.age >= bubble.maxAge) {
+      if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
         if (bubble.particles.length > 0) {
           bubble.particles.forEach(particle => {
             Matter.Composite.remove(this.engine.world, particle.body);
@@ -767,7 +763,7 @@ export class CanvasController {
       }
       return true;
     });
-    
+
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
   }
@@ -778,73 +774,73 @@ export class CanvasController {
     // Use our constant for cycle period
     const cyclePeriod = CanvasController.CYCLE_PERIOD_MS;
     const currentCycleTime = Math.floor(elapsed / cyclePeriod);
-    
+
     // Check if we've started a new cycle
     if (currentCycleTime > this.lastCycleTime) {
       this.lastCycleTime = currentCycleTime;
       // Increment the cycle number
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
-      
+
       // Remove bubbles and particles that are older than our lifetime threshold
-      // This ensures particles live through multiple cycles
+      //      // This ensures particles live through multiple cycles
       this.bubbles = this.bubbles.filter(bubble => {
         // Use our helper method to determine if bubbles should be kept
         const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
         return this.shouldRenderParticle(cycleDiff);
       });
-      
+
       // Remove particles from physics engine that are no longer in any bubble
       const activeBodies = new Set(this.bubbles.flatMap(b => b.particles.map(p => p.body)));
       Matter.Composite.allBodies(this.engine.world).forEach(body => {
         // Skip walls and other static bodies
         if (body.isStatic) return;
-        
+
         // If the body is not in active bubbles, remove it from the world
         if (!activeBodies.has(body)) {
           Matter.Composite.remove(this.engine.world, body);
         }
       });
-      
+
       // Call the cycle start callback if it exists
       if (this.onCycleStart) {
         this.onCycleStart();
       }
     }
-    
+
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
-    
+
     // Update physics engine with our defined time step
     // Using a shorter time step for more accurate simulation
     Matter.Engine.update(this.engine, CanvasController.PHYSICS_TIMESTEP_MS);
-    
+
     this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
-  
+
   private drawFunnelWalls() {
     if (this.funnelWalls.length !== 2) return;
-    
+
     const [topWall, bottomWall] = this.funnelWalls;
       // Draw rectangular walls for straight walls
       const wallThickness = CanvasController.WALL_THICKNESS; // Use our constant for wall thickness
-      
+
       // Get wall positions
       const topWallPos = topWall.position;
       const bottomWallPos = bottomWall.position;
-      
+
       // Get wall dimensions
       const topWallBounds = topWall.bounds;
       const bottomWallBounds = bottomWall.bounds;
       const topWallHeight = topWallBounds.max.y - topWallBounds.min.y;
       const bottomWallHeight = bottomWallBounds.max.y - bottomWallBounds.min.y;
-      
+
       // Draw top wall at its current position with rotation
       this.ctx.save();
       this.ctx.translate(topWallPos.x, topWallPos.y);
       this.ctx.rotate(topWall.angle); // Use the Matter.js body's current angle
-      
+
       this.ctx.beginPath();
       this.ctx.rect(
         -wallThickness/2,
@@ -852,22 +848,22 @@ export class CanvasController {
         wallThickness,
         topWallHeight
       );
-      
+
       // Smoky white fill
       this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
       this.ctx.fill();
-      
+
       // White border
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       this.ctx.lineWidth = 1;
       this.ctx.stroke();
       this.ctx.restore();
-      
+
       // Draw bottom wall at its current position with rotation
       this.ctx.save();
       this.ctx.translate(bottomWallPos.x, bottomWallPos.y);
       this.ctx.rotate(bottomWall.angle); // Use the Matter.js body's current angle
-      
+
       this.ctx.beginPath();
       this.ctx.rect(
         -wallThickness/2,
@@ -875,11 +871,11 @@ export class CanvasController {
         wallThickness,
         bottomWallHeight
       );
-      
+
       // Smoky white fill
       this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
       this.ctx.fill();
-      
+
       // White border
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       this.ctx.lineWidth = 1;
@@ -887,3 +883,4 @@ export class CanvasController {
       this.ctx.restore();
     }
   }
+}
