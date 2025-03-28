@@ -707,21 +707,66 @@ export class CanvasController {
               // Group particles by their direction based on dot product with positive x-axis
               const directionGroups: {[key: string]: Particle[]} = {};
               
+              // Define non-linear bucket boundaries for horizontal motion emphasis
+              // More buckets near horizontal (±1) and fewer in the middle (near 0)
+              const bucketBoundaries = [
+                -1.0, -0.95, -0.85, -0.70, -0.5, -0.2, 0.2, 0.5, 0.70, 0.85, 0.95, 1.0
+              ];
+              
+              // Debug info for particle count
+              let totalParticlesProcessed = 0;
+              let particlesAssigned = 0;
+              
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
                 const vel = particle.body.velocity;
+                totalParticlesProcessed++;
                 
                 // Calculate dot product with positive x direction (1,0)
                 // Normalize to get value between -1 and 1
                 const magnitude = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-                if (magnitude === 0) return; // Skip stationary particles
+                if (magnitude < 0.001) { // Very small threshold for stationary
+                  // Put near-stationary particles in a special bucket
+                  const bucketKey = "stationary";
+                  if (!directionGroups[bucketKey]) {
+                    directionGroups[bucketKey] = [];
+                  }
+                  directionGroups[bucketKey].push(particle);
+                  particlesAssigned++;
+                  return;
+                }
                 
                 const dotProduct = vel.x / magnitude; // Dot product with (1,0) is just the x component
                 
-                // Group into 8 direction buckets (-1.0 to 1.0 range divided into 8 segments)
-                const bucketSize = 2 / 8; // 8 buckets across -1 to 1 range
-                const bucketIndex = Math.floor((dotProduct + 1) / bucketSize);
+                // Find which bucket this particle belongs to
+                let bucketIndex = bucketBoundaries.length - 2; // Default to last bucket (0.95 to 1.0)
+                
+                for (let i = 0; i < bucketBoundaries.length - 1; i++) {
+                  if (dotProduct >= bucketBoundaries[i] && dotProduct < bucketBoundaries[i + 1]) {
+                    bucketIndex = i;
+                    break;
+                  }
+                }
+                
+                // Ensure all particles get a bucket even if they're exactly at a boundary
+                if (dotProduct === 1.0) {
+                  bucketIndex = bucketBoundaries.length - 2; // Last bucket
+                } else if (dotProduct === -1.0) {
+                  bucketIndex = 0; // First bucket
+                }
+                
+                // If we fall through somehow, use a fallback direction-based bucketing
+                if (bucketIndex < 0 || bucketIndex >= bucketBoundaries.length - 1) {
+                  // This should never happen, but as fallback:
+                  if (dotProduct > 0) {
+                    bucketIndex = Math.floor((dotProduct * 5) + 5); // 5-10 buckets for 0 to 1
+                  } else {
+                    bucketIndex = Math.floor((dotProduct * 5) + 5); // 0-5 buckets for -1 to 0
+                  }
+                }
+                
                 const bucketKey = bucketIndex.toString();
+                particlesAssigned++;
                 
                 if (!directionGroups[bucketKey]) {
                   directionGroups[bucketKey] = [];
@@ -729,12 +774,18 @@ export class CanvasController {
                 directionGroups[bucketKey].push(particle);
               });
               
+              // If in debug mode and this is the first frame of a cycle, log info
+              if (this.showParticles && (this.currentCycleNumber !== bubble.cycleNumber)) {
+                console.log(`NEW IMPL - Direction groups stats: Total=${totalParticlesProcessed}, Assigned=${particlesAssigned}`);
+                console.log(`NEW IMPL - Buckets: ${Object.keys(directionGroups).map(k => `${k}:${directionGroups[k].length}`).join(', ')}`);
+              }
+              
               // Draw each direction group as a separate Bézier curve
-              Object.values(directionGroups).forEach(particles => {
+              Object.entries(directionGroups).forEach(([bucketKey, particles]) => {
                 if (particles.length > 2) {
-                  // Sort particles by x-position for a more natural curve
+                  // Sort particles by y-position (top to bottom)
                   const sortedParticles = particles.sort((a, b) => 
-                    a.body.position.x - b.body.position.x
+                    a.body.position.y - b.body.position.y
                   );
                   
                   // Draw the curve using our helper method
