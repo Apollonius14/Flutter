@@ -441,6 +441,7 @@ export class CanvasController {
 
   setShowParticles(show: boolean) {
     this.showParticles = show;
+    console.log(`Toggled particle visibility: ${show ? 'visible' : 'hidden'}`);
     this.drawFrame(0); // Force redraw to see changes immediately
   }
   
@@ -768,14 +769,23 @@ export class CanvasController {
             visibleParticles.forEach(particle => {
               const pos = particle.body.position;
               const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-              const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
+              // Increased size for better visibility
+              const particleSize = 2 + (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.5;
 
+              // Add a glow effect with shadow
+              this.ctx.shadowColor = 'rgba(255, 0, 255, 0.7)';
+              this.ctx.shadowBlur = 5;
+              
               // Draw a filled circle with neon pink glow effect
               this.ctx.beginPath();
-              this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+              this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
               const opacity = bubble.energy / bubble.initialEnergy;
-              this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
+              this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.9})`; // Brighter neon pink
               this.ctx.fill();
+              
+              // Reset shadow for other rendering
+              this.ctx.shadowColor = 'transparent';
+              this.ctx.shadowBlur = 0;
             });
           }
         }

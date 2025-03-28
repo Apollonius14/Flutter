@@ -28,7 +28,8 @@ const translations = {
     particles: "Particles",
     curveLogic: "Curve Logic",
     byBubble: "By Bubble",
-    byDirection: "By Direction"
+    byDirection: "By Direction",
+    showDots: "Show Dots"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -43,7 +44,8 @@ const translations = {
     particles: "الجسيمات",
     curveLogic: "منطق المنحنى",
     byBubble: "حسب الفقاعة",
-    byDirection: "حسب الاتجاه"
+    byDirection: "حسب الاتجاه",
+    showDots: "عرض النقاط"
   }
 };
 
@@ -323,14 +325,20 @@ export default function Home() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
                 
-                <Button
-                  size="sm"
-                  variant={showParticles ? "default" : "outline"}
-                  onClick={toggleShowParticles}
-                  className={`border-gray-600 rounded-full ${showParticles ? 'bg-pink-500 text-white' : 'text-gray-400'}`}
-                >
-                  <Circle className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    size="sm"
+                    variant={showParticles ? "default" : "outline"}
+                    onClick={toggleShowParticles}
+                    className={`border-gray-600 rounded-full ${showParticles ? 'bg-pink-500 text-white' : 'text-gray-400'}`}
+                    title={showParticles ? "Hide particle dots" : "Show particle dots"}
+                  >
+                    <Circle className="h-4 w-4" fill={showParticles ? "#FFF" : "none"} />
+                  </Button>
+                  <span className="text-xs text-gray-400">
+                    {t.showDots}
+                  </span>
+                </div>
               </div>
             </div>
           </CardContent>
