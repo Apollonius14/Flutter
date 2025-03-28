@@ -100,17 +100,10 @@ export class CanvasController {
   }
 
   
-
-  /**
-   * Determine if a particle should be rendered based on its age
-   */
   private shouldRenderParticle(cycleDiff: number): boolean {
     return cycleDiff <= CanvasController.PARTICLE_LIFETIME_CYCLES;
   }
 
-  /**
-   * Calculate the appropriate stroke width for a particle
-   */
   private calculateStrokeWidth(
     drawPowerFactor: number, 
     thicknessFactor: number, 
