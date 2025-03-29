@@ -296,119 +296,6 @@ export class CanvasController {
   private updateBubbleEnergy(bubble: Bubble) {
     bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
-  
-  /**
-   * Groups particles by cycle and direction to create more coherent wave patterns
-   * @returns Map of cycle numbers to arrays of particle groups
-   */
-  private groupParticlesByCycleAndDirection(): Map<number, Particle[][]> {
-    // Map to store groups by cycle number
-    const groupsByCycle = new Map<number, Particle[][]>();
-    
-    // First, collect all visible particles from each cycle
-    const visibleParticlesByCycle = new Map<number, Particle[]>();
-    
-    this.bubbles.forEach(bubble => {
-      // Skip bubbles with no energy
-      if (bubble.energy <= 0) return;
-      
-      // Get cycle number for this bubble
-      const cycleNum = bubble.cycleNumber;
-      
-      // Get all visible particles from this bubble
-      const visibleBubbleParticles = bubble.particles.filter(p => {
-        const pos = p.body.position;
-        return pos.x >= 0 && pos.x <= this.canvas.width && 
-               pos.y >= 0 && pos.y <= this.canvas.height;
-      });
-      
-      // Add to the cycle map
-      if (!visibleParticlesByCycle.has(cycleNum)) {
-        visibleParticlesByCycle.set(cycleNum, []);
-      }
-      const cycleParticles = visibleParticlesByCycle.get(cycleNum);
-      if (cycleParticles) {
-        cycleParticles.push(...visibleBubbleParticles);
-      }
-    });
-    
-    // Now process each cycle's particles
-    for (const [cycleNum, cycleParticles] of visibleParticlesByCycle.entries()) {
-      // Skip cycles with too few particles
-      if (cycleParticles.length <= 2) continue;
-      
-      // Group particles by velocity direction
-      const directionGroups: Particle[][] = [];
-      const DIRECTION_THRESHOLD = Math.cos(Math.PI/5);  // ~36 degrees threshold
-      
-      // Temp array to track which particles have been assigned to groups
-      const assignedParticles = new Set<Particle>();
-      
-      // For each particle, create a new group if it hasn't been assigned yet
-      for (const particle of cycleParticles) {
-        if (assignedParticles.has(particle)) continue;
-        
-        // Normalize velocity vector for this particle
-        const vel = particle.body.velocity;
-        const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-        
-        // Skip particles that are barely moving
-        if (speed < 0.1) continue;
-        
-        const velNorm = { x: vel.x / speed, y: vel.y / speed };
-        
-        // Start a new group with this particle
-        const group: Particle[] = [particle];
-        assignedParticles.add(particle);
-        
-        // Find other particles moving in a similar direction
-        for (const otherParticle of cycleParticles) {
-          if (assignedParticles.has(otherParticle)) continue;
-          
-          const otherVel = otherParticle.body.velocity;
-          const otherSpeed = Math.sqrt(otherVel.x * otherVel.x + otherVel.y * otherVel.y);
-          
-          // Skip particles that are barely moving
-          if (otherSpeed < 0.1) continue;
-          
-          const otherVelNorm = { x: otherVel.x / otherSpeed, y: otherVel.y / otherSpeed };
-          
-          // Calculate dot product to determine similarity in direction
-          const dotProduct = velNorm.x * otherVelNorm.x + velNorm.y * otherVelNorm.y;
-          
-          // If directions are similar (dot product near 1), add to the same group
-          if (dotProduct > DIRECTION_THRESHOLD) {
-            group.push(otherParticle);
-            assignedParticles.add(otherParticle);
-          }
-        }
-        
-        // Only add groups with multiple particles
-        if (group.length >= 2) {
-          // Sort particles within group by x position for left-to-right drawing
-          group.sort((a, b) => a.body.position.x - b.body.position.x);
-          directionGroups.push(group);
-        }
-      }
-      
-      // Store the direction groups for this cycle
-      if (directionGroups.length > 0) {
-        groupsByCycle.set(cycleNum, directionGroups);
-      }
-    }
-    
-    return groupsByCycle;
-  }
-  
-  /**
-   * Calculate thickness factor based on y-position (enhanced version)
-   * Center (0.5) gets 2.1x, edges (0 or 1) get 0.7x
-   */
-  private calculateThicknessFactorByPosition(normalizedY: number): number {
-    // Make center bubbles thicker (2.1x) than edge bubbles (0.7x)
-    // normalizedY is 0-1 where 0 is top and 1 is bottom
-    return 0.7 + 1.4 * (1 - Math.abs(normalizedY * 2 - 1));
-  }
 
 
 
@@ -620,8 +507,10 @@ export class CanvasController {
       max: { x: this.canvas.width + bufferMargin, y: this.canvas.height + bufferMargin }
     };
 
-    // First pass: Update physics collision filters for all bubbles
-    this.bubbles.forEach(bubble => {
+    // Update and draw bubbles
+    this.bubbles = this.bubbles.filter(bubble => {
+      //bubble.age++;
+
       // Optimize physics by only processing particles within or near the canvas
       if (bubble.particles.length > 0) {
         bubble.particles.forEach(particle => {
@@ -656,128 +545,142 @@ export class CanvasController {
           }
         });
       }
-    });
 
-    // Second pass: Group particles by cycle and direction
-    // This is a significant change from the previous implementation
-    // as it groups particles across bubbles based on cycle number
-    const cycleGroups = this.groupParticlesByCycleAndDirection();
-    
-    // Draw each cycle's particle groups
-    // Using Array.from to avoid the TypeScript error about MapIterator
-    Array.from(cycleGroups.entries()).forEach(([cycleNum, directionGroups]) => {
-      // Calculate the age of this cycle to determine brightness
-      const cycleDiff = this.currentCycleNumber - cycleNum;
-      const cycleFactor = Math.max(0, 1 - cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES);
-      
-      // Calculate common drawing parameters once per cycle
-      const baseOpacity = cycleFactor * 0.8; // Decay opacity as cycle gets older
-      const drawPowerFactor = this.params.power / 3;
-      
-      // Process each direction group for this cycle
-      for (const particleGroup of directionGroups) {
-        if (particleGroup.length < 3) continue; // Skip groups with too few particles
+      if (bubble.particles.length > 0) {
+        // Use energy for opacity control
+        let opacity = bubble.energy / bubble.initialEnergy;
         
-        // Calculate the average y-position to determine the proper thickness
-        const avgY = particleGroup.reduce((sum, p) => sum + p.body.position.y, 0) / particleGroup.length;
-        const normalizedY = avgY / this.canvas.height; // 0-1 position
-        
-        // Calculate thickness based on y-position (center thicker than edges)
-        // Center (0.5) gets 2.1x, edges (0 or 1) get 0.7x
-        const thicknessFactor = 0.7 + 1.4 * (1 - Math.abs(normalizedY * 2 - 1));
-        
-        // Draw a glow effect with reduced blur layers
-        for (let blur = 3; blur >= 0; blur--) {
-          this.ctx.beginPath();
-          const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
-          
-          // Only use shadow effect for higher power levels to save rendering time
-          if (this.params.power > 1) {
-            this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
-            this.ctx.shadowBlur = 8 * drawPowerFactor;
-          } else {
+        // Skip rendering if no energy left
+        if (opacity <= 0) {
+          return true; // Skip rendering but keep for physics until properly cleaned up
+        }
+
+        // We no longer draw inactive particles - they're completely invisible
+        // Only blue particles at the activation line are visible
+        // For active particles, they'll be drawn with the bezier curves below
+        // We skip drawing them here to avoid double-rendering
+
+        // Draw all particles with bezier curves, not just those near the activation line
+        if (bubble.particles.length > 1) {
+          const visibleParticles = bubble.particles
+            .filter(p => {
+              // Get particles that are on screen
+              const pos = p.body.position;
+              return pos.x >= 0 && pos.x <= this.canvas.width && pos.y >= 0 && pos.y <= this.canvas.height;
+            })
+            .sort((a, b) => {
+              // Sort particles by angle around the center
+              const aPos = a.body.position;
+              const bPos = b.body.position;
+              const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
+              const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
+              return aAngle - bAngle;
+            });
+
+          if (visibleParticles.length > 2) {
+            // Calculate power factor for drawing
+            const drawPowerFactor = this.params.power / 3;
+
+            // Draw a glow effect with reduced blur layers (from 7 to 4)
+            // Add motion blur effect by drawing multiple semi-transparent layers
+            for (let blur = 3; blur >= 0; blur--) {
+              this.ctx.beginPath();
+              const baseOpacity = bubble.energy / bubble.initialEnergy;
+              const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
+
+              // Only use shadow effect for higher power levels to save rendering time
+              if (this.params.power > 1) {
+                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
+                this.ctx.shadowBlur = 8 * drawPowerFactor;
+              } else {
+                this.ctx.shadowColor = 'transparent';
+                this.ctx.shadowBlur = 0;
+              }
+              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
+
+              // Calculate thickness based on wave position and energy
+              const energyFactor = bubble.energy / bubble.initialEnergy;
+              
+              // Get position index from positions array
+              const waveIndex = this.positions.indexOf(bubble.y);
+              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+
+              // Apply both factors to stroke width
+              this.ctx.lineWidth = energyFactor * thicknessFactor;
+
+              // Start at the first particle
+              const startPos = visibleParticles[0].body.position;
+              this.ctx.moveTo(startPos.x, startPos.y);
+
+              // Use cubic bezier curves to create a smooth path through all particles
+              for (let i = 0; i < visibleParticles.length - 1; i++) {
+                const p0 = visibleParticles[Math.max(0, i-1)].body.position;
+                const p1 = visibleParticles[i].body.position;
+                const p2 = visibleParticles[i+1].body.position;
+                const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
+
+                // Calculate control points for the current segment (p1 to p2)
+                // Use a portion of the vector from previous to next particle
+                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
+
+                // First control point - influenced by p0 and p2
+                const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+                const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+
+                // Second control point - influenced by p1 and p3
+                const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+                const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+
+                // Draw the cubic bezier curve
+                this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+              }
+
+              this.ctx.stroke();
+            }
+
+            // Reset shadow effects after drawing the curve
             this.ctx.shadowColor = 'transparent';
             this.ctx.shadowBlur = 0;
-          }
-          
-          // Use a slightly different blue hue for each direction group for visual distinction
-          // This creates a subtle rainbow effect across different wave fronts
-          const hueShift = (particleGroup[0].groupId % 5) * 10; // Vary hue slightly based on group
-          this.ctx.strokeStyle = `rgba(${20 + hueShift}, ${210 - hueShift/2}, 255, ${currentOpacity})`;
-          
-          // Apply power, cycle age and position-based thickness to stroke width
-          this.ctx.lineWidth = baseOpacity * thicknessFactor * this.params.power * 3.5;
-          
-          // Start at the first particle in this group
-          const startPos = particleGroup[0].body.position;
-          this.ctx.moveTo(startPos.x, startPos.y);
-          
-          // Use quadratic bezier curves to connect particles in this group
-          for (let i = 0; i < particleGroup.length - 1; i++) {
-            const p1 = particleGroup[i].body.position;
-            const p2 = particleGroup[i+1].body.position;
-            
-            // Adaptive control factor based on distance between points
-            // Larger distances need smaller factors to avoid wild curves
-            const distance = Math.sqrt((p2.x - p1.x)**2 + (p2.y - p1.y)**2);
-            const adaptiveControlFactor = Math.min(0.35, 25 / distance);
-            
-            // Calculate midpoint between the points
-            const midX = (p1.x + p2.x) / 2;
-            const midY = (p1.y + p2.y) / 2;
-            
-            // Calculate perpendicular vector to create natural curve
-            const dx = p2.x - p1.x;
-            const dy = p2.y - p1.y;
-            
-            // Create control point by offsetting from midpoint in perpendicular direction
-            const cpx = midX - dy * adaptiveControlFactor;
-            const cpy = midY + dx * adaptiveControlFactor;
-            
-            // Draw the quadratic bezier curve (single control point)
-            this.ctx.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
-          }
-          
-          this.ctx.stroke();
-        }
-      }
-      
-      // Reset shadow effects after drawing all groups for this cycle
-      this.ctx.shadowColor = 'transparent';
-      this.ctx.shadowBlur = 0;
-    });
-    
-    // Draw individual particles that weren't grouped
-    if (this.showParticles) {
-      this.bubbles.forEach(bubble => {
-        if (bubble.energy <= 0) return;
-        
-        // Find particles that aren't part of any direction group
-        const visibleParticles = bubble.particles.filter(p => {
-          const pos = p.body.position;
-          return pos.x >= 0 && pos.x <= this.canvas.width && pos.y >= 0 && pos.y <= this.canvas.height;
-        });
-        
-        if (visibleParticles.length > 0) {
-          const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-          const opacity = bubble.energy / bubble.initialEnergy;
-          
-          visibleParticles.forEach((particle: Particle) => {
-            const pos = particle.body.position;
-            const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
-            
-            // Draw a filled circle with neon pink glow effect
-            this.ctx.beginPath();
-            this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
-            this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
-            this.ctx.fill();
-          });
-        }
-      });
-    }
 
-    // Update the bubbles array by filtering out expired bubbles
-    this.bubbles = this.bubbles.filter(bubble => {
+            // Draw particles as bright neon pink circles only if showParticles is true
+            
+          } else if (visibleParticles.length > 1) {
+            // If we don't have enough points for a proper curve, fall back to lines
+            this.ctx.beginPath();
+            const baseOpacity = bubble.energy / bubble.initialEnergy;
+            const lineOpacity = baseOpacity * 0.4;
+            this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
+            this.ctx.lineWidth = 0.8;
+
+            for (let i = 0; i < visibleParticles.length - 1; i++) {
+              const pos1 = visibleParticles[i].body.position;
+              const pos2 = visibleParticles[i + 1].body.position;
+              this.ctx.moveTo(pos1.x, pos1.y);
+              this.ctx.lineTo(pos2.x, pos2.y);
+            }
+
+            this.ctx.stroke();
+
+            // Also draw the particle dots in neon pink for consistency if showParticles is true
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
+                const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
+
+                // Draw a filled circle with neon pink glow effect
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
+                this.ctx.fill();
+
+              });
+            }
+          }
+        }
+      } 
+
+
       if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
         if (bubble.particles.length > 0) {
           bubble.particles.forEach(particle => {
