@@ -153,27 +153,24 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    // Use a less compressed layout to make better use of the increased canvas height
-    const compressionFactor = 0.75; // Increased from 0.585 to use more vertical space
+    // Keep the compression factor high to spread the 9 positions across the increased canvas height
+    const compressionFactor = 0.75; // Higher value to use more vertical space
     const center = canvasHeight / 2;
-    const numPositions = 11; // Increased from 9 to add more wave positions
+    const numPositions = 9; // Back to the original 9 positions as requested
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
-    // Added more positions to take advantage of the increased canvas height
-    positions.push(center - halfSpacing - baseSpacing * 5);
+    // Using exactly 9 positions but spread across the taller canvas
     positions.push(center - halfSpacing - baseSpacing * 4);
     positions.push(center - halfSpacing - baseSpacing * 3);
     positions.push(center - halfSpacing - baseSpacing * 2);
     positions.push(center - halfSpacing - baseSpacing);
-    positions.push(center - halfSpacing);
-    positions.push(center + halfSpacing);
+    positions.push(center); // Center position (no offset)
     positions.push(center + halfSpacing + baseSpacing);
     positions.push(center + halfSpacing + baseSpacing * 2);
     positions.push(center + halfSpacing + baseSpacing * 3);
     positions.push(center + halfSpacing + baseSpacing * 4);
-    positions.push(center + halfSpacing + baseSpacing * 5);
 
     return positions;
   }
