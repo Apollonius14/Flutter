@@ -170,7 +170,7 @@ export class CanvasController {
     const width = this.canvas.width;
 
     const bubbles: Bubble[] = [];
-    const fixedRadius = CanvasController.FIXED_BUBBLE_RADIUS;
+    const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
 
     // Calculate wave positions using our helper method
     this.positions = this.calculateWavePositions(height);
@@ -179,8 +179,21 @@ export class CanvasController {
     // This ensures particles only appear at the activation line
     x = this.activationLineX;
 
+    // Find the center position for radius calculation
+    const centerY = height / 2;
 
     this.positions.forEach(y => {
+      // Calculate a radius multiplier based on the distance from center
+      // Use a cosine function to create a smooth bow curve
+      // Normalize the position to be between -1 and 1, where 0 is center
+      const normalizedPos = (y - centerY) / (height / 2);
+      
+      // Use cosine function to create a smooth curve, with center being largest
+      // Multiplier will be between 1.0 (edges) and 1.5 (center)
+      const radiusMultiplier = 1.0 + 0.5 * Math.cos(normalizedPos * Math.PI);
+      
+      // Apply the multiplier to get the actual radius for this position
+      const bubbleRadius = baseRadius * radiusMultiplier;
       
       const intensity = 2.0;
 
@@ -199,8 +212,8 @@ export class CanvasController {
 
       // Create particles at the calculated angles
       for (const angle of particleAngles) {
-        const particleX = x + Math.cos(angle) * fixedRadius;
-        const particleY = y + Math.sin(angle) * fixedRadius;
+        const particleX = x + Math.cos(angle) * bubbleRadius;
+        const particleY = y + Math.sin(angle) * bubbleRadius;
 
         // Create physics body with size from our constant
         const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
@@ -240,8 +253,8 @@ export class CanvasController {
       bubbles.push({
         x,
         y,
-        radius: fixedRadius,
-        initialRadius: fixedRadius,
+        radius: bubbleRadius,
+        initialRadius: bubbleRadius,
         intensity: intensity,
         particles,
         groupId: groupId,  // Assign the same group ID to the bubble
