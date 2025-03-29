@@ -562,32 +562,88 @@ export class CanvasController {
 
         // Draw all particles with bezier curves, not just those near the activation line
         if (bubble.particles.length > 1) {
-          const visibleParticles = bubble.particles
+          // Get all particles that are on screen
+          const allVisibleParticles = bubble.particles
             .filter(p => {
-              // Get particles that are on screen
               const pos = p.body.position;
               return pos.x >= 0 && pos.x <= this.canvas.width && pos.y >= 0 && pos.y <= this.canvas.height;
-            })
-            .sort((a, b) => {
-              // Sort particles by angle around the center
-              const aPos = a.body.position;
-              const bPos = b.body.position;
-              const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
-              const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
-              return aAngle - bAngle;
             });
-
-          if (visibleParticles.length > 2) {
-            // Calculate power factor for drawing
-            const drawPowerFactor = this.params.power / 3;
-
-            // Draw a glow effect with reduced blur layers (from 7 to 4)
-            // Add motion blur effect by drawing multiple semi-transparent layers
+            
+          // Group particles by velocity direction (using dot product with horizontal vector)
+          // This will group particles moving in similar directions into the same wave front
+          const directionGroups: Particle[][] = [];
+          const DIRECTION_BUCKETS = 5;  // Number of buckets for direction grouping
+          const DIRECTION_THRESHOLD = Math.cos(Math.PI/5);  // ~36 degrees threshold
+          
+          // Temp array to track which particles have been assigned to groups
+          const assignedParticles = new Set<Particle>();
+          
+          // For each particle, create a new group if it hasn't been assigned yet
+          for (const particle of allVisibleParticles) {
+            if (assignedParticles.has(particle)) continue;
+            
+            // Start a new group with this particle
+            const group: Particle[] = [particle];
+            assignedParticles.add(particle);
+            
+            // Normalize velocity vector for this particle
+            const vel = particle.body.velocity;
+            const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+            
+            // Skip particles that are barely moving
+            if (speed < 0.1) continue;
+            
+            const velNorm = { x: vel.x / speed, y: vel.y / speed };
+            
+            // Find other particles moving in a similar direction
+            for (const otherParticle of allVisibleParticles) {
+              if (assignedParticles.has(otherParticle)) continue;
+              
+              const otherVel = otherParticle.body.velocity;
+              const otherSpeed = Math.sqrt(otherVel.x * otherVel.x + otherVel.y * otherVel.y);
+              
+              // Skip particles that are barely moving
+              if (otherSpeed < 0.1) continue;
+              
+              const otherVelNorm = { x: otherVel.x / otherSpeed, y: otherVel.y / otherSpeed };
+              
+              // Calculate dot product to determine similarity in direction
+              const dotProduct = velNorm.x * otherVelNorm.x + velNorm.y * otherVelNorm.y;
+              
+              // If directions are similar (dot product near 1), add to the same group
+              if (dotProduct > DIRECTION_THRESHOLD) {
+                group.push(otherParticle);
+                assignedParticles.add(otherParticle);
+              }
+            }
+            
+            // Only add groups with multiple particles
+            if (group.length >= 2) {
+              // Sort particles within group by x position for left-to-right drawing
+              group.sort((a, b) => a.body.position.x - b.body.position.x);
+              directionGroups.push(group);
+            }
+          }
+          
+          // Now draw each direction group separately
+          // This allows us to connect particles that are moving in similar directions
+          
+          // Calculate common drawing parameters once per bubble
+          const baseOpacity = bubble.energy / bubble.initialEnergy;
+          const drawPowerFactor = this.params.power / 3;
+          const energyFactor = bubble.energy / bubble.initialEnergy;
+          const waveIndex = this.positions.indexOf(bubble.y);
+          const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+          
+          // Process each group that has enough particles for a curve
+          for (const particleGroup of directionGroups) {
+            if (particleGroup.length < 3) continue; // Skip groups with too few particles
+            
+            // Draw a glow effect with reduced blur layers
             for (let blur = 3; blur >= 0; blur--) {
               this.ctx.beginPath();
-              const baseOpacity = bubble.energy / bubble.initialEnergy;
               const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
-
+              
               // Only use shadow effect for higher power levels to save rendering time
               if (this.params.power > 1) {
                 this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
@@ -596,86 +652,85 @@ export class CanvasController {
                 this.ctx.shadowColor = 'transparent';
                 this.ctx.shadowBlur = 0;
               }
-              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
-
-              // Calculate thickness based on wave position and energy
-              const energyFactor = bubble.energy / bubble.initialEnergy;
               
-              // Get position index from positions array
-              const waveIndex = this.positions.indexOf(bubble.y);
-              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
-
-              // Apply both factors to stroke width
+              // Use a slightly different blue hue for each direction group for visual distinction
+              // This creates a subtle rainbow effect across different wave fronts
+              const hueShift = (particleGroup[0].groupId % 5) * 10; // Vary hue slightly based on group
+              this.ctx.strokeStyle = `rgba(${20 + hueShift}, ${210 - hueShift/2}, 255, ${currentOpacity})`;
+              
+              // Apply both energy and thickness factors to stroke width
               this.ctx.lineWidth = energyFactor * thicknessFactor;
-
-              // Start at the first particle
-              const startPos = visibleParticles[0].body.position;
+              
+              // Start at the first particle in this group
+              const startPos = particleGroup[0].body.position;
               this.ctx.moveTo(startPos.x, startPos.y);
-
-              // Use quadratic bezier curves for better performance
-              for (let i = 0; i < visibleParticles.length - 1; i++) {
-                const p1 = visibleParticles[i].body.position;
-                const p2 = visibleParticles[i+1].body.position;
+              
+              // Use quadratic bezier curves to connect particles in this group
+              for (let i = 0; i < particleGroup.length - 1; i++) {
+                const p1 = particleGroup[i].body.position;
+                const p2 = particleGroup[i+1].body.position;
                 
-                // Use a higher control factor for quadratic curves to maintain visual appeal
-                const controlPointFactor = 0.35; // Increased from 0.25 for better curvature
+                // Adaptive control factor based on distance between points
+                // Larger distances need smaller factors to avoid wild curves
+                const distance = Math.sqrt((p2.x - p1.x)**2 + (p2.y - p1.y)**2);
+                const adaptiveControlFactor = Math.min(0.35, 25 / distance);
                 
                 // Calculate midpoint between the points
                 const midX = (p1.x + p2.x) / 2;
                 const midY = (p1.y + p2.y) / 2;
                 
                 // Calculate perpendicular vector to create natural curve
-                // This creates a control point that's perpendicular to the line segment
                 const dx = p2.x - p1.x;
                 const dy = p2.y - p1.y;
                 
                 // Create control point by offsetting from midpoint in perpendicular direction
-                const cpx = midX - dy * controlPointFactor;
-                const cpy = midY + dx * controlPointFactor;
+                const cpx = midX - dy * adaptiveControlFactor;
+                const cpy = midY + dx * adaptiveControlFactor;
                 
                 // Draw the quadratic bezier curve (single control point)
                 this.ctx.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
               }
-
+              
               this.ctx.stroke();
             }
-
-            // Reset shadow effects after drawing the curve
-            this.ctx.shadowColor = 'transparent';
-            this.ctx.shadowBlur = 0;
-
-            // Draw particles as bright neon pink circles only if showParticles is true
+          }
             
-          } else if (visibleParticles.length > 1) {
-            // If we don't have enough points for a proper curve, fall back to lines
-            this.ctx.beginPath();
-            const baseOpacity = bubble.energy / bubble.initialEnergy;
-            const lineOpacity = baseOpacity * 0.4;
-            this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 0.8;
-
-            for (let i = 0; i < visibleParticles.length - 1; i++) {
-              const pos1 = visibleParticles[i].body.position;
-              const pos2 = visibleParticles[i + 1].body.position;
-              this.ctx.moveTo(pos1.x, pos1.y);
-              this.ctx.lineTo(pos2.x, pos2.y);
+          // Reset shadow effects after drawing all groups
+          this.ctx.shadowColor = 'transparent';
+          this.ctx.shadowBlur = 0;
+          
+          // Draw individual particles when there are no proper groups
+          if (directionGroups.length === 0 && allVisibleParticles.length > 0) {
+            // If we don't have enough points for proper curves, fall back to lines or dots
+            if (allVisibleParticles.length > 1) {
+              // Draw simple lines between particles
+              this.ctx.beginPath();
+              const lineOpacity = baseOpacity * 0.4;
+              this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
+              this.ctx.lineWidth = 0.8;
+              
+              for (let i = 0; i < allVisibleParticles.length - 1; i++) {
+                const pos1 = allVisibleParticles[i].body.position;
+                const pos2 = allVisibleParticles[i + 1].body.position;
+                this.ctx.moveTo(pos1.x, pos1.y);
+                this.ctx.lineTo(pos2.x, pos2.y);
+              }
+              
+              this.ctx.stroke();
             }
-
-            this.ctx.stroke();
-
-            // Also draw the particle dots in neon pink for consistency if showParticles is true
+            
+            // Draw individual particle dots if showParticles is enabled
             if (this.showParticles) {
-              visibleParticles.forEach(particle => {
+              allVisibleParticles.forEach((particle: Particle) => {
                 const pos = particle.body.position;
                 const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
                 const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
-
+                
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
                 this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
                 this.ctx.fill();
-
               });
             }
           }
