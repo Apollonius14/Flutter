@@ -15,7 +15,10 @@ const translations = {
     loading: "Loading Physics Engine...",
     ltr: "Left to Right",
     rtl: "Right to Left",
-    particles: "Particles"
+    particles: "Particles",
+    oval: "Oval",
+    position: "Position",
+    eccentricity: "Eccentricity"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -25,7 +28,10 @@ const translations = {
     loading: "جاري تحميل محرك الفيزياء...",
     ltr: "من اليسار إلى اليمين",
     rtl: "من اليمين إلى اليسار",
-    particles: "الجسيمات"
+    particles: "الجسيمات",
+    oval: "بيضاوي",
+    position: "الموضع",
+    eccentricity: "التمركز"
   }
 };
 
@@ -37,6 +43,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRTL, setIsRTL] = useState(false);
   const [showParticles, setShowParticles] = useState(true);
+  const [showOval, setShowOval] = useState(false);
+  const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
+  const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
@@ -83,7 +92,10 @@ export default function Home() {
       // When animation starts playing, update with the current power value
       controller.updateParams({
         power: powerValue,
-        frequency: 0.15 // Fixed frequency value
+        frequency: 0.15, // Fixed frequency value
+        showOval,
+        ovalPosition,
+        ovalEccentricity
       });
       lastPowerValue.current = powerValue;
       setCycleStarted(true);
@@ -91,7 +103,7 @@ export default function Home() {
       // Reset cycle tracking when paused
       setCycleStarted(false);
     }
-  }, [controller, powerValue, isPlaying, cycleStarted]);
+  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity]);
   
   // Add a listener to know when a cycle starts
   useEffect(() => {
@@ -102,7 +114,10 @@ export default function Home() {
       if (lastPowerValue.current !== powerValue) {
         controller.updateParams({
           power: powerValue,
-          frequency: 0.15 // Fixed frequency value
+          frequency: 0.15, // Fixed frequency value
+          showOval,
+          ovalPosition,
+          ovalEccentricity
         });
         lastPowerValue.current = powerValue;
       }
@@ -117,7 +132,7 @@ export default function Home() {
         controller.onCycleStart = null;
       }
     };
-  }, [controller, powerValue]);
+  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity]);
 
   useEffect(() => {
     if (!controller) return;
@@ -139,11 +154,24 @@ export default function Home() {
     if (!controller) return;
     controller.setShowParticles(showParticles);
   }, [showParticles, controller]);
+  
+  // Dedicated effect for oval settings
+  useEffect(() => {
+    if (!controller) return;
+    controller.updateParams({
+      power: powerValue,
+      frequency: 0.15,
+      showOval,
+      ovalPosition,
+      ovalEccentricity
+    });
+  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
   const toggleShowParticles = () => setShowParticles(prev => !prev);
+  const toggleShowOval = () => setShowOval(prev => !prev);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -180,7 +208,50 @@ export default function Home() {
                 />
               </div>
               
-
+              {/* Oval toggle and settings */}
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <Button
+                  size="sm"
+                  variant={showOval ? "default" : "outline"}
+                  onClick={toggleShowOval}
+                  className={`border-gray-600 ${showOval ? 'bg-green-500 text-white' : 'text-gray-400'}`}
+                >
+                  {t.oval}
+                </Button>
+                
+                <div className={`flex-1 transition-opacity ${showOval ? 'opacity-100' : 'opacity-50'}`}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Label className={`text-gray-200 text-xs ${language === 'ar' ? 'arabic text-right' : ''}`}>
+                        {t.position}
+                      </Label>
+                      <Slider
+                        value={[ovalPosition]}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onValueChange={([value]) => setOvalPosition(value)}
+                        className="flex-1"
+                        disabled={!showOval}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className={`text-gray-200 text-xs ${language === 'ar' ? 'arabic text-right' : ''}`}>
+                        {t.eccentricity}
+                      </Label>
+                      <Slider
+                        value={[ovalEccentricity]}
+                        min={0.1}
+                        max={0.99}
+                        step={0.01}
+                        onValueChange={([value]) => setOvalEccentricity(value)}
+                        className="flex-1"
+                        disabled={!showOval}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               {/* Direction and particles controls in a row */}
               <div className="flex justify-center items-center gap-4">

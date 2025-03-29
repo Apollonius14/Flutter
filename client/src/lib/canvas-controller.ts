@@ -3,6 +3,9 @@ import * as Matter from 'matter-js';
 interface AnimationParams {
   power: number;
   frequency: number;
+  showOval: boolean;
+  ovalPosition: number; // Normalized position (0-1) for oval's horizontal position
+  ovalEccentricity: number; // 0-1 value representing eccentricity
 }
 
 interface Particle {
@@ -60,6 +63,7 @@ export class CanvasController {
   private positions: number[] = [];
   private isRTL: boolean = false;
   private showParticles: boolean = true;
+  private ovalBody: Matter.Body | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -76,11 +80,17 @@ export class CanvasController {
     }); 
     this.params = {
       power: 12,
-      frequency: 0.3
+      frequency: 0.3,
+      showOval: false,
+      ovalPosition: 0.5, // Default to center
+      ovalEccentricity: 0.7 // Default eccentricity
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
+    
+    // Initialize the oval if needed
+    this.updateOval();
   }
 
   
@@ -223,7 +233,7 @@ export class CanvasController {
           frictionAir: 0,    // No air resistance
           collisionFilter: {
             category: 0x0001,
-            mask: 0x0001,    // Only collide with other particles
+            mask: 0x0003,    // Collide with other particles (0x0001) and the oval (0x0002)
             group: -1
           }
         });
@@ -300,8 +310,73 @@ export class CanvasController {
   }
 
   updateParams(params: AnimationParams) {
+    const prevShowOval = this.params.showOval;
+    const prevPosition = this.params.ovalPosition;
+    const prevEccentricity = this.params.ovalEccentricity;
+    
     this.params = params;
+    
+    // Check if oval-related parameters have changed
+    if (prevShowOval !== params.showOval || 
+        prevPosition !== params.ovalPosition || 
+        prevEccentricity !== params.ovalEccentricity) {
+      this.updateOval();
+    }
+    
     this.drawFrame(0);
+  }
+  
+  private updateOval() {
+    // If the oval exists, remove it from the world
+    if (this.ovalBody) {
+      Matter.Composite.remove(this.engine.world, this.ovalBody);
+      this.ovalBody = null;
+    }
+    
+    // If oval is not supposed to be shown, we're done
+    if (!this.params.showOval) {
+      return;
+    }
+    
+    // Otherwise, create a new oval based on current parameters
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    
+    // Calculate dimensions based on canvas size and eccentricity
+    const majorAxis = width * 0.8; // 80% of canvas width
+    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
+    
+    // Calculate position based on ovalPosition parameter
+    const centerX = width * this.params.ovalPosition;
+    const centerY = height / 2; // Always centered vertically
+    
+    // Create vertices for the oval
+    const vertices = [];
+    const segments = 36; // More segments = smoother oval
+    
+    for (let i = 0; i < segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const x = centerX + (majorAxis / 2) * Math.cos(angle);
+      const y = centerY + (minorAxis / 2) * Math.sin(angle);
+      vertices.push({ x, y });
+    }
+    
+    // Create the oval body
+    this.ovalBody = Matter.Bodies.fromVertices(centerX, centerY, [vertices], {
+      isStatic: true, // The oval doesn't move by physics
+      restitution: 1.0, // Perfect elasticity for bouncing particles
+      friction: 0,
+      frictionAir: 0,
+      frictionStatic: 0,
+      collisionFilter: {
+        category: 0x0002, // Different category from particles
+        mask: 0x0001, // Only collide with particles
+        group: 0
+      }
+    });
+    
+    // Add the oval to the world
+    Matter.Composite.add(this.engine.world, this.ovalBody);
   }
 
   play() {
@@ -423,7 +498,7 @@ export class CanvasController {
             // Enable collisions for on-screen particles
             const collisionFilter = {
               category: 0x0001,
-              mask: 0x0001, // Only collide with other particles
+              mask: 0x0003, // Collide with other particles (0x0001) and the oval (0x0002)
               group: -1 // Can collide with other particles
             };
             Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
@@ -589,6 +664,33 @@ export class CanvasController {
       return true;
     });
 
+    // Draw the oval if it exists and is supposed to be shown
+    if (this.params.showOval && this.ovalBody) {
+      const vertices = this.ovalBody.vertices;
+      
+      // Draw a glow effect for the oval
+      this.ctx.beginPath();
+      this.ctx.moveTo(vertices[0].x, vertices[0].y);
+      
+      for (let i = 1; i < vertices.length; i++) {
+        this.ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      
+      // Close the path
+      this.ctx.lineTo(vertices[0].x, vertices[0].y);
+      
+      // Add a subtle glow
+      this.ctx.shadowColor = 'rgba(220, 50, 255, 0.5)';
+      this.ctx.shadowBlur = 10;
+      this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.3)';
+      this.ctx.lineWidth = 1.5;
+      this.ctx.stroke();
+      
+      // Reset shadow for the next drawing
+      this.ctx.shadowColor = 'transparent';
+      this.ctx.shadowBlur = 0;
+    }
+    
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
   }
