@@ -612,27 +612,29 @@ export class CanvasController {
               const startPos = visibleParticles[0].body.position;
               this.ctx.moveTo(startPos.x, startPos.y);
 
-              // Use cubic bezier curves to create a smooth path through all particles
+              // Use quadratic bezier curves for better performance
               for (let i = 0; i < visibleParticles.length - 1; i++) {
-                const p0 = visibleParticles[Math.max(0, i-1)].body.position;
                 const p1 = visibleParticles[i].body.position;
                 const p2 = visibleParticles[i+1].body.position;
-                const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
-
-                // Calculate control points for the current segment (p1 to p2)
-                // Use a portion of the vector from previous to next particle
-                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
-
-                // First control point - influenced by p0 and p2
-                const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-                const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-
-                // Second control point - influenced by p1 and p3
-                const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-                const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-
-                // Draw the cubic bezier curve
-                this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+                
+                // Use a higher control factor for quadratic curves to maintain visual appeal
+                const controlPointFactor = 0.35; // Increased from 0.25 for better curvature
+                
+                // Calculate midpoint between the points
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2;
+                
+                // Calculate perpendicular vector to create natural curve
+                // This creates a control point that's perpendicular to the line segment
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                
+                // Create control point by offsetting from midpoint in perpendicular direction
+                const cpx = midX - dy * controlPointFactor;
+                const cpy = midY + dx * controlPointFactor;
+                
+                // Draw the quadratic bezier curve (single control point)
+                this.ctx.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
               }
 
               this.ctx.stroke();
