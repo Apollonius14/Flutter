@@ -233,8 +233,8 @@ export class CanvasController {
           frictionAir: 0,    // No air resistance
           collisionFilter: {
             category: 0x0001,
-            mask: 0x0003,    // Collide with other particles (0x0001) and the oval (0x0002)
-            group: -1
+            mask: 0x0002,    // Only collide with the oval (0x0002), not other particles
+            group: 0        // Using 0 instead of -1 to rely on mask for collision rules
           }
         });
 
@@ -343,7 +343,7 @@ export class CanvasController {
     const height = this.canvas.height;
     
     // Calculate dimensions based on canvas size and eccentricity
-    const majorAxis = width * 0.8; // 80% of canvas width
+    const majorAxis = width * 1.2; // 120% of canvas width (50% longer)
     const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
     
     // Calculate position based on ovalPosition parameter
@@ -498,8 +498,8 @@ export class CanvasController {
             // Enable collisions for on-screen particles
             const collisionFilter = {
               category: 0x0001,
-              mask: 0x0003, // Collide with other particles (0x0001) and the oval (0x0002)
-              group: -1 // Can collide with other particles
+              mask: 0x0002, // Only collide with the oval (0x0002), not other particles
+              group: 0 // Using standard group to rely on mask
             };
             Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
             // Keep normal physics simulation for on-screen particles

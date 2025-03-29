@@ -220,9 +220,9 @@ export default function Home() {
                 </Button>
                 
                 <div className={`flex-1 transition-opacity ${showOval ? 'opacity-100' : 'opacity-50'}`}>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
-                      <Label className={`text-gray-200 text-xs ${language === 'ar' ? 'arabic text-right' : ''}`}>
+                      <Label className={`text-gray-200 w-1/5 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
                         {t.position}
                       </Label>
                       <Slider
@@ -236,7 +236,7 @@ export default function Home() {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Label className={`text-gray-200 text-xs ${language === 'ar' ? 'arabic text-right' : ''}`}>
+                      <Label className={`text-gray-200 w-1/5 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
                         {t.eccentricity}
                       </Label>
                       <Slider
@@ -314,12 +314,12 @@ export default function Home() {
                 </p>
               </div>
             )}
-            {/* Increased canvas height by 30% from 200 to 260 */}
+            {/* Increased canvas height by 50% from 260 to 390 */}
             <canvas
               ref={canvasRef}
               width={800}
-              height={260}
-              className="w-full h-[260px] border border-gray-800 rounded-md"
+              height={390}
+              className="w-full h-[390px] border border-gray-800 rounded-md"
             />
           </CardContent>
         </Card>
