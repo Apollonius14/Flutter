@@ -30,7 +30,7 @@ interface Bubble {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.44; // Cycle duration in milliseconds
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6; // Cycle duration in milliseconds
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
   // Layout constants
@@ -38,7 +38,7 @@ export class CanvasController {
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
-  private static readonly PARTICLES_PER_RING: number = 17; // Number of particles in each ring
+  private static readonly PARTICLES_PER_RING: number = 13; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.5; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -106,10 +106,10 @@ export class CanvasController {
     const farthestPositions = [0, 9];
 
     // Increased thickness factors for more visual distinction between waves
-    if (centralPositions.includes(waveIndex)) return 3.0;    // Was 1.8
-    if (innerPositions.includes(waveIndex)) return 2.4;      // Was 1.6
-    if (middlePositions.includes(waveIndex)) return 1.8;     // Was 1.3
-    if (outerPositions.includes(waveIndex)) return 1.2;      // Was 1.05
+    if (centralPositions.includes(waveIndex)) return 2.0;    // Was 1.8
+    if (innerPositions.includes(waveIndex)) return 1.4;      // Was 1.6
+    if (middlePositions.includes(waveIndex)) return 1.2;     // Was 1.3
+    if (outerPositions.includes(waveIndex)) return 0.9;      // Was 1.05
     if (farthestPositions.includes(waveIndex)) return 0.8;   // Was 1.0
 
     return 0.8;
@@ -154,10 +154,10 @@ export class CanvasController {
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
     // Keep the compression factor high to spread the 9 positions across the increased canvas height
-    const compressionFactor = 0.75; // Higher value to use more vertical space
+    const compressionFactor = 0.3; // Higher value to use more vertical space
     const center = canvasHeight / 2;
     const numPositions = 9; // Back to the original 9 positions as requested
-    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 2);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
@@ -239,10 +239,10 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 1.5; 
+        const baseSpeed = 3.9; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 + 0.3 * horizontalAlignment);
+        const directedSpeed = baseSpeed * (1 + 0.7 * horizontalAlignment);
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -451,23 +451,17 @@ export class CanvasController {
 
     const timeX = width * progress;
 
-    // Draw enhanced time indicator line with motion blur effect
-    // First draw a wider, lower opacity blur for motion blur effect
+    // Draw sweep line with reduced complexity (two layers instead of three)
+    // Batch draw calls for performance
     this.ctx.beginPath();
-    this.ctx.moveTo(timeX - 3, 0);
-    this.ctx.lineTo(timeX - 3, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-    this.ctx.lineWidth = 6;
-    this.ctx.stroke();
-
-    // Second blur layer, closer to main line
-    this.ctx.beginPath();
-    this.ctx.moveTo(timeX - 1.5, 0);
-    this.ctx.lineTo(timeX - 1.5, height);
+    
+    // Glow/blur effect layer
+    this.ctx.moveTo(timeX - 2, 0);
+    this.ctx.lineTo(timeX - 2, height);
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-    this.ctx.lineWidth = 4;
+    this.ctx.lineWidth = 5;
     this.ctx.stroke();
-
+    
     // Main sweep line - thicker and brighter
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
@@ -476,20 +470,20 @@ export class CanvasController {
     this.ctx.lineWidth = 2; // Thicker line
     this.ctx.stroke();
 
-    // Draw enhanced activation line with subtle glow
-    // First draw a wider, low opacity glow
+    // Draw activation line with batched calls
+    // Glow layer
     this.ctx.beginPath();
     this.ctx.moveTo(this.activationLineX, 0);
     this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.03)";
-    this.ctx.lineWidth = 4;
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.05)";
+    this.ctx.lineWidth = 3;
     this.ctx.stroke();
-
+    
     // Main activation line
     this.ctx.beginPath();
     this.ctx.moveTo(this.activationLineX, 0);
     this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.08)";
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.1)";
     this.ctx.lineWidth = 1;
     this.ctx.stroke();
 
@@ -507,7 +501,7 @@ export class CanvasController {
     this.previousSweepLineX = timeX;
 
     // Limit physics calculations to on-screen elements
-    const bufferMargin = 20; // Extra margin around screen to prevent abrupt changes
+    const bufferMargin = 50; // Increased margin to prevent abrupt changes (20px → 50px)
     const screenBounds = {
       min: { x: -bufferMargin, y: -bufferMargin },
       max: { x: this.canvas.width + bufferMargin, y: this.canvas.height + bufferMargin }
@@ -546,8 +540,8 @@ export class CanvasController {
               group: 0 // Don't allow collision with other particles
             };
             Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
-            // Optionally, make off-screen particles static to further reduce computation
-            // Matter.Body.setStatic(particle.body, true);
+            // Make off-screen particles static to further reduce computation
+            Matter.Body.setStatic(particle.body, true);
           }
         });
       }
@@ -587,9 +581,9 @@ export class CanvasController {
             // Calculate power factor for drawing
             const drawPowerFactor = this.params.power / 3;
 
-            // Draw a glow effect for the curve first
+            // Draw a glow effect with reduced blur layers (from 7 to 4)
             // Add motion blur effect by drawing multiple semi-transparent layers
-            for (let blur = 6; blur >= 0; blur--) {
+            for (let blur = 3; blur >= 0; blur--) {
               this.ctx.beginPath();
               const baseOpacity = bubble.energy / bubble.initialEnergy;
               const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
@@ -779,9 +773,12 @@ export class CanvasController {
   }
 
   private updatePhysics(timestamp: number) {
-    // Use multiple smaller substeps for higher accuracy physics
-    const numSubSteps = 6; 
+    // Use a variable number of substeps based on whether oval is shown
+    // More steps for better collision accuracy when oval is present
+    // Fewer steps when no complex collisions are needed
+    const numSubSteps = this.params.showOval ? 4 : 2; // Reduced from 6 to 4 when oval shown, 2 when not
     const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
+    
     for (let i = 0; i < numSubSteps; i++) {
       Matter.Engine.update(this.engine, subStepTime);
     }
