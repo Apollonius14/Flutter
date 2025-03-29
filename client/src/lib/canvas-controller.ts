@@ -31,7 +31,7 @@ interface Bubble {
 export class CanvasController {
   // Core timing constants
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.44; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 12; // How many cycles particles live
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
@@ -63,7 +63,7 @@ export class CanvasController {
   private positions: number[] = [];
   private isRTL: boolean = false;
   private showParticles: boolean = true;
-  private ovalBody: Matter.Body | null = null;
+  private ovalBody: Matter.Composite | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -346,13 +346,12 @@ export class CanvasController {
       return;
     }
     
-    // Otherwise, create a new oval based on current parameters
+    // Otherwise, create a new oval ring based on current parameters
     const width = this.canvas.width;
     const height = this.canvas.height;
     
     // Calculate dimensions based on canvas size and eccentricity
-    // Use a fixed width for the majorAxis (80% of canvas width) instead of making it longer
-    // This keeps the pulse width consistent while the canvas is taller
+    // Use a fixed width for the majorAxis (80% of canvas width)
     const majorAxis = width * 0.8; 
     const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
     
@@ -360,32 +359,57 @@ export class CanvasController {
     const centerX = width * this.params.ovalPosition;
     const centerY = height / 2; // Always centered vertically
     
-    // Create vertices for the oval
-    const vertices = [];
-    const segments = 36; // More segments = smoother oval
+    // Wall thickness for the ring
+    const wallThickness = 3;
+    
+    // Create a composite for all the small segments that will form our ring
+    const newOvalBody = Matter.Composite.create();
+    this.ovalBody = newOvalBody;
+    
+    // Number of segments to create a smooth ring
+    const segments = 24;
     
     for (let i = 0; i < segments; i++) {
+      // Calculate current angle and next angle
       const angle = (i / segments) * Math.PI * 2;
-      const x = centerX + (majorAxis / 2) * Math.cos(angle);
-      const y = centerY + (minorAxis / 2) * Math.sin(angle);
-      vertices.push({ x, y });
+      const nextAngle = ((i + 1) / segments) * Math.PI * 2;
+      
+      // Calculate current position on the ellipse
+      const x1 = centerX + (majorAxis / 2) * Math.cos(angle);
+      const y1 = centerY + (minorAxis / 2) * Math.sin(angle);
+      
+      // Calculate next position on the ellipse
+      const x2 = centerX + (majorAxis / 2) * Math.cos(nextAngle);
+      const y2 = centerY + (minorAxis / 2) * Math.sin(nextAngle);
+      
+      // Calculate midpoint and length of segment
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const segmentLength = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+      
+      // Calculate angle of the segment
+      const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
+      
+      // Create a small rectangle body for this segment
+      const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
+        isStatic: true,
+        angle: segmentAngle,
+        restitution: 1.0, // Perfect elasticity
+        friction: 0,
+        frictionAir: 0,
+        frictionStatic: 0,
+        collisionFilter: {
+          category: 0x0002,
+          mask: 0x0001, // Only collide with particles
+          group: 0
+        }
+      });
+      
+      // Add the segment to our composite
+      Matter.Composite.add(this.ovalBody, segment);
     }
     
-    // Create the oval body
-    this.ovalBody = Matter.Bodies.fromVertices(centerX, centerY, [vertices], {
-      isStatic: true, // The oval doesn't move by physics
-      restitution: 1.0, // Perfect elasticity for bouncing particles
-      friction: 0,
-      frictionAir: 0,
-      frictionStatic: 0,
-      collisionFilter: {
-        category: 0x0002, // Different category from particles
-        mask: 0x0001, // Only collide with particles
-        group: 0
-      }
-    });
-    
-    // Add the oval to the world
+    // Add the entire composite to the world
     Matter.Composite.add(this.engine.world, this.ovalBody);
   }
 
@@ -676,18 +700,26 @@ export class CanvasController {
 
     // Draw the oval if it exists and is supposed to be shown
     if (this.params.showOval && this.ovalBody) {
-      const vertices = this.ovalBody.vertices;
+      // Since the oval is now a composite of multiple segments,
+      // we need to iterate through each body in the composite
+      const bodies = Matter.Composite.allBodies(this.ovalBody);
       
-      // Draw a glow effect for the oval
+      // Draw a glow effect for all the segments that make up the oval
       this.ctx.beginPath();
-      this.ctx.moveTo(vertices[0].x, vertices[0].y);
       
-      for (let i = 1; i < vertices.length; i++) {
-        this.ctx.lineTo(vertices[i].x, vertices[i].y);
-      }
-      
-      // Close the path
-      this.ctx.lineTo(vertices[0].x, vertices[0].y);
+      // Iterate through each segment body and draw it
+      bodies.forEach(body => {
+        const vertices = body.vertices;
+        
+        this.ctx.moveTo(vertices[0].x, vertices[0].y);
+        
+        for (let i = 1; i < vertices.length; i++) {
+          this.ctx.lineTo(vertices[i].x, vertices[i].y);
+        }
+        
+        // Close the path for this segment
+        this.ctx.lineTo(vertices[0].x, vertices[0].y);
+      });
       
       // Add a subtle glow
       this.ctx.shadowColor = 'rgba(220, 50, 255, 0.5)';
