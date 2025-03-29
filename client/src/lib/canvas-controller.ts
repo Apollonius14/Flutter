@@ -153,13 +153,16 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.585;
+    // Use a less compressed layout to make better use of the increased canvas height
+    const compressionFactor = 0.75; // Increased from 0.585 to use more vertical space
     const center = canvasHeight / 2;
-    const numPositions = 9; 
+    const numPositions = 11; // Increased from 9 to add more wave positions
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
+    // Added more positions to take advantage of the increased canvas height
+    positions.push(center - halfSpacing - baseSpacing * 5);
     positions.push(center - halfSpacing - baseSpacing * 4);
     positions.push(center - halfSpacing - baseSpacing * 3);
     positions.push(center - halfSpacing - baseSpacing * 2);
@@ -170,6 +173,7 @@ export class CanvasController {
     positions.push(center + halfSpacing + baseSpacing * 2);
     positions.push(center + halfSpacing + baseSpacing * 3);
     positions.push(center + halfSpacing + baseSpacing * 4);
+    positions.push(center + halfSpacing + baseSpacing * 5);
 
     return positions;
   }
@@ -321,9 +325,16 @@ export class CanvasController {
         prevPosition !== params.ovalPosition || 
         prevEccentricity !== params.ovalEccentricity) {
       this.updateOval();
+      
+      // Only force a redraw when oval parameters change
+      if (this.animationFrame === null) {
+        // Only manually redraw if animation is not running
+        this.drawFrame(0);
+      }
     }
     
-    this.drawFrame(0);
+    // Don't call drawFrame here as it causes performance issues
+    // with slider interactions by forcing constant redraws
   }
   
   private updateOval() {
@@ -343,7 +354,9 @@ export class CanvasController {
     const height = this.canvas.height;
     
     // Calculate dimensions based on canvas size and eccentricity
-    const majorAxis = width * 1.2; // 120% of canvas width (50% longer)
+    // Use a fixed width for the majorAxis (80% of canvas width) instead of making it longer
+    // This keeps the pulse width consistent while the canvas is taller
+    const majorAxis = width * 0.8; 
     const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
     
     // Calculate position based on ovalPosition parameter
