@@ -189,8 +189,8 @@ export class CanvasController {
       const normalizedPos = (y - centerY) / (height / 2);
       
       // Use cosine function to create a smooth curve, with center being largest
-      // Multiplier will be between 1.0 (edges) and 1.5 (center)
-      const radiusMultiplier = 1.0 + 0.5 * Math.cos(normalizedPos * Math.PI);
+      // Multiplier will be between 0.7 (edges) and 2.1 (center) - 3x difference
+      const radiusMultiplier = 0.7 + 1.4 * Math.cos(normalizedPos * Math.PI);
       
       // Apply the multiplier to get the actual radius for this position
       const bubbleRadius = baseRadius * radiusMultiplier;
