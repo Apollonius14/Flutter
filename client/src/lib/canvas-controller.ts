@@ -58,17 +58,17 @@ interface RenderParams {
 }
 
 export class CanvasController {
-  // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.8; // Cycle duration in milliseconds
+  // Core timing constants - slowed by 80% for observation
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.8 * 1.8; // Cycle duration in milliseconds (slowed)
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
-  private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
+  private static readonly PHYSICS_TIMESTEP_MS: number = 12.5 * 1.8; // Physics engine update interval (slowed)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
   private static readonly PARTICLES_PER_RING: number = 11; // Number of particles in each ring
-  private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
+  private static readonly PARTICLE_RADIUS: number = 0.9 * 2; // Physics body radius for particles (doubled)
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
   // State variables
@@ -270,7 +270,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 3; 
+        const baseSpeed = 3 * 0.2; // Reduced to 20% of original speed
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
         const directedSpeed = baseSpeed * (1 + 1 * horizontalAlignment);
@@ -498,8 +498,8 @@ export class CanvasController {
         ctx.shadowBlur = 0;
       }
       
-      // Apply wave-specific styling
-      ctx.strokeStyle = `rgba(20, 210, 255, ${layerOpacity})`;
+      // Apply wave-specific styling - make lines more transparent
+      ctx.strokeStyle = `rgba(20, 210, 255, ${layerOpacity * 0.4})`; // Reduced opacity to 40%
       ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH;
       
       // Render the path once for this layer
@@ -814,8 +814,8 @@ export class CanvasController {
             // Only draw if particle is on screen
             if (pos.x >= 0 && pos.x <= this.canvas.width && 
                 pos.y >= 0 && pos.y <= this.canvas.height) {
-              const particleSize = 1.2; // Slightly larger for better visibility
-              const particleOpacity = bubbleOpacity * 0.7; // Brighter pink dots
+              const particleSize = 2.4; // Doubled in size (1.2 * 2)
+              const particleOpacity = bubbleOpacity * 1.4; // Doubled brightness (0.7 * 2)
               
               // Draw a filled circle with neon pink color
               this.ctx.beginPath();
@@ -868,8 +868,8 @@ export class CanvasController {
             if (this.showParticles) {
               // Calculate opacity based on bubble's energy
               const bubbleEnergy = bubble.energy / bubble.initialEnergy;
-              const dotSize = 0.8;
-              const dotOpacity = bubbleEnergy * 0.6;
+              const dotSize = 1.6; // Doubled in size
+              const dotOpacity = bubbleEnergy * 1.2; // Doubled brightness
               
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
@@ -886,9 +886,9 @@ export class CanvasController {
           else if (visibleParticles.length > 1) {
             this.ctx.beginPath();
             const baseOpacity = bubble.energy / bubble.initialEnergy;
-            const lineOpacity = baseOpacity * 0.4;
+            const lineOpacity = baseOpacity * 0.05;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 0.8;
+            this.ctx.lineWidth = 0.1;
 
             for (let i = 0; i < visibleParticles.length - 1; i++) {
               const pos1 = visibleParticles[i].body.position;
@@ -906,12 +906,12 @@ export class CanvasController {
               
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const particleSize = 0.8;
+                const particleSize = 1.6; // Doubled in size
                 
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${particleOpacity})`; // Neon pink, decays
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${particleOpacity * 2})`; // Neon pink, doubled brightness
                 this.ctx.fill();
               });
             }
