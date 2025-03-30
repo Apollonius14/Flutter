@@ -166,7 +166,7 @@ export class CanvasController {
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - 0.1 * compressionFactor);
+      const transformedAngle = angle * (1 - 1.5 * compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
 
       particleAngles.push(normalizedAngle);
