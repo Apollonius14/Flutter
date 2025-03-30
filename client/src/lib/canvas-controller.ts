@@ -39,7 +39,7 @@ export class CanvasController {
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
   private static readonly PARTICLES_PER_RING: number = 13; // Number of particles in each ring
-  private static readonly PARTICLE_RADIUS: number = 0.5; // Physics body radius for particles
+  private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
   // State variables
@@ -76,7 +76,7 @@ export class CanvasController {
       gravity: { x: 0, y: 0 },
       positionIterations: 3,
       velocityIterations: 3,
-      constraintIterations: 2,
+      constraintIterations: 2
     }); 
     this.params = {
       power: 12,
@@ -228,14 +228,16 @@ export class CanvasController {
 
         // Create physics body with size from our constant
         const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
-          friction: 0.0,     // No friction to prevent energy loss 
-          restitution: 1.0,  // Perfect elasticity (no energy loss)
-          mass: 0.2,         // Standard mass
-          frictionAir: 0,    // No air resistance
+          friction: 0.0,         // No surface friction
+          frictionAir: 0.0,      // No air resistance
+          frictionStatic: 0.0,   // No static friction
+          restitution: 1.0,      // Perfect elasticity (no energy loss)
+          mass: 0.4,             // Light mass for responsive physics
+          slop: 0.01,            // Minimal slop for precise collisions
           collisionFilter: {
             category: 0x0001,
-            mask: 0x0002,    // Only collide with the oval (0x0002), not other particles
-            group: 0        // Using 0 instead of -1 to rely on mask for collision rules
+            mask: 0x0002,        // Only collide with the oval (0x0002), not other particles
+            group: 0             // Using 0 instead of -1 to rely on mask for collision rules
           }
         });
 
@@ -297,6 +299,26 @@ export class CanvasController {
     bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
 
+  /**
+   * Creates a physics body with optimized properties for perfectly elastic collisions
+   * This helper ensures consistent physics properties across all particle bodies
+   */
+  private createPerfectlyElasticBody(
+    x: number, 
+    y: number, 
+    radius: number, 
+    collisionFilter: Matter.ICollisionFilter
+  ): Matter.Body {
+    return Matter.Bodies.circle(x, y, radius, {
+      friction: 0.0,         // No surface friction
+      frictionAir: 0.0,      // No air resistance
+      frictionStatic: 0.0,   // No static friction
+      restitution: 1.0,      // Perfect elasticity (bounces with no energy loss)
+      mass: 0.4,             // Light mass for responsive physics
+      slop: 0.01,            // Minimal slop for precise collisions
+      collisionFilter        // Custom collision filter passed as parameter
+    });
+  }
 
 
   setRTL(enabled: boolean) {
@@ -390,17 +412,18 @@ export class CanvasController {
       // Calculate angle of the segment
       const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
       
-      // Create a small rectangle body for this segment
+      // Create a small rectangle body for this segment with consistent physics properties
       const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
-        isStatic: true,
+        isStatic: true, // Oval segments must be static
         angle: segmentAngle,
         restitution: 1.0, // Perfect elasticity
-        friction: 0,
-        frictionAir: 0,
-        frictionStatic: 0,
+        friction: 0,      // No friction for smooth, energy-preserving collisions
+        frictionAir: 0,   // No air resistance
+        frictionStatic: 0, // No static friction
+        slop: 0.01,       // Minimal slop for precise collisions
         collisionFilter: {
           category: 0x0002,
-          mask: 0x0001, // Only collide with particles
+          mask: 0x0001,   // Only collide with particles
           group: 0
         }
       });
@@ -603,7 +626,7 @@ export class CanvasController {
               const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
 
               // Calculate control points for the current segment (p1 to p2)
-              const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
+              const controlPointFactor = 0.4; // Adjust this for tighter/looser curves
 
               // First control point - influenced by p0 and p2
               const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
@@ -776,10 +799,20 @@ export class CanvasController {
     // Use a variable number of substeps based on whether oval is shown
     // More steps for better collision accuracy when oval is present
     // Fewer steps when no complex collisions are needed
-    const numSubSteps = this.params.showOval ? 4 : 2; // Reduced from 6 to 4 when oval shown, 2 when not
+    const numSubSteps = this.params.showOval ? 3 : 1; // Reduced from 6 to 4 when oval shown, 2 when not
     const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
     
+    // Perform physics updates in substeps for better stability
     for (let i = 0; i < numSubSteps; i++) {
+      // Apply zero frictionAir to all bodies before each physics update
+      // This ensures no velocity is lost due to air resistance
+      Matter.Composite.allBodies(this.engine.world).forEach(body => {
+        // Ensure all bodies have zero friction to maintain perfectly elastic behavior
+        body.frictionAir = 0;
+        body.friction = 0;
+        body.frictionStatic = 0;
+      });
+      
       Matter.Engine.update(this.engine, subStepTime);
     }
 
