@@ -1,5 +1,9 @@
 import * as Matter from 'matter-js';
 
+// Path rendering type - can be set to either "CUBIC" or "QUADRATIC"
+// QUADRATIC is more performant but may look slightly less smooth
+const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "QUADRATIC";
+
 interface AnimationParams {
   power: number;
   frequency: number;
@@ -385,7 +389,7 @@ export class CanvasController {
   }
   
   /**
-   * Generates a smooth path through a set of points using cubic Bézier curves
+   * Generates a smooth path through a set of points using either cubic or quadratic Bézier curves
    * Pure function that only deals with calculating the geometric path
    */
   private calculatePath(points: Point2D[]): Path2D {
@@ -406,27 +410,57 @@ export class CanvasController {
       return path;
     }
     
-    // For 3+ points, calculate cubic Bézier curves
-    for (let i = 0; i < points.length - 1; i++) {
-      // Get four points needed for the curve calculation
-      const p0 = points[Math.max(0, i-1)];
-      const p1 = points[i];
-      const p2 = points[i+1];
-      const p3 = points[Math.min(points.length-1, i+2)];
-      
-      // Calculate control points for the current segment (p1 to p2)
-      const controlPointFactor = 0.4; // Adjust this for tighter/looser curves
-      
-      // First control point - influenced by p0 and p2
-      const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-      const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-      
-      // Second control point - influenced by p1 and p3
-      const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-      const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-      
-      // Add the cubic bezier curve to our path
-      path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    if (BEZIER_CURVE_TYPE === "CUBIC") {
+      // For 3+ points, calculate cubic Bézier curves
+      for (let i = 0; i < points.length - 1; i++) {
+        // Get four points needed for the curve calculation
+        const p0 = points[Math.max(0, i-1)];
+        const p1 = points[i];
+        const p2 = points[i+1];
+        const p3 = points[Math.min(points.length-1, i+2)];
+        
+        // Calculate control points for the current segment (p1 to p2)
+        const controlPointFactor = 0.4; // Adjust this for tighter/looser curves
+        
+        // First control point - influenced by p0 and p2
+        const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+        const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+        
+        // Second control point - influenced by p1 and p3
+        const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+        const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+        
+        // Add the cubic bezier curve to our path
+        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+      }
+    } else {
+      // For 3+ points, calculate quadratic Bézier curves (more performant)
+      for (let i = 0; i < points.length - 1; i++) {
+        // Get three points needed for the curve calculation
+        const p1 = points[i];
+        const p2 = points[i+1];
+        
+        // For quadratic curves, we need just one control point
+        // Calculate midpoint between current and next point, then offset it
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        
+        // Calculate tangent direction using nearby points
+        const prevPoint = i > 0 ? points[i-1] : p1;
+        const nextPoint = i < points.length - 2 ? points[i+2] : p2;
+        
+        // Calculate tangent vector (average of segments)
+        const tangentX = (p2.x - prevPoint.x) * 0.5;
+        const tangentY = (p2.y - prevPoint.y) * 0.5;
+        
+        // Control point - offset from midpoint using tangent
+        const controlFactor = 0.2; // Controls curve tightness (smaller = tighter)
+        const cpx = midX + tangentY * controlFactor; // Perpendicular offset for curvature
+        const cpy = midY - tangentX * controlFactor;
+        
+        // Add the quadratic bezier curve to our path (more performant than cubic)
+        path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
+      }
     }
     
     return path;
