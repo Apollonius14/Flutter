@@ -580,12 +580,46 @@ export class CanvasController {
           if (visibleParticles.length > 2) {
             // Calculate power factor for drawing
             const drawPowerFactor = this.params.power / 3;
+            const baseOpacity = bubble.energy / bubble.initialEnergy;
+            
+            // Calculate thickness based on wave position and energy
+            const energyFactor = bubble.energy / bubble.initialEnergy;
+            const waveIndex = this.positions.indexOf(bubble.y);
+            const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+            
+            // OPTIMIZATION: Create a Path2D object to store the bezier curve path once
+            // This prevents recalculating the same curve for each drawing layer
+            const particlePath = new Path2D();
+            
+            // Start at the first particle
+            const startPos = visibleParticles[0].body.position;
+            particlePath.moveTo(startPos.x, startPos.y);
+            
+            // Calculate bezier curve just ONCE and store in path
+            for (let i = 0; i < visibleParticles.length - 1; i++) {
+              const p0 = visibleParticles[Math.max(0, i-1)].body.position;
+              const p1 = visibleParticles[i].body.position;
+              const p2 = visibleParticles[i+1].body.position;
+              const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
 
-            // Draw a glow effect with reduced blur layers (from 7 to 4)
-            // Add motion blur effect by drawing multiple semi-transparent layers
+              // Calculate control points for the current segment (p1 to p2)
+              const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
+
+              // First control point - influenced by p0 and p2
+              const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+              const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+
+              // Second control point - influenced by p1 and p3
+              const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+              const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+
+              // Add the cubic bezier curve to our path (calculate only once)
+              particlePath.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+            }
+            
+            // Now draw the SAME path multiple times with different styles
+            // Draw a glow effect with reduced blur layers (4 layers)
             for (let blur = 3; blur >= 0; blur--) {
-              this.ctx.beginPath();
-              const baseOpacity = bubble.energy / bubble.initialEnergy;
               const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
 
               // Only use shadow effect for higher power levels to save rendering time
@@ -596,46 +630,12 @@ export class CanvasController {
                 this.ctx.shadowColor = 'transparent';
                 this.ctx.shadowBlur = 0;
               }
-              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
-
-              // Calculate thickness based on wave position and energy
-              const energyFactor = bubble.energy / bubble.initialEnergy;
               
-              // Get position index from positions array
-              const waveIndex = this.positions.indexOf(bubble.y);
-              const thicknessFactor = this.calculateThicknessFactor(waveIndex);
-
-              // Apply both factors to stroke width
+              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
               this.ctx.lineWidth = energyFactor * thicknessFactor;
-
-              // Start at the first particle
-              const startPos = visibleParticles[0].body.position;
-              this.ctx.moveTo(startPos.x, startPos.y);
-
-              // Use cubic bezier curves to create a smooth path through all particles
-              for (let i = 0; i < visibleParticles.length - 1; i++) {
-                const p0 = visibleParticles[Math.max(0, i-1)].body.position;
-                const p1 = visibleParticles[i].body.position;
-                const p2 = visibleParticles[i+1].body.position;
-                const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
-
-                // Calculate control points for the current segment (p1 to p2)
-                // Use a portion of the vector from previous to next particle
-                const controlPointFactor = 0.25; // Adjust this for tighter/looser curves
-
-                // First control point - influenced by p0 and p2
-                const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-                const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-
-                // Second control point - influenced by p1 and p3
-                const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-                const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-
-                // Draw the cubic bezier curve
-                this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-              }
-
-              this.ctx.stroke();
+              
+              // Stroke the pre-calculated path instead of rebuilding it
+              this.ctx.stroke(particlePath);
             }
 
             // Reset shadow effects after drawing the curve
