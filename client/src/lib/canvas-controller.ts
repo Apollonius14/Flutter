@@ -67,7 +67,7 @@ export class CanvasController {
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
-  private static readonly PARTICLES_PER_RING: number = 19; // Number of particles in each ring
+  private static readonly PARTICLES_PER_RING: number = 15; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -804,8 +804,24 @@ export class CanvasController {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
 
-        // We skip drawing individual particles here to avoid double-rendering
-        // since they'll be drawn with the bezier curves below
+        // Draw individual particles if toggle is on
+        if (this.showParticles) {
+          bubble.particles.forEach(particle => {
+            const pos = particle.body.position;
+            // Only draw if particle is on screen
+            if (pos.x >= 0 && pos.x <= this.canvas.width && 
+                pos.y >= 0 && pos.y <= this.canvas.height) {
+              const particleSize = 1.2; // Slightly larger for better visibility
+              const particleOpacity = opacity * 0.7; // Brighter pink dots
+              
+              // Draw a filled circle with neon pink color
+              this.ctx.beginPath();
+              this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
+              this.ctx.fillStyle = `rgba(255, 50, 200, ${particleOpacity})`;
+              this.ctx.fill();
+            }
+          });
+        }
         
         // Draw all particles with bezier curves, using our modular approach
         if (bubble.particles.length > 1) {
