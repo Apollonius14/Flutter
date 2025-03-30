@@ -28,17 +28,42 @@ interface Bubble {
   initialEnergy: number;
 }
 
+// New interface for representing a point in 2D space
+interface Point2D {
+  x: number;
+  y: number;
+}
+
+// New interface for particle wavefronts
+interface WaveFront {
+  points: Point2D[];           // Sorted array of particle positions
+  energy: number;              // Energy level for this wavefront
+  waveIndex: number;           // Position index in the wave pattern
+  thicknessFactor: number;     // Calculated thickness for this wavefront
+  baseOpacity: number;         // Base opacity for this wavefront
+}
+
+// Interface for rendering parameters
+interface RenderParams {
+  showShadow: boolean;         // Whether to show shadow effects
+  power: number;               // Current power setting
+  screenBounds: {              // Screen bounds for culling
+    min: Point2D;
+    max: Point2D;
+  };
+}
+
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.8; // Cycle duration in milliseconds
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
-  private static readonly PARTICLES_PER_RING: number = 13; // Number of particles in each ring
+  private static readonly PARTICLES_PER_RING: number = 19; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -300,6 +325,159 @@ export class CanvasController {
   }
 
   /**
+   * Calculates and organizes particle wave fronts
+   * Handles filtering, sorting, and grouping particles into visually coherent wave fronts
+   */
+  private calculateWaveFronts(bubbles: Bubble[], screenBounds: {min: Point2D, max: Point2D}): WaveFront[] {
+    const waveFronts: WaveFront[] = [];
+    
+    for (const bubble of bubbles) {
+      // Skip bubbles with no energy
+      if (bubble.energy <= 0 || bubble.particles.length <= 1) {
+        continue;
+      }
+      
+      // Extract only visible particles
+      const visibleParticles = bubble.particles.filter(p => {
+        const pos = p.body.position;
+        return pos.x >= screenBounds.min.x && 
+               pos.x <= screenBounds.max.x && 
+               pos.y >= screenBounds.min.y && 
+               pos.y <= screenBounds.max.y;
+      });
+      
+      // Skip if not enough visible particles to form a meaningful wave front
+      if (visibleParticles.length < 2) {
+        continue;
+      }
+      
+      // Sort particles by angle around the center point (bubble origin)
+      const sortedParticles = visibleParticles.sort((a, b) => {
+        const aPos = a.body.position;
+        const bPos = b.body.position;
+        const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
+        const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
+        return aAngle - bAngle;
+      });
+      
+      // Extract just the particle positions for the wave front
+      const points: Point2D[] = sortedParticles.map(p => ({
+        x: p.body.position.x,
+        y: p.body.position.y
+      }));
+      
+      // Calculate wave parameters needed for rendering
+      const waveIndex = this.positions.indexOf(bubble.y);
+      const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+      const baseOpacity = bubble.energy / bubble.initialEnergy;
+      
+      // Create the wave front object
+      waveFronts.push({
+        points,
+        energy: bubble.energy,
+        waveIndex,
+        thicknessFactor,
+        baseOpacity
+      });
+    }
+    
+    return waveFronts;
+  }
+  
+  /**
+   * Generates a smooth path through a set of points using cubic Bézier curves
+   * Pure function that only deals with calculating the geometric path
+   */
+  private calculatePath(points: Point2D[]): Path2D {
+    // Create a new path
+    const path = new Path2D();
+    
+    // If not enough points, return empty path
+    if (points.length < 2) {
+      return path;
+    }
+    
+    // Start the path at the first point
+    path.moveTo(points[0].x, points[0].y);
+    
+    // If only two points, draw a straight line
+    if (points.length === 2) {
+      path.lineTo(points[1].x, points[1].y);
+      return path;
+    }
+    
+    // For 3+ points, calculate cubic Bézier curves
+    for (let i = 0; i < points.length - 1; i++) {
+      // Get four points needed for the curve calculation
+      const p0 = points[Math.max(0, i-1)];
+      const p1 = points[i];
+      const p2 = points[i+1];
+      const p3 = points[Math.min(points.length-1, i+2)];
+      
+      // Calculate control points for the current segment (p1 to p2)
+      const controlPointFactor = 0.4; // Adjust this for tighter/looser curves
+      
+      // First control point - influenced by p0 and p2
+      const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
+      const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
+      
+      // Second control point - influenced by p1 and p3
+      const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
+      const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
+      
+      // Add the cubic bezier curve to our path
+      path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+    
+    return path;
+  }
+  
+  /**
+   * Renders a wave front path with glow effects
+   * Handles all the styling and drawing, but not path calculation
+   */
+  private renderWaveFrontPath(
+    ctx: CanvasRenderingContext2D, 
+    path: Path2D, 
+    waveFront: WaveFront, 
+    renderParams: RenderParams
+  ): void {
+    const { showShadow, power } = renderParams;
+    const { baseOpacity, thicknessFactor, energy, waveIndex } = waveFront;
+    
+    // Energy factor determines line thickness
+    const energyFactor = energy / (power || 1);
+    
+    // Draw a glow effect with multiple layers (fewer layers for better performance)
+    const numLayers = showShadow ? 4 : 2;
+    
+    for (let layer = numLayers - 1; layer >= 0; layer--) {
+      // Fade out each successive blur layer
+      const layerOpacity = baseOpacity * (1 - layer * 0.2);
+      
+      // Only apply shadow effects if enabled and on higher power settings
+      if (showShadow && power > 1) {
+        ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
+        ctx.shadowBlur = 8 * (power / 3); // Scale blur with power setting
+      } else {
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+      }
+      
+      // Apply wave-specific styling
+      ctx.strokeStyle = `rgba(20, 210, 255, ${layerOpacity})`;
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH;
+      
+      // Render the path once for this layer
+      ctx.stroke(path);
+    }
+    
+    // Reset shadow effects after drawing
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  }
+
+  /**
    * Creates a physics body with optimized properties for perfectly elastic collisions
    * This helper ensures consistent physics properties across all particle bodies
    */
@@ -318,6 +496,48 @@ export class CanvasController {
       slop: 0.01,            // Minimal slop for precise collisions
       collisionFilter        // Custom collision filter passed as parameter
     });
+  }
+  
+  /**
+   * Draws UI elements like sweep lines and activation lines
+   * Extracted into a separate method for better code organization
+   */
+  private drawUIElements(width: number, height: number, progress: number): void {
+    const timeX = width * progress;
+    
+    // Draw sweep line with batched draw calls for performance
+    // Glow/blur effect layer
+    this.ctx.beginPath();
+    this.ctx.moveTo(timeX - 2, 0);
+    this.ctx.lineTo(timeX - 2, height);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    this.ctx.lineWidth = 5;
+    this.ctx.stroke();
+    
+    // Main sweep line - thicker and brighter
+    this.ctx.beginPath();
+    this.ctx.moveTo(timeX, 0);
+    this.ctx.lineTo(timeX, height);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)"; // Increased brightness
+    this.ctx.lineWidth = 2; // Thicker line
+    this.ctx.stroke();
+
+    // Draw activation line with batched calls
+    // Glow layer
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.activationLineX, 0);
+    this.ctx.lineTo(this.activationLineX, height);
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.05)";
+    this.ctx.lineWidth = 3;
+    this.ctx.stroke();
+    
+    // Main activation line
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.activationLineX, 0);
+    this.ctx.lineTo(this.activationLineX, height);
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.1)";
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
   }
 
 
@@ -382,14 +602,14 @@ export class CanvasController {
     const centerY = height / 2; // Always centered vertically
     
     // Wall thickness for the ring
-    const wallThickness = 3;
+    const wallThickness = 5;
     
     // Create a composite for all the small segments that will form our ring
     const newOvalBody = Matter.Composite.create();
     this.ovalBody = newOvalBody;
     
     // Number of segments to create a smooth ring
-    const segments = 24;
+    const segments = 20;
     
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
@@ -471,45 +691,17 @@ export class CanvasController {
     // Reduce motion blur effect to make particles stay visible longer
     this.ctx.fillStyle = 'rgba(26, 26, 26, 0.03)'; // Reduced from 0.06 to 0.03 (another 50% reduction)
     this.ctx.fillRect(0, 0, width, height);
-
+    
+    // =====================================
+    // Step 1: Draw UI elements (sweep lines, activation lines)
+    // =====================================
+    this.drawUIElements(width, height, progress);
+    
+    // =====================================
+    // Step 2: Handle particle spawning at activation line
+    // =====================================
     const timeX = width * progress;
-
-    // Draw sweep line with reduced complexity (two layers instead of three)
-    // Batch draw calls for performance
-    this.ctx.beginPath();
     
-    // Glow/blur effect layer
-    this.ctx.moveTo(timeX - 2, 0);
-    this.ctx.lineTo(timeX - 2, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-    this.ctx.lineWidth = 5;
-    this.ctx.stroke();
-    
-    // Main sweep line - thicker and brighter
-    this.ctx.beginPath();
-    this.ctx.moveTo(timeX, 0);
-    this.ctx.lineTo(timeX, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)"; // Increased brightness
-    this.ctx.lineWidth = 2; // Thicker line
-    this.ctx.stroke();
-
-    // Draw activation line with batched calls
-    // Glow layer
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.activationLineX, 0);
-    this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.05)";
-    this.ctx.lineWidth = 3;
-    this.ctx.stroke();
-    
-    // Main activation line
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.activationLineX, 0);
-    this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.1)";
-    this.ctx.lineWidth = 1;
-    this.ctx.stroke();
-
     // Check if the sweep line has crossed the activation line (left to right only)
     const hasPassedActivationLine = 
       (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX);
@@ -523,17 +715,17 @@ export class CanvasController {
     // Update previous position for next frame
     this.previousSweepLineX = timeX;
 
-    // Limit physics calculations to on-screen elements
+    // =====================================
+    // Step 3: Define screen bounds for physics and rendering optimization
+    // =====================================
     const bufferMargin = 50; // Increased margin to prevent abrupt changes (20px → 50px)
     const screenBounds = {
       min: { x: -bufferMargin, y: -bufferMargin },
-      max: { x: this.canvas.width + bufferMargin, y: this.canvas.height + bufferMargin }
+      max: { x: width + bufferMargin, y: height + bufferMargin }
     };
 
     // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
-      //bubble.age++;
-
       // Optimize physics by only processing particles within or near the canvas
       if (bubble.particles.length > 0) {
         bubble.particles.forEach(particle => {
@@ -578,97 +770,64 @@ export class CanvasController {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
 
-        // We no longer draw inactive particles - they're completely invisible
-        // Only blue particles at the activation line are visible
-        // For active particles, they'll be drawn with the bezier curves below
-        // We skip drawing them here to avoid double-rendering
-
-        // Draw all particles with bezier curves, not just those near the activation line
+        // We skip drawing individual particles here to avoid double-rendering
+        // since they'll be drawn with the bezier curves below
+        
+        // Draw all particles with bezier curves, using our modular approach
         if (bubble.particles.length > 1) {
-          const visibleParticles = bubble.particles
-            .filter(p => {
-              // Get particles that are on screen
-              const pos = p.body.position;
-              return pos.x >= 0 && pos.x <= this.canvas.width && pos.y >= 0 && pos.y <= this.canvas.height;
-            })
-            .sort((a, b) => {
-              // Sort particles by angle around the center
-              const aPos = a.body.position;
-              const bPos = b.body.position;
-              const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
-              const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
-              return aAngle - bAngle;
-            });
-
+          // Get visible particles for rendering
+          const visibleParticles = bubble.particles.filter(p => {
+            const pos = p.body.position;
+            return pos.x >= 0 && pos.x <= this.canvas.width && 
+                   pos.y >= 0 && pos.y <= this.canvas.height;
+          });
+          
+          // If we have enough particles, use wave front rendering
           if (visibleParticles.length > 2) {
-            // Calculate power factor for drawing
-            const drawPowerFactor = this.params.power / 3;
-            const baseOpacity = bubble.energy / bubble.initialEnergy;
+            // =====================================
+            // Step 4: Calculate wave fronts using our dedicated function
+            // =====================================
+            const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
             
-            // Calculate thickness based on wave position and energy
-            const energyFactor = bubble.energy / bubble.initialEnergy;
-            const waveIndex = this.positions.indexOf(bubble.y);
-            const thicknessFactor = this.calculateThicknessFactor(waveIndex);
+            // Prepare rendering parameters
+            const renderParams: RenderParams = {
+              showShadow: this.params.power > 1,
+              power: this.params.power,
+              screenBounds
+            };
             
-            // OPTIMIZATION: Create a Path2D object to store the bezier curve path once
-            // This prevents recalculating the same curve for each drawing layer
-            const particlePath = new Path2D();
-            
-            // Start at the first particle
-            const startPos = visibleParticles[0].body.position;
-            particlePath.moveTo(startPos.x, startPos.y);
-            
-            // Calculate bezier curve just ONCE and store in path
-            for (let i = 0; i < visibleParticles.length - 1; i++) {
-              const p0 = visibleParticles[Math.max(0, i-1)].body.position;
-              const p1 = visibleParticles[i].body.position;
-              const p2 = visibleParticles[i+1].body.position;
-              const p3 = visibleParticles[Math.min(visibleParticles.length-1, i+2)].body.position;
-
-              // Calculate control points for the current segment (p1 to p2)
-              const controlPointFactor = 0.4; // Adjust this for tighter/looser curves
-
-              // First control point - influenced by p0 and p2
-              const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-              const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-
-              // Second control point - influenced by p1 and p3
-              const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-              const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-
-              // Add the cubic bezier curve to our path (calculate only once)
-              particlePath.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+            // Process each wave front
+            for (const waveFront of waveFronts) {
+              if (waveFront.points.length < 2) continue;
+              
+              // =====================================
+              // Step 5: Calculate the path once using our path generation function
+              // =====================================
+              const path = this.calculatePath(waveFront.points);
+              
+              // =====================================
+              // Step 6: Render the path with appropriate styling using our rendering function
+              // =====================================
+              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
             }
             
-            // Now draw the SAME path multiple times with different styles
-            // Draw a glow effect with reduced blur layers (4 layers)
-            for (let blur = 3; blur >= 0; blur--) {
-              const currentOpacity = baseOpacity * (1 - blur * 0.2); // Fade out each blur layer
-
-              // Only use shadow effect for higher power levels to save rendering time
-              if (this.params.power > 1) {
-                this.ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
-                this.ctx.shadowBlur = 8 * drawPowerFactor;
-              } else {
-                this.ctx.shadowColor = 'transparent';
-                this.ctx.shadowBlur = 0;
-              }
-              
-              this.ctx.strokeStyle = `rgba(20, 210, 255, ${currentOpacity})`;
-              this.ctx.lineWidth = energyFactor * thicknessFactor;
-              
-              // Stroke the pre-calculated path instead of rebuilding it
-              this.ctx.stroke(particlePath);
+            // Draw individual particles if needed
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
+                const pos = particle.body.position;
+                const particleSize = 0.8;
+                const particleOpacity = opacity * 0.6;
+                
+                // Draw a small dot for each particle
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 50, 200, ${particleOpacity})`;
+                this.ctx.fill();
+              });
             }
-
-            // Reset shadow effects after drawing the curve
-            this.ctx.shadowColor = 'transparent';
-            this.ctx.shadowBlur = 0;
-
-            // Draw particles as bright neon pink circles only if showParticles is true
-            
-          } else if (visibleParticles.length > 1) {
-            // If we don't have enough points for a proper curve, fall back to lines
+          } 
+          // If we have some particles but not enough for a curve, draw simple lines
+          else if (visibleParticles.length > 1) {
             this.ctx.beginPath();
             const baseOpacity = bubble.energy / bubble.initialEnergy;
             const lineOpacity = baseOpacity * 0.4;
@@ -688,22 +847,20 @@ export class CanvasController {
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const cycleDiff = this.currentCycleNumber - bubble.cycleNumber;
-                const particleSize = (cycleDiff / CanvasController.PARTICLE_LIFETIME_CYCLES) * 0.4;
-
+                const particleSize = 0.8;
+                
                 // Draw a filled circle with neon pink glow effect
                 this.ctx.beginPath();
-                this.ctx.arc(pos.x, pos.y, particleSize * 0.8, 0, Math.PI * 2);
+                this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
                 this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
                 this.ctx.fill();
-
               });
             }
           }
         }
-      } 
+      }
 
-
+      // Check if the bubble has expired based on its cycle number
       if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
         if (bubble.particles.length > 0) {
           bubble.particles.forEach(particle => {
