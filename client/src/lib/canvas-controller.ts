@@ -62,15 +62,15 @@ interface RenderParams {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6; // Cycle duration in milliseconds
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4; // Cycle duration in milliseconds
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
-  private static readonly OPACITY_DECAY_RATE: number = 0.05; // How much opacity decreases per cycle
+  private static readonly OPACITY_DECAY_RATE: number = 0.4; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 1.0; // Reduced to 1.0 (5x thinner) as requested for debugging
-  private static readonly PARTICLES_PER_RING: number = 15; // Number of particles in each ring
+  private static readonly PARTICLES_PER_RING: number = 11; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -106,7 +106,7 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 3,    // Increased for better physics accuracy
+      positionIterations: 4,    // Increased for better physics accuracy
       velocityIterations: 4,    // Increased for smoother motion
       constraintIterations: 2
     }); 
@@ -187,7 +187,7 @@ export class CanvasController {
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
     // Keep the compression factor high to spread the 9 positions across the increased canvas height
-    const compressionFactor = 0.3; // Higher value to use more vertical space
+    const compressionFactor = 0.1; // Higher value to use more vertical space
     const center = canvasHeight / 2;
     const numPositions = 9; // Back to the original 9 positions as requested
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 2);
@@ -275,10 +275,10 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 5.9; 
+        const baseSpeed = 6.9; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 + 0.2 * horizontalAlignment);
+        const directedSpeed = baseSpeed * (1 + 0.1 * horizontalAlignment);
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -331,7 +331,7 @@ export class CanvasController {
   }
 
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.003));
   }
 
   /**
@@ -405,14 +405,14 @@ export class CanvasController {
       }
       
       const dotProductRanges: DotProductRange[] = [
-        { min: 0.2, max: 0.4 },
-        { min: 0.4, max: 0.7 },
-        { min: 0.7, max: 0.9 },
-        { min: 0.9, max: 1.0 },
-        { min: -0.4, max: -0.2 },
-        { min: -0.7, max: -0.4 },
-        { min: -0.9, max: -0.7 },
-        { min: -1.0, max: -0.9 }
+        { min: 0.2, max: 0.3 },
+        { min: 0.3, max: 0.4 },
+        { min: 0.4, max: 0.6 },
+        { min: 0.6, max: 1.0 },
+        { min: -0.3, max: -0.2 },
+        { min: -0.4, max: -0.3 },
+        { min: -0.6, max: -0.4 },
+        { min: -1.0, max: -0.6}
       ];
       
       // Group particles by their dot product range
@@ -448,19 +448,9 @@ export class CanvasController {
         // Calculate average energy and position index from constituent particles
         const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.intensity, 0) / orderedParticles.length;
         
-        // For thickness, use a value based on the direction bucket
-        // Forward-moving particles get thicker lines
-        const isForwardMoving = directionIndex < 4; // First 4 ranges are positive (forward)
-        const thicknessFactor = isForwardMoving 
-          ? 2.0 + (directionIndex * 0.25) // 2.0 to 2.75 for forward
-          : 1.0 + ((7 - directionIndex) * 0.15); // 1.0 to 1.45 for backward
-        
-        // Calculate opacity based on average intensity and direction
-        const baseOpacity = isForwardMoving 
-          ? 0.8 - (directionIndex * 0.1) // 0.8 to 0.5 for forward (stronger is more opaque)
-          : 0.5 - ((7 - directionIndex) * 0.05); // 0.5 to 0.3 for backward
-        
-        // Create the wave front object
+     
+        const thicknessFactor = 2;
+        const baseOpacity = 0.9; 
         waveFronts.push({
           points,
           energy: avgEnergy * 5, // Scale energy for visual effect
@@ -636,15 +626,15 @@ export class CanvasController {
     // Make all curves blue with varying opacity/thickness as requested
     
     // Make everything half as thick and twice as transparent
-    const adjustedOpacity = baseOpacity * 0.5; // Half the opacity
+    const adjustedOpacity = baseOpacity * 0.8; // Half the opacity
     
     // Base blue color for all waves with adjusted opacity
     ctx.strokeStyle = `rgba(20, 210, 255, ${adjustedOpacity})`;
-    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.75; // Half as thick (1.5 * 0.5)
+    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5; // Half as thick (1.5 * 0.5)
     ctx.stroke(path);
     
     // Add highlight layer for higher energy waves
-    if (energyFactor > 0.5) {
+    if (energyFactor > 0.8) {
       ctx.strokeStyle = `rgba(160, 240, 255, ${adjustedOpacity * 0.8})`;
       ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.2; // Half as thick (0.4 * 0.5)
       ctx.stroke(path);
@@ -851,7 +841,7 @@ export class CanvasController {
     }
 
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.021)'; // Further reduced by 30% from 0.03 to 0.021
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.5)'; // Increased to 0.5 to reduce motion blur effect
     this.ctx.fillRect(0, 0, width, height);
     
     // =====================================
@@ -1067,10 +1057,6 @@ export class CanvasController {
     this.ctx.restore();
   }
 
-  // Track whether this frame should render
-  private frameCount: number = 0;
-  private readonly RENDER_EVERY_N_FRAMES: number = 2; // Render every other frame
-  
   private animate() {
     if (!this.startTime) return;
 
@@ -1107,18 +1093,8 @@ export class CanvasController {
 
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
-    
-    // Increment frame counter
-    this.frameCount++;
-    
-    // Update physics simulation
     this.updatePhysics(elapsed);
-    
-    // Only render every N frames to create more distinct wave patterns
-    if (this.frameCount % this.RENDER_EVERY_N_FRAMES === 0) {
-      this.drawFrame(progress);
-    }
-    
+    this.drawFrame(progress);
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
 
@@ -1126,19 +1102,8 @@ export class CanvasController {
     // Use fixed timestep for more consistent physics
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
     
-    // Determine if this is a render frame or a physics-only frame
-    const isRenderFrame = this.frameCount % this.RENDER_EVERY_N_FRAMES === 0;
-    
-    // More physics substeps when we're not rendering, and even more when the oval is shown
-    let numSubSteps;
-    if (isRenderFrame) {
-      // Baseline substeps when rendering
-      numSubSteps = this.params.showOval ? 4 : 2;
-    } else {
-      // Double the substeps when not rendering
-      numSubSteps = this.params.showOval ? 8 : 4;
-    }
-    
+    // Use a variable number of substeps based on whether oval is shown
+    const numSubSteps = this.params.showOval ? 4 : 2; // More substeps with oval present
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
