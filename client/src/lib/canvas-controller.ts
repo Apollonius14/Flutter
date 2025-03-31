@@ -45,6 +45,7 @@ interface WaveFront {
   waveIndex: number;           // Position index in the wave pattern
   thicknessFactor: number;     // Calculated thickness for this wavefront
   baseOpacity: number;         // Base opacity for this wavefront
+  cycleNumber: number;         // The cycle number this wavefront belongs to
 }
 
 // Interface for rendering parameters
@@ -381,7 +382,8 @@ export class CanvasController {
         energy: bubble.energy,
         waveIndex,
         thicknessFactor,
-        baseOpacity
+        baseOpacity,
+        cycleNumber: bubble.cycleNumber  // Pass the bubble's cycle number to the wave front
       });
     }
     
@@ -477,22 +479,22 @@ export class CanvasController {
     renderParams: RenderParams
   ): void {
     const { showShadow, power } = renderParams;
-    const { baseOpacity, thicknessFactor, energy, waveIndex } = waveFront;
+    const { baseOpacity, thicknessFactor, energy, waveIndex, cycleNumber } = waveFront;
     
     // Energy factor determines line thickness
     const energyFactor = energy / (power || 1);
     
     // Calculate opacity based on whether this is the primary wavefront or a trailing one
     // If this is the first wavefront from its bubble, make it more prominent
-    // Get the cycle number for this wavefront
-    const cycleNumber = this.currentCycleNumber - this.bubbles[0]?.cycleNumber || 0;
+    // Get the relative cycle number (how many cycles ago this wave was created)
+    const relativeCycleNumber = this.currentCycleNumber - cycleNumber;
     
     // Exponentially decrease opacity for trailing waves
     // First wave: 1.0x opacity, second: 0.5x opacity, third: 0.2x opacity
     let opacityMultiplier = 1.0;
-    if (cycleNumber === 1) {
+    if (relativeCycleNumber === 1) {
       opacityMultiplier = 0.5;  // Second wave is much less visible but still noticeable
-    } else if (cycleNumber >= 2) {
+    } else if (relativeCycleNumber >= 2) {
       opacityMultiplier = 0.2;  // Third and subsequent waves are barely visible
     }
     
@@ -501,9 +503,9 @@ export class CanvasController {
     // Second wave: 0.2x thickness (5x thinner than first)
     // Third wave: 0.04x thickness (5x thinner than second, 25x thinner than first)
     let thicknessMultiplier = 1.0;
-    if (cycleNumber === 1) {
+    if (relativeCycleNumber === 1) {
       thicknessMultiplier = 0.2;  // Second wave is 5x thinner
-    } else if (cycleNumber >= 2) {
+    } else if (relativeCycleNumber >= 2) {
       thicknessMultiplier = 0.04;  // Third wave is 25x thinner than first (5x thinner than second)
     }
     
@@ -536,7 +538,7 @@ export class CanvasController {
     }
     
     // Add multiple extra highlight strokes for the primary wavefront to make it extremely pronounced
-    if (cycleNumber === 0) {
+    if (relativeCycleNumber === 0) {
       // First highlight layer - bright center with strong glow
       ctx.shadowColor = 'rgba(120, 230, 255, 0.9)';
       ctx.shadowBlur = 18;
