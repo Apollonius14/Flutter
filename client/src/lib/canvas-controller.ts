@@ -106,7 +106,7 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 4,    // Increased for better physics accuracy
+      positionIterations: 3,    // Increased for better physics accuracy
       velocityIterations: 4,    // Increased for smoother motion
       constraintIterations: 2
     }); 
@@ -392,7 +392,8 @@ export class CanvasController {
   
   /**
    * Generates a path through a set of points using cubic or quadratic Bézier curves, or linear segments
-   * Now uses the curveType parameter from AnimationParams instead of the global constant
+   * Simplified version with fewer calculations for better performance
+   * Uses the curveType parameter from AnimationParams
    * Connects the last point back to the first to create a closed loop
    */
   private calculatePath(points: Point2D[]): Path2D {
@@ -410,117 +411,66 @@ export class CanvasController {
     // If only two points, draw a straight line and close the path
     if (points.length === 2) {
       path.lineTo(points[1].x, points[1].y);
-      path.closePath(); // Connect back to the first point
+      path.closePath();
       return path;
     }
     
-    // Use the curve type from params instead of the global constant
+    // Use the curve type from params
     const curveType = this.params.curveType;
     
     if (curveType === "linear") {
-      // Simplest option: just draw straight lines between each point
+      // Simplest and fastest option: just draw straight lines
       for (let i = 1; i < points.length; i++) {
         path.lineTo(points[i].x, points[i].y);
       }
-      // Connect the last point back to the first point
       path.closePath();
     } 
-    else if (curveType === "cubic") {
-      // For 3+ points, calculate cubic Bézier curves
+    else if (curveType === "quadratic") {
+      // Quadratic curves - more efficient than cubic
+      const controlFactor = 0.4; // Controls curve tightness
+      
       for (let i = 0; i < points.length - 1; i++) {
-        // Get four points needed for the curve calculation
-        const p0 = points[Math.max(0, i-1)];
-        const p1 = points[i];
-        const p2 = points[i+1];
-        const p3 = points[Math.min(points.length-1, i+2)];
-        
-        // Calculate control points for the current segment (p1 to p2)
-        const controlPointFactor = 0.4; // Adjust this for tighter/looser curves
-        
-        // First control point - influenced by p0 and p2
-        const cp1x = p1.x + (p2.x - p0.x) * controlPointFactor;
-        const cp1y = p1.y + (p2.y - p0.y) * controlPointFactor;
-        
-        // Second control point - influenced by p1 and p3
-        const cp2x = p2.x - (p3.x - p1.x) * controlPointFactor;
-        const cp2y = p2.y - (p3.y - p1.y) * controlPointFactor;
-        
-        // Add the cubic bezier curve to our path
-        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-      }
-      
-      // Add a curve connecting the last point back to the first point
-      const lastIndex = points.length - 1;
-      const pLast = points[lastIndex];
-      const pFirst = points[0];
-      const pBeforeLast = points[lastIndex - 1];
-      const pSecond = points[1];
-      
-      // Calculate control points for the closing segment (pLast to pFirst)
-      const controlPointFactor = 0.4;
-      
-      // First control point - influenced by pBeforeLast and pFirst
-      const cp1x = pLast.x + (pFirst.x - pBeforeLast.x) * controlPointFactor;
-      const cp1y = pLast.y + (pFirst.y - pBeforeLast.y) * controlPointFactor;
-      
-      // Second control point - influenced by pLast and pSecond
-      const cp2x = pFirst.x - (pSecond.x - pLast.x) * controlPointFactor;
-      const cp2y = pFirst.y - (pSecond.y - pLast.y) * controlPointFactor;
-      
-      // Add the final cubic bezier curve to close the path
-      path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
-    } 
-    else { // quadratic is the default (most performant)
-      // For 3+ points, calculate quadratic Bézier curves (more performant)
-      for (let i = 0; i < points.length - 1; i++) {
-        // Get three points needed for the curve calculation
         const p1 = points[i];
         const p2 = points[i+1];
         
-        // For quadratic curves, we need just one control point
-        // Calculate midpoint between current and next point, then offset it
+        // Simple midpoint calculation with offset
         const midX = (p1.x + p2.x) / 2;
         const midY = (p1.y + p2.y) / 2;
         
-        // Calculate tangent direction using nearby points
-        const prevPoint = i > 0 ? points[i-1] : p1;
-        const nextPoint = i < points.length - 2 ? points[i+2] : p2;
+        // Simple perpendicular offset for the control point
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const cpx = midX + dy * controlFactor;
+        const cpy = midY - dx * controlFactor;
         
-        // Calculate tangent vector (average of segments)
-        const tangentX = (p2.x - prevPoint.x) * 0.5;
-        const tangentY = (p2.y - prevPoint.y) * 0.5;
-        
-        // Control point - offset from midpoint using tangent
-        const controlFactor = 0.4; // Controls curve tightness (smaller = tighter)
-        const cpx = midX + tangentY * controlFactor; // Perpendicular offset for curvature
-        const cpy = midY - tangentX * controlFactor;
-        
-        // Add the quadratic bezier curve to our path (more performant than cubic)
         path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
       }
       
-      // Add a curve connecting the last point back to the first point
-      const lastIndex = points.length - 1;
-      const pLast = points[lastIndex];
-      const pFirst = points[0];
+      // Connect back to start with a simple line
+      path.lineTo(points[0].x, points[0].y);
+    } 
+    else { // "cubic" - use only when needed for quality
+      // Fixed control point factor
+      const controlPointFactor = 0.4;
       
-      // Calculate midpoint for the closing segment
-      const midX = (pLast.x + pFirst.x) / 2;
-      const midY = (pLast.y + pFirst.y) / 2;
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i+1];
+        
+        // Simplified control points using just current and next point
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        
+        const cp1x = p1.x + dx * controlPointFactor;
+        const cp1y = p1.y + dy * controlPointFactor;
+        const cp2x = p2.x - dx * controlPointFactor;
+        const cp2y = p2.y - dy * controlPointFactor;
+        
+        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+      }
       
-      // Calculate tangent using the last and first segment
-      const pBeforeLast = points[lastIndex - 1];
-      const pSecond = points[1];
-      const tangentX = (pFirst.x - pBeforeLast.x) * 0.5;
-      const tangentY = (pFirst.y - pBeforeLast.y) * 0.5;
-      
-      // Control point for the closing curve
-      const controlFactor = 0.4;
-      const cpx = midX + tangentY * controlFactor;
-      const cpy = midY - tangentX * controlFactor;
-      
-      // Add the final quadratic curve to close the path
-      path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
+      // Connect back to start with a simple line
+      path.lineTo(points[0].x, points[0].y);
     }
     
     return path;
@@ -528,6 +478,7 @@ export class CanvasController {
   
   /**
    * Renders a wave front path based on its energy level
+   * Simplified version with fewer layers and no shadows for better performance
    */
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
@@ -535,74 +486,27 @@ export class CanvasController {
     waveFront: WaveFront, 
     renderParams: RenderParams
   ): void {
-    const { showShadow, power } = renderParams;
+    const { power } = renderParams;
     const { baseOpacity, thicknessFactor, energy } = waveFront;
     
     // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
     
-    // Base number of layers depends on power setting
-    const numLayers = showShadow ? 4 : 2;
-    
-    // Draw main wave layers
-    for (let layer = numLayers - 1; layer >= 0; layer--) {
-      // Fade out each successive blur layer
-      const layerOpacity = baseOpacity * (1 - layer * 0.25);
-      
-      // Apply shadow effects based on energy level
-      if (showShadow && power > 1) {
-        ctx.shadowColor = `rgba(0, 220, 255, ${Math.min(0.7 * energyFactor, 0.7)})`;
-        ctx.shadowBlur = 12 * (power / 3) * energyFactor;
-      } else {
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-      }
-      
-      // Apply wave styling with color intensity based on energy
-      ctx.strokeStyle = `rgba(20, 210, 255, ${layerOpacity})`;
-      
-      // Line thickness driven by energy
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.5;
-      
-      ctx.stroke(path);
-    }
-    
-    // Add highlight effects that scale with energy
-    // Higher energy = more pronounced highlights
-    if (energyFactor > 0.4) {
-      // Scale glow intensity with energy
-      const glowIntensity = Math.min(0.9 * energyFactor, 0.9);
-      
-      // First highlight layer
-      ctx.shadowColor = `rgba(120, 230, 255, ${glowIntensity})`;
-      ctx.shadowBlur = 18 * energyFactor;
-      ctx.strokeStyle = `rgba(160, 240, 255, ${glowIntensity})`;
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.6;
-      ctx.stroke(path);
-      
-      // Only add inner highlight layers for higher energy waves
-      if (energyFactor > 0.6) {
-        // Second highlight layer 
-        ctx.shadowColor = `rgba(180, 250, 255, ${glowIntensity * 1.05})`;
-        ctx.shadowBlur = 12 * energyFactor;
-        ctx.strokeStyle = `rgba(200, 250, 255, ${glowIntensity * 1.05})`;
-        ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.3;
-        ctx.stroke(path);
-        
-        // Third highlight layer for highest energy waves
-        if (energyFactor > 0.8) {
-          ctx.shadowColor = `rgba(220, 255, 255, ${energyFactor})`;
-          ctx.shadowBlur = 8 * energyFactor;
-          ctx.strokeStyle = `rgba(255, 255, 255, ${energyFactor})`;
-          ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.15;
-          ctx.stroke(path);
-        }
-      }
-    }
-    
-    // Reset shadow effects
+    // No shadows for better performance
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
+    
+    // Main wave - single stroke with opacity based on energy
+    ctx.strokeStyle = `rgba(20, 210, 255, ${baseOpacity})`;
+    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.5;
+    ctx.stroke(path);
+    
+    // Add just one highlight layer for visual appeal, but only for higher energy waves
+    if (energyFactor > 0.5) {
+      ctx.strokeStyle = `rgba(160, 240, 255, ${baseOpacity * 0.8})`;
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.4;
+      ctx.stroke(path);
+    }
   }
 
   /**
@@ -634,43 +538,25 @@ export class CanvasController {
   
   /**
    * Draws UI elements like sweep lines and activation lines
-   * Extracted into a separate method for better code organization
+   * Simplified version with fewer draw calls for better performance
    */
   private drawUIElements(width: number, height: number, progress: number): void {
     const timeX = width * progress;
     
-    // Draw sweep line with batched draw calls for performance
-    // Glow/blur effect layer
-    this.ctx.beginPath();
-    this.ctx.moveTo(timeX - 2, 0);
-    this.ctx.lineTo(timeX - 2, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-    this.ctx.lineWidth = 5;
-    this.ctx.stroke();
-    
-    // Main sweep line - thicker and brighter
+    // Single sweep line without glow effect
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)"; // Increased brightness
-    this.ctx.lineWidth = 2; // Thicker line
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    this.ctx.lineWidth = 2;
     this.ctx.stroke();
 
-    // Draw activation line with batched calls
-    // Glow layer
+    // Single activation line without glow effect
     this.ctx.beginPath();
     this.ctx.moveTo(this.activationLineX, 0);
     this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.05)";
-    this.ctx.lineWidth = 3;
-    this.ctx.stroke();
-    
-    // Main activation line
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.activationLineX, 0);
-    this.ctx.lineTo(this.activationLineX, height);
-    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.1)";
-    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.15)";
+    this.ctx.lineWidth = 1.5;
     this.ctx.stroke();
   }
 
@@ -1012,7 +898,7 @@ export class CanvasController {
       // we need to iterate through each body in the composite
       const bodies = Matter.Composite.allBodies(this.ovalBody);
       
-      // Draw a glow effect for all the segments that make up the oval
+      // Draw the oval outline without glow effects
       this.ctx.beginPath();
       
       // Iterate through each segment body and draw it
@@ -1029,16 +915,10 @@ export class CanvasController {
         this.ctx.lineTo(vertices[0].x, vertices[0].y);
       });
       
-      // Add a subtle glow
-      this.ctx.shadowColor = 'rgba(220, 50, 255, 0.5)';
-      this.ctx.shadowBlur = 10;
-      this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.3)';
+      // Simple solid stroke without shadows
+      this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
       this.ctx.lineWidth = 1.5;
       this.ctx.stroke();
-      
-      // Reset shadow for the next drawing
-      this.ctx.shadowColor = 'transparent';
-      this.ctx.shadowBlur = 0;
     }
     
     // Restore canvas state (important for RTL transformation)
