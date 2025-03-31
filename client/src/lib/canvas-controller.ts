@@ -69,8 +69,8 @@ export class CanvasController {
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.05; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 6.0; // Increased to 6.0 for dramatically more pronounced wavefronts
-  private static readonly PARTICLES_PER_RING: number = 7; // Number of particles in each ring
+  private static readonly BASE_LINE_WIDTH: number = 5.0; // Increased to 6.0 for dramatically more pronounced wavefronts
+  private static readonly PARTICLES_PER_RING: number = 19; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -335,20 +335,34 @@ export class CanvasController {
   }
 
   /**
-   * Calculates and organizes particle wave fronts
-   * Now uses particles' fixed indices instead of sorting them in each frame
+   * Calculates and organizes particle wave fronts based on velocity direction
+   * Groups particles by cycle number and dot product of velocity with X-axis
    */
   private calculateWaveFronts(bubbles: Bubble[], screenBounds: {min: Point2D, max: Point2D}): WaveFront[] {
     const waveFronts: WaveFront[] = [];
     
+    // Step 1: Group all particles by cycle number
+    const particlesByCycle: Map<number, Particle[]> = new Map();
+    
     for (const bubble of bubbles) {
       // Skip bubbles with no energy
-      if (bubble.energy <= 0 || bubble.particles.length <= 1) {
+      if (bubble.energy <= 0 || bubble.particles.length === 0) {
         continue;
       }
       
-      // Extract only visible particles
-      const visibleParticles = bubble.particles.filter(p => {
+      // Add particles to their cycle group
+      const cycleNumber = bubble.cycleNumber;
+      if (!particlesByCycle.has(cycleNumber)) {
+        particlesByCycle.set(cycleNumber, []);
+      }
+      particlesByCycle.get(cycleNumber)!.push(...bubble.particles);
+    }
+    
+    // Process each cycle group
+    // Convert Map entries to array for TypeScript compatibility
+    Array.from(particlesByCycle.entries()).forEach(([cycleNumber, cycleParticles]) => {
+      // Step 2: Filter visible particles
+      const visibleParticles = cycleParticles.filter((p: Particle) => {
         const pos = p.body.position;
         return pos.x >= screenBounds.min.x && 
                pos.x <= screenBounds.max.x && 
@@ -356,36 +370,107 @@ export class CanvasController {
                pos.y <= screenBounds.max.y;
       });
       
-      // Skip if not enough visible particles to form a meaningful wave front
-      if (visibleParticles.length < 2) {
-        continue;
+      if (visibleParticles.length < 3) {
+        return; // Skip if not enough particles for a meaningful wavefront
       }
       
-      // Instead of sorting by angle, use the fixed indices assigned during creation
-      // This eliminates the per-frame sorting cost and visual jitter
-      const orderedParticles = [...visibleParticles].sort((a, b) => a.index - b.index);
+      // Step 3: Calculate dot product of velocity with positive X-axis
+      // and filter out particles moving close to vertical
+      interface ParticleWithDirection {
+        particle: Particle;
+        dotProduct: number;
+      }
       
-      // Extract just the particle positions for the wave front
-      const points: Point2D[] = orderedParticles.map(p => ({
-        x: p.body.position.x,
-        y: p.body.position.y
-      }));
-      
-      // Calculate wave parameters needed for rendering
-      const waveIndex = this.positions.indexOf(bubble.y);
-      const thicknessFactor = this.calculateThicknessFactor(waveIndex);
-      const baseOpacity = bubble.energy / bubble.initialEnergy;
-      
-      // Create the wave front object
-      waveFronts.push({
-        points,
-        energy: bubble.energy,
-        waveIndex,
-        thicknessFactor,
-        baseOpacity,
-        cycleNumber: bubble.cycleNumber  // Pass the bubble's cycle number to the wave front
+      const directionBasedParticles = visibleParticles.map((p: Particle): ParticleWithDirection => {
+        const velocity = p.body.velocity;
+        const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+        
+        // Calculate normalized dot product (cosine of angle with x-axis)
+        // If speed is 0, use 0 as the dot product
+        const dotProduct = speed === 0 ? 0 : velocity.x / speed;
+        
+        return {
+          particle: p,
+          dotProduct
+        };
+      }).filter((item: ParticleWithDirection) => {
+        // Filter out particles moving nearly vertically (dot product close to 0)
+        return Math.abs(item.dotProduct) >= 0.2;
       });
-    }
+      
+      // Step 4: Group particles into buckets based on dot product
+      interface DotProductRange {
+        min: number;
+        max: number;
+      }
+      
+      const dotProductRanges: DotProductRange[] = [
+        { min: 0.2, max: 0.4 },
+        { min: 0.4, max: 0.7 },
+        { min: 0.7, max: 0.9 },
+        { min: 0.9, max: 1.0 },
+        { min: -0.4, max: -0.2 },
+        { min: -0.7, max: -0.4 },
+        { min: -0.9, max: -0.7 },
+        { min: -1.0, max: -0.9 }
+      ];
+      
+      // Group particles by their dot product range
+      const particlesByDirection: Map<number, Particle[]> = new Map();
+      
+      for (let i = 0; i < dotProductRanges.length; i++) {
+        const range = dotProductRanges[i];
+        const particlesInRange = directionBasedParticles.filter((item: ParticleWithDirection) => 
+          item.dotProduct >= range.min && item.dotProduct <= range.max
+        ).map((item: ParticleWithDirection) => item.particle);
+        
+        // Only add groups with enough particles
+        if (particlesInRange.length >= 2) {
+          particlesByDirection.set(i, particlesInRange);
+        }
+      }
+      
+      // Step 5: Create wavefronts from each direction group
+      for (let directionIndex = 0; directionIndex < dotProductRanges.length; directionIndex++) {
+        // Skip if no particles in this direction bucket
+        if (!particlesByDirection.has(directionIndex)) continue;
+        
+        const groupParticles = particlesByDirection.get(directionIndex)!;
+        // Sort particles by their original indices to maintain consistency
+        const orderedParticles = [...groupParticles].sort((a, b) => a.index - b.index);
+        
+        // Extract just the particle positions for the wave front
+        const points: Point2D[] = orderedParticles.map(p => ({
+          x: p.body.position.x,
+          y: p.body.position.y
+        }));
+        
+        // Calculate average energy and position index from constituent particles
+        const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.intensity, 0) / orderedParticles.length;
+        
+        // For thickness, use a value based on the direction bucket
+        // Forward-moving particles get thicker lines
+        const isForwardMoving = directionIndex < 4; // First 4 ranges are positive (forward)
+        const thicknessFactor = isForwardMoving 
+          ? 2.0 + (directionIndex * 0.25) // 2.0 to 2.75 for forward
+          : 1.0 + ((7 - directionIndex) * 0.15); // 1.0 to 1.45 for backward
+        
+        // Calculate opacity based on average intensity and direction
+        const baseOpacity = isForwardMoving 
+          ? 0.8 - (directionIndex * 0.1) // 0.8 to 0.5 for forward (stronger is more opaque)
+          : 0.5 - ((7 - directionIndex) * 0.05); // 0.5 to 0.3 for backward
+        
+        // Create the wave front object
+        waveFronts.push({
+          points,
+          energy: avgEnergy * 5, // Scale energy for visual effect
+          waveIndex: directionIndex, // Use direction index for wave index
+          thicknessFactor,
+          baseOpacity,
+          cycleNumber
+        });
+      }
+    });
     
     return waveFronts;
   }
@@ -528,8 +613,8 @@ export class CanvasController {
   }
   
   /**
-   * Renders a wave front path based on its energy level
-   * Simplified version with fewer layers and no shadows for better performance
+   * Renders a wave front path based on its energy level and direction
+   * Uses different colors for forward and backward moving waves
    */
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
@@ -538,7 +623,7 @@ export class CanvasController {
     renderParams: RenderParams
   ): void {
     const { power } = renderParams;
-    const { baseOpacity, thicknessFactor, energy } = waveFront;
+    const { baseOpacity, thicknessFactor, energy, waveIndex } = waveFront;
     
     // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
@@ -547,16 +632,34 @@ export class CanvasController {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     
-    // Main wave - single stroke with opacity based on energy
-    ctx.strokeStyle = `rgba(20, 210, 255, ${baseOpacity})`;
-    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.5;
-    ctx.stroke(path);
+    // Determine if this is a forward or backward moving wave front
+    const isForwardMoving = waveIndex < 4; // First 4 indices are forward moving
     
-    // Add just one highlight layer for visual appeal, but only for higher energy waves
-    if (energyFactor > 0.5) {
-      ctx.strokeStyle = `rgba(160, 240, 255, ${baseOpacity * 0.8})`;
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.4;
+    // Choose colors based on direction
+    if (isForwardMoving) {
+      // Forward moving waves - blue colors
+      ctx.strokeStyle = `rgba(20, 210, 255, ${baseOpacity})`;
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.5;
       ctx.stroke(path);
+      
+      // Add highlight layer for higher energy waves
+      if (energyFactor > 0.5) {
+        ctx.strokeStyle = `rgba(160, 240, 255, ${baseOpacity * 0.8})`;
+        ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.4;
+        ctx.stroke(path);
+      }
+    } else {
+      // Backward moving waves - magenta colors
+      ctx.strokeStyle = `rgba(255, 100, 180, ${baseOpacity * 0.7})`;
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.2;
+      ctx.stroke(path);
+      
+      // Add highlight layer for higher energy waves
+      if (energyFactor > 0.5) {
+        ctx.strokeStyle = `rgba(255, 180, 220, ${baseOpacity * 0.6})`;
+        ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.35;
+        ctx.stroke(path);
+      }
     }
   }
 
