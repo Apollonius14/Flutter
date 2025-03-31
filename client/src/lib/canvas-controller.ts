@@ -70,7 +70,7 @@ export class CanvasController {
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.05; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 1.0; // Reduced to 1.0 (5x thinner) as requested for debugging
-  private static readonly PARTICLES_PER_RING: number = 19; // Number of particles in each ring
+  private static readonly PARTICLES_PER_RING: number = 15; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -170,7 +170,7 @@ export class CanvasController {
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - 1.4 * compressionFactor);
+      const transformedAngle = angle * (1 - compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
 
       particleAngles.push(normalizedAngle);
@@ -275,10 +275,10 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 3.9; 
+        const baseSpeed = 5.9; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 + 0.5 * horizontalAlignment);
+        const directedSpeed = baseSpeed * (1 + 0.2 * horizontalAlignment);
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -771,7 +771,7 @@ export class CanvasController {
     this.ovalBody = newOvalBody;
     
     // Increased number of segments for smoother collisions
-    const segments = 15;
+    const segments = 29;
     
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
@@ -1067,6 +1067,10 @@ export class CanvasController {
     this.ctx.restore();
   }
 
+  // Track whether this frame should render
+  private frameCount: number = 0;
+  private readonly RENDER_EVERY_N_FRAMES: number = 2; // Render every other frame
+  
   private animate() {
     if (!this.startTime) return;
 
@@ -1075,7 +1079,7 @@ export class CanvasController {
     const cyclePeriod = CanvasController.CYCLE_PERIOD_MS;
     const currentCycleTime = Math.floor(elapsed / cyclePeriod);
 
-    // Incrament Cycles
+    // Increment Cycles
     if (currentCycleTime > this.lastCycleTime) {
       this.lastCycleTime = currentCycleTime;
       this.currentCycleNumber++;
@@ -1103,8 +1107,18 @@ export class CanvasController {
 
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
+    
+    // Increment frame counter
+    this.frameCount++;
+    
+    // Update physics simulation
     this.updatePhysics(elapsed);
-    this.drawFrame(progress);
+    
+    // Only render every N frames to create more distinct wave patterns
+    if (this.frameCount % this.RENDER_EVERY_N_FRAMES === 0) {
+      this.drawFrame(progress);
+    }
+    
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
 
@@ -1112,8 +1126,19 @@ export class CanvasController {
     // Use fixed timestep for more consistent physics
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
     
-    // Use a variable number of substeps based on whether oval is shown
-    const numSubSteps = this.params.showOval ? 4 : 2; // More substeps with oval present
+    // Determine if this is a render frame or a physics-only frame
+    const isRenderFrame = this.frameCount % this.RENDER_EVERY_N_FRAMES === 0;
+    
+    // More physics substeps when we're not rendering, and even more when the oval is shown
+    let numSubSteps;
+    if (isRenderFrame) {
+      // Baseline substeps when rendering
+      numSubSteps = this.params.showOval ? 4 : 2;
+    } else {
+      // Double the substeps when not rendering
+      numSubSteps = this.params.showOval ? 8 : 4;
+    }
+    
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
