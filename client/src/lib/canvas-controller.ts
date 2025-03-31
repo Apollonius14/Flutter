@@ -66,7 +66,7 @@ export class CanvasController {
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 4.0; // Increased from 2.7 to 4.0 for more pronounced wavefronts
+  private static readonly BASE_LINE_WIDTH: number = 6.0; // Increased to 6.0 for dramatically more pronounced wavefronts
   private static readonly PARTICLES_PER_RING: number = 25; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
@@ -488,20 +488,23 @@ export class CanvasController {
     const cycleNumber = this.currentCycleNumber - this.bubbles[0]?.cycleNumber || 0;
     
     // Exponentially decrease opacity for trailing waves
-    // First wave: 1.0x opacity, second: 0.3x opacity, third: 0.1x opacity
+    // First wave: 1.0x opacity, second: 0.5x opacity, third: 0.2x opacity
     let opacityMultiplier = 1.0;
     if (cycleNumber === 1) {
-      opacityMultiplier = 0.3;  // Second wave is much less visible
+      opacityMultiplier = 0.5;  // Second wave is much less visible but still noticeable
     } else if (cycleNumber >= 2) {
-      opacityMultiplier = 0.1;  // Third and subsequent waves are barely visible
+      opacityMultiplier = 0.2;  // Third and subsequent waves are barely visible
     }
     
-    // Apply exponential decay to thickness as well
+    // Apply dramatic reduction in thickness for trailing waves
+    // First wave: 1.0x thickness (very thick)
+    // Second wave: 0.2x thickness (5x thinner than first)
+    // Third wave: 0.04x thickness (5x thinner than second, 25x thinner than first)
     let thicknessMultiplier = 1.0;
     if (cycleNumber === 1) {
-      thicknessMultiplier = 0.4;  // Second wave is thinner
+      thicknessMultiplier = 0.2;  // Second wave is 5x thinner
     } else if (cycleNumber >= 2) {
-      thicknessMultiplier = 0.2;  // Third and subsequent waves are very thin
+      thicknessMultiplier = 0.04;  // Third wave is 25x thinner than first (5x thinner than second)
     }
     
     // Draw a glow effect with multiple layers (fewer layers for better performance)
@@ -532,12 +535,27 @@ export class CanvasController {
       ctx.stroke(path);
     }
     
-    // Add an extra highlight stroke for the primary wavefront to make it even more pronounced
+    // Add multiple extra highlight strokes for the primary wavefront to make it extremely pronounced
     if (cycleNumber === 0) {
+      // First highlight layer - bright center with strong glow
       ctx.shadowColor = 'rgba(120, 230, 255, 0.9)';
-      ctx.shadowBlur = 15;
-      ctx.strokeStyle = 'rgba(120, 230, 255, 0.8)';
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5;
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = 'rgba(160, 240, 255, 0.9)';
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.6;
+      ctx.stroke(path);
+      
+      // Second highlight layer - inner bright line
+      ctx.shadowColor = 'rgba(180, 250, 255, 0.95)';
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = 'rgba(200, 250, 255, 0.95)';
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.3;
+      ctx.stroke(path);
+      
+      // Third highlight layer - super bright core
+      ctx.shadowColor = 'rgba(220, 255, 255, 1.0)';
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)';
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.15;
       ctx.stroke(path);
     }
     
