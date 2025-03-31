@@ -419,27 +419,16 @@ export class CanvasController {
     
     if (curveType === "chaikin") {
       // Implementation of Chaikin's corner cutting algorithm
-      // Create a closed loop of points for Chaikin's algorithm with better closure
+      // Create a closed loop of points for Chaikin's algorithm
       const closedPoints = [...points];
       
-      // Ensure proper closure by adding the first point at the end
-      // This creates a complete loop that the algorithm can properly smooth
-      if (points.length > 1) {
-        // Always add the first point at the end for consistent closure
+      // Only add the first point to close the loop if the first and last points aren't already the same
+      if (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y) {
         closedPoints.push(points[0]);
-        
-        // For very small point sets, duplicate a few points to ensure proper smoothing
-        if (points.length < 4) {
-          // Add a second loop of first two points for better curve generation with small point sets
-          closedPoints.push(points[0]);
-          if (points.length >= 2) {
-            closedPoints.push(points[1]);
-          }
-        }
       }
       
-      // Apply Chaikin's algorithm with 4 iterations for smoother curves
-      const iterations = 4;
+      // Apply Chaikin's algorithm with 3 iterations
+      const iterations = 3;
       let currentPoints = closedPoints;
       
       for (let iter = 0; iter < iterations; iter++) {
@@ -450,14 +439,13 @@ export class CanvasController {
           const p0 = currentPoints[i];
           const p1 = currentPoints[i+1];
           
-          // Use a more relaxed cutting ratio (0.7/0.3 instead of 0.75/0.25)
-          // This makes curves smoother but may follow original points less strictly
-          // Q = 0.7 * P0 + 0.3 * P1
-          // R = 0.3 * P0 + 0.7 * P1
-          const qx = 0.7 * p0.x + 0.3 * p1.x;
-          const qy = 0.7 * p0.y + 0.3 * p1.y;
-          const rx = 0.3 * p0.x + 0.7 * p1.x;
-          const ry = 0.3 * p0.y + 0.7 * p1.y;
+          // Cut corner at 1/4 and 3/4 marks
+          // Q = 0.75 * P0 + 0.25 * P1
+          // R = 0.25 * P0 + 0.75 * P1
+          const qx = 0.75 * p0.x + 0.25 * p1.x;
+          const qy = 0.75 * p0.y + 0.25 * p1.y;
+          const rx = 0.25 * p0.x + 0.75 * p1.x;
+          const ry = 0.25 * p0.y + 0.75 * p1.y;
           
           if (i === 0) {
             newPoints.push({ x: qx, y: qy });
