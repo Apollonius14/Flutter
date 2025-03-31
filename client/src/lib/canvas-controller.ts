@@ -63,13 +63,13 @@ interface RenderParams {
 export class CanvasController {
   // Core timing constants
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.05; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 4.0; // Increased to 6.0 for dramatically more pronounced wavefronts
+  private static readonly BASE_LINE_WIDTH: number = 6.0; // Increased to 6.0 for dramatically more pronounced wavefronts
   private static readonly PARTICLES_PER_RING: number = 7; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
@@ -393,6 +393,7 @@ export class CanvasController {
   /**
    * Generates a path through a set of points using cubic or quadratic Bézier curves, or linear segments
    * Now uses the curveType parameter from AnimationParams instead of the global constant
+   * Connects the last point back to the first to create a closed loop
    */
   private calculatePath(points: Point2D[]): Path2D {
     // Create a new path
@@ -406,9 +407,10 @@ export class CanvasController {
     // Start the path at the first point
     path.moveTo(points[0].x, points[0].y);
     
-    // If only two points, draw a straight line
+    // If only two points, draw a straight line and close the path
     if (points.length === 2) {
       path.lineTo(points[1].x, points[1].y);
+      path.closePath(); // Connect back to the first point
       return path;
     }
     
@@ -420,6 +422,8 @@ export class CanvasController {
       for (let i = 1; i < points.length; i++) {
         path.lineTo(points[i].x, points[i].y);
       }
+      // Connect the last point back to the first point
+      path.closePath();
     } 
     else if (curveType === "cubic") {
       // For 3+ points, calculate cubic Bézier curves
@@ -444,6 +448,27 @@ export class CanvasController {
         // Add the cubic bezier curve to our path
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
+      
+      // Add a curve connecting the last point back to the first point
+      const lastIndex = points.length - 1;
+      const pLast = points[lastIndex];
+      const pFirst = points[0];
+      const pBeforeLast = points[lastIndex - 1];
+      const pSecond = points[1];
+      
+      // Calculate control points for the closing segment (pLast to pFirst)
+      const controlPointFactor = 0.4;
+      
+      // First control point - influenced by pBeforeLast and pFirst
+      const cp1x = pLast.x + (pFirst.x - pBeforeLast.x) * controlPointFactor;
+      const cp1y = pLast.y + (pFirst.y - pBeforeLast.y) * controlPointFactor;
+      
+      // Second control point - influenced by pLast and pSecond
+      const cp2x = pFirst.x - (pSecond.x - pLast.x) * controlPointFactor;
+      const cp2y = pFirst.y - (pSecond.y - pLast.y) * controlPointFactor;
+      
+      // Add the final cubic bezier curve to close the path
+      path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
     } 
     else { // quadratic is the default (most performant)
       // For 3+ points, calculate quadratic Bézier curves (more performant)
@@ -473,6 +498,29 @@ export class CanvasController {
         // Add the quadratic bezier curve to our path (more performant than cubic)
         path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
       }
+      
+      // Add a curve connecting the last point back to the first point
+      const lastIndex = points.length - 1;
+      const pLast = points[lastIndex];
+      const pFirst = points[0];
+      
+      // Calculate midpoint for the closing segment
+      const midX = (pLast.x + pFirst.x) / 2;
+      const midY = (pLast.y + pFirst.y) / 2;
+      
+      // Calculate tangent using the last and first segment
+      const pBeforeLast = points[lastIndex - 1];
+      const pSecond = points[1];
+      const tangentX = (pFirst.x - pBeforeLast.x) * 0.5;
+      const tangentY = (pFirst.y - pBeforeLast.y) * 0.5;
+      
+      // Control point for the closing curve
+      const controlFactor = 0.4;
+      const cpx = midX + tangentY * controlFactor;
+      const cpy = midY - tangentX * controlFactor;
+      
+      // Add the final quadratic curve to close the path
+      path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
     }
     
     return path;
