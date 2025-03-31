@@ -632,34 +632,22 @@ export class CanvasController {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     
-    // Determine if this is a forward or backward moving wave front
-    const isForwardMoving = waveIndex < 4; // First 4 indices are forward moving
+    // Determine wave intensity by position in the wave pattern
+    // Make all curves blue with varying opacity/thickness as requested
     
-    // Choose colors based on direction
-    if (isForwardMoving) {
-      // Forward moving waves - blue colors
-      ctx.strokeStyle = `rgba(20, 210, 255, ${baseOpacity})`;
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.5;
+    // Make everything half as thick and twice as transparent
+    const adjustedOpacity = baseOpacity * 0.5; // Half the opacity
+    
+    // Base blue color for all waves with adjusted opacity
+    ctx.strokeStyle = `rgba(20, 210, 255, ${adjustedOpacity})`;
+    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.75; // Half as thick (1.5 * 0.5)
+    ctx.stroke(path);
+    
+    // Add highlight layer for higher energy waves
+    if (energyFactor > 0.5) {
+      ctx.strokeStyle = `rgba(160, 240, 255, ${adjustedOpacity * 0.8})`;
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.2; // Half as thick (0.4 * 0.5)
       ctx.stroke(path);
-      
-      // Add highlight layer for higher energy waves
-      if (energyFactor > 0.5) {
-        ctx.strokeStyle = `rgba(160, 240, 255, ${baseOpacity * 0.8})`;
-        ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.4;
-        ctx.stroke(path);
-      }
-    } else {
-      // Backward moving waves - magenta colors
-      ctx.strokeStyle = `rgba(255, 100, 180, ${baseOpacity * 0.7})`;
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.2;
-      ctx.stroke(path);
-      
-      // Add highlight layer for higher energy waves
-      if (energyFactor > 0.5) {
-        ctx.strokeStyle = `rgba(255, 180, 220, ${baseOpacity * 0.6})`;
-        ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.35;
-        ctx.stroke(path);
-      }
     }
   }
 
@@ -995,7 +983,7 @@ export class CanvasController {
                 // Draw a larger dot for each particle for better visualization
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${particleOpacity})`;
+                this.ctx.fillStyle = `rgba(20, 210, 255, ${particleOpacity})`;
                 this.ctx.fill();
               });
             }
@@ -1023,10 +1011,10 @@ export class CanvasController {
                 const pos = particle.body.position;
                 const particleSize = 4.0; // Increased 5x (from 0.8 to 4.0) as requested for debugging
                 
-                // Draw a larger filled circle with neon pink glow effect
+                // Draw a larger filled circle with blue glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
+                this.ctx.fillStyle = `rgba(20, 210, 255, ${opacity * 0.6})`; // Now blue to match other elements
                 this.ctx.fill();
               });
             }
