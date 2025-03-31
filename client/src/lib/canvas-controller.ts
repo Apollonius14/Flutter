@@ -2,7 +2,7 @@ import * as Matter from 'matter-js';
 
 // Path rendering type - can be set to either "CUBIC" or "QUADRATIC"
 // QUADRATIC is more performant but may look slightly less smooth
-const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "QUADRATIC";
+const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "CUBIC";
 
 interface AnimationParams {
   power: number;
@@ -10,6 +10,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; // Normalized position (0-1) for oval's horizontal position
   ovalEccentricity: number; // 0-1 value representing eccentricity
+  curveType: "cubic" | "quadratic" | "linear"; // Type of curve to use for rendering
 }
 
 interface Particle {
@@ -17,6 +18,7 @@ interface Particle {
   intensity: number;
   groupId: number;
   cycleNumber: number;
+  index: number; // Fixed index in the bubble's particles array
 }
 
 interface Bubble {
@@ -60,15 +62,15 @@ interface RenderParams {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
-  private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6; // Cycle duration in milliseconds
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
+  private static readonly PHYSICS_TIMESTEP_MS: number = 12; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
-  private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 7.0; // Increased to 6.0 for dramatically more pronounced wavefronts
-  private static readonly PARTICLES_PER_RING: number = 11; // Number of particles in each ring
+  private static readonly OPACITY_DECAY_RATE: number = 0.05; // How much opacity decreases per cycle
+  private static readonly BASE_LINE_WIDTH: number = 4.0; // Increased to 6.0 for dramatically more pronounced wavefronts
+  private static readonly PARTICLES_PER_RING: number = 7; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -104,16 +106,17 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 5,    // Increased for better physics accuracy
-      velocityIterations: 6,    // Increased for smoother motion
-      constraintIterations: 3
+      positionIterations: 4,    // Increased for better physics accuracy
+      velocityIterations: 4,    // Increased for smoother motion
+      constraintIterations: 2
     }); 
     this.params = {
       power: 12,
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5, // Default to center
-      ovalEccentricity: 0.7 // Default eccentricity
+      ovalEccentricity: 0.7, // Default eccentricity
+      curveType: "cubic" // Default to cubic curves
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -252,7 +255,7 @@ export class CanvasController {
       const particleAngles = this.generateParticleAngles(numParticlesInRing);
 
       // Create particles at the calculated angles
-      for (const angle of particleAngles) {
+      particleAngles.forEach((angle, idx) => {
         const particleX = x + Math.cos(angle) * bubbleRadius;
         const particleY = y + Math.sin(angle) * bubbleRadius;
 
@@ -262,7 +265,8 @@ export class CanvasController {
           frictionAir: 0.0,      // No air resistance
           frictionStatic: 0.0,   // No static friction
           restitution: 1.0,      // Perfect elasticity (no energy loss)
-          mass: 0.4,             // Light mass for responsive physics
+          mass:1,             // Light mass for responsive physics
+          inertia: Infinity,
           slop: 0.01,            // Minimal slop for precise collisions
           collisionFilter: {
             category: 0x0001,
@@ -271,10 +275,10 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 5.9; 
+        const baseSpeed = 3.9; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 + 0.7 * horizontalAlignment);
+        const directedSpeed = baseSpeed * (1 + 0.5 * horizontalAlignment);
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -283,15 +287,16 @@ export class CanvasController {
         });
 
         Matter.Composite.add(this.engine.world, body);
-        // Create a properly typed particle with cycle number
+        // Create a properly typed particle with cycle number and index
         const particle: Particle = {
           body,
           intensity: intensity,
           groupId: groupId,  // Assign the same group ID to all particles in this ring
-          cycleNumber: this.currentCycleNumber  // Assign current cycle number
+          cycleNumber: this.currentCycleNumber,  // Assign current cycle number
+          index: idx  // Assign fixed index based on position in the angle array
         };
         particles.push(particle);
-        }
+      });
 
       bubbles.push({
         x,
@@ -331,7 +336,7 @@ export class CanvasController {
 
   /**
    * Calculates and organizes particle wave fronts
-   * Handles filtering, sorting, and grouping particles into visually coherent wave fronts
+   * Now uses particles' fixed indices instead of sorting them in each frame
    */
   private calculateWaveFronts(bubbles: Bubble[], screenBounds: {min: Point2D, max: Point2D}): WaveFront[] {
     const waveFronts: WaveFront[] = [];
@@ -356,17 +361,12 @@ export class CanvasController {
         continue;
       }
       
-      // Sort particles by angle around the center point (bubble origin)
-      const sortedParticles = visibleParticles.sort((a, b) => {
-        const aPos = a.body.position;
-        const bPos = b.body.position;
-        const aAngle = Math.atan2(aPos.y - bubble.y, aPos.x - bubble.x);
-        const bAngle = Math.atan2(bPos.y - bubble.y, bPos.x - bubble.x);
-        return aAngle - bAngle;
-      });
+      // Instead of sorting by angle, use the fixed indices assigned during creation
+      // This eliminates the per-frame sorting cost and visual jitter
+      const orderedParticles = [...visibleParticles].sort((a, b) => a.index - b.index);
       
       // Extract just the particle positions for the wave front
-      const points: Point2D[] = sortedParticles.map(p => ({
+      const points: Point2D[] = orderedParticles.map(p => ({
         x: p.body.position.x,
         y: p.body.position.y
       }));
@@ -391,8 +391,8 @@ export class CanvasController {
   }
   
   /**
-   * Generates a smooth path through a set of points using either cubic or quadratic Bézier curves
-   * Pure function that only deals with calculating the geometric path
+   * Generates a path through a set of points using cubic or quadratic Bézier curves, or linear segments
+   * Now uses the curveType parameter from AnimationParams instead of the global constant
    */
   private calculatePath(points: Point2D[]): Path2D {
     // Create a new path
@@ -412,7 +412,16 @@ export class CanvasController {
       return path;
     }
     
-    if (BEZIER_CURVE_TYPE === "CUBIC") {
+    // Use the curve type from params instead of the global constant
+    const curveType = this.params.curveType;
+    
+    if (curveType === "linear") {
+      // Simplest option: just draw straight lines between each point
+      for (let i = 1; i < points.length; i++) {
+        path.lineTo(points[i].x, points[i].y);
+      }
+    } 
+    else if (curveType === "cubic") {
       // For 3+ points, calculate cubic Bézier curves
       for (let i = 0; i < points.length - 1; i++) {
         // Get four points needed for the curve calculation
@@ -435,7 +444,8 @@ export class CanvasController {
         // Add the cubic bezier curve to our path
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
-    } else {
+    } 
+    else { // quadratic is the default (most performant)
       // For 3+ points, calculate quadratic Bézier curves (more performant)
       for (let i = 0; i < points.length - 1; i++) {
         // Get three points needed for the curve calculation
@@ -456,7 +466,7 @@ export class CanvasController {
         const tangentY = (p2.y - prevPoint.y) * 0.5;
         
         // Control point - offset from midpoint using tangent
-        const controlFactor = 0.2; // Controls curve tightness (smaller = tighter)
+        const controlFactor = 0.4; // Controls curve tightness (smaller = tighter)
         const cpx = midX + tangentY * controlFactor; // Perpendicular offset for curvature
         const cpy = midY - tangentX * controlFactor;
         
@@ -562,8 +572,9 @@ export class CanvasController {
       frictionAir: 0,
       frictionStatic: 0,
       restitution: 1.0,
-      mass: 0.4,
-      slop: 0.005,         // Reduced slop for more precise collisions 
+      inertia: Infinity,
+      mass: 1,
+      slop: 0.05,         // Reduced slop for more precise collisions 
       collisionFilter
     });
     
@@ -677,14 +688,14 @@ export class CanvasController {
     const centerY = height / 2; // Always centered vertically
     
     // Wall thickness for the ring
-    const wallThickness = 5;
+    const wallThickness = 9;
     
     // Create a composite for all the small segments that will form our ring
     const newOvalBody = Matter.Composite.create();
     this.ovalBody = newOvalBody;
     
     // Increased number of segments for smoother collisions
-    const segments = 32;
+    const segments = 15;
     
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
