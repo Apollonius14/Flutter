@@ -2,7 +2,7 @@ import * as Matter from 'matter-js';
 
 // Path rendering type - can be set to either "CUBIC" or "QUADRATIC"
 // QUADRATIC is more performant but may look slightly less smooth
-const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "CUBIC";
+const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "QUADRATIC";
 
 interface AnimationParams {
   power: number;
@@ -67,8 +67,8 @@ export class CanvasController {
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 6.0; // Increased to 6.0 for dramatically more pronounced wavefronts
-  private static readonly PARTICLES_PER_RING: number = 25; // Number of particles in each ring
+  private static readonly BASE_LINE_WIDTH: number = 7.0; // Increased to 6.0 for dramatically more pronounced wavefronts
+  private static readonly PARTICLES_PER_RING: number = 11; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -167,7 +167,7 @@ export class CanvasController {
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - 1.5 * compressionFactor);
+      const transformedAngle = angle * (1 - 1.4 * compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
 
       particleAngles.push(normalizedAngle);
@@ -469,8 +469,7 @@ export class CanvasController {
   }
   
   /**
-   * Renders a wave front path with glow effects
-   * Handles all the styling and drawing, but not path calculation
+   * Renders a wave front path based on its energy level
    */
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
@@ -479,96 +478,77 @@ export class CanvasController {
     renderParams: RenderParams
   ): void {
     const { showShadow, power } = renderParams;
-    const { baseOpacity, thicknessFactor, energy, waveIndex, cycleNumber } = waveFront;
+    const { baseOpacity, thicknessFactor, energy } = waveFront;
     
-    // Energy factor determines line thickness
+    // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
     
-    // Calculate opacity based on whether this is the primary wavefront or a trailing one
-    // If this is the first wavefront from its bubble, make it more prominent
-    // Get the relative cycle number (how many cycles ago this wave was created)
-    const relativeCycleNumber = this.currentCycleNumber - cycleNumber;
-    
-    // Exponentially decrease opacity for trailing waves
-    // First wave: 1.0x opacity, second: 0.5x opacity, third: 0.2x opacity
-    let opacityMultiplier = 1.0;
-    if (relativeCycleNumber === 1) {
-      opacityMultiplier = 0.5;  // Second wave is much less visible but still noticeable
-    } else if (relativeCycleNumber >= 2) {
-      opacityMultiplier = 0.2;  // Third and subsequent waves are barely visible
-    }
-    
-    // Apply dramatic reduction in thickness for trailing waves
-    // First wave: 1.0x thickness (very thick)
-    // Second wave: 0.2x thickness (5x thinner than first)
-    // Third wave: 0.04x thickness (5x thinner than second, 25x thinner than first)
-    let thicknessMultiplier = 1.0;
-    if (relativeCycleNumber === 1) {
-      thicknessMultiplier = 0.2;  // Second wave is 5x thinner
-    } else if (relativeCycleNumber >= 2) {
-      thicknessMultiplier = 0.04;  // Third wave is 25x thinner than first (5x thinner than second)
-    }
-    
-    // Draw a glow effect with multiple layers (fewer layers for better performance)
+    // Base number of layers depends on power setting
     const numLayers = showShadow ? 4 : 2;
     
+    // Draw main wave layers
     for (let layer = numLayers - 1; layer >= 0; layer--) {
-      // Fade out each successive blur layer, with more pronounced contrast
-      const layerOpacity = baseOpacity * opacityMultiplier * (1 - layer * 0.25);
+      // Fade out each successive blur layer
+      const layerOpacity = baseOpacity * (1 - layer * 0.25);
       
-      // Only apply shadow effects if enabled and on higher power settings
+      // Apply shadow effects based on energy level
       if (showShadow && power > 1) {
-        // Stronger shadow color for better visualization
-        ctx.shadowColor = 'rgba(0, 220, 255, 0.7)';
-        ctx.shadowBlur = 12 * (power / 3); // Scale blur with power setting, increased from 8 to 12
+        ctx.shadowColor = `rgba(0, 220, 255, ${Math.min(0.7 * energyFactor, 0.7)})`;
+        ctx.shadowBlur = 12 * (power / 3) * energyFactor;
       } else {
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
       }
       
-      // Apply wave-specific styling with more saturated color
+      // Apply wave styling with color intensity based on energy
       ctx.strokeStyle = `rgba(20, 210, 255, ${layerOpacity})`;
       
-      // Apply exponential thickness decrease for trailing waves
-      ctx.lineWidth = energyFactor * thicknessFactor * thicknessMultiplier * 
-                      CanvasController.BASE_LINE_WIDTH * 1.5; // Base increase of 50% for more pronounced effect
+      // Line thickness driven by energy
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 1.5;
       
-      // Render the path once for this layer
       ctx.stroke(path);
     }
     
-    // Add multiple extra highlight strokes for the primary wavefront to make it extremely pronounced
-    if (relativeCycleNumber === 0) {
-      // First highlight layer - bright center with strong glow
-      ctx.shadowColor = 'rgba(120, 230, 255, 0.9)';
-      ctx.shadowBlur = 18;
-      ctx.strokeStyle = 'rgba(160, 240, 255, 0.9)';
+    // Add highlight effects that scale with energy
+    // Higher energy = more pronounced highlights
+    if (energyFactor > 0.4) {
+      // Scale glow intensity with energy
+      const glowIntensity = Math.min(0.9 * energyFactor, 0.9);
+      
+      // First highlight layer
+      ctx.shadowColor = `rgba(120, 230, 255, ${glowIntensity})`;
+      ctx.shadowBlur = 18 * energyFactor;
+      ctx.strokeStyle = `rgba(160, 240, 255, ${glowIntensity})`;
       ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.6;
       ctx.stroke(path);
       
-      // Second highlight layer - inner bright line
-      ctx.shadowColor = 'rgba(180, 250, 255, 0.95)';
-      ctx.shadowBlur = 12;
-      ctx.strokeStyle = 'rgba(200, 250, 255, 0.95)';
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.3;
-      ctx.stroke(path);
-      
-      // Third highlight layer - super bright core
-      ctx.shadowColor = 'rgba(220, 255, 255, 1.0)';
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)';
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.15;
-      ctx.stroke(path);
+      // Only add inner highlight layers for higher energy waves
+      if (energyFactor > 0.6) {
+        // Second highlight layer 
+        ctx.shadowColor = `rgba(180, 250, 255, ${glowIntensity * 1.05})`;
+        ctx.shadowBlur = 12 * energyFactor;
+        ctx.strokeStyle = `rgba(200, 250, 255, ${glowIntensity * 1.05})`;
+        ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.3;
+        ctx.stroke(path);
+        
+        // Third highlight layer for highest energy waves
+        if (energyFactor > 0.8) {
+          ctx.shadowColor = `rgba(220, 255, 255, ${energyFactor})`;
+          ctx.shadowBlur = 8 * energyFactor;
+          ctx.strokeStyle = `rgba(255, 255, 255, ${energyFactor})`;
+          ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.15;
+          ctx.stroke(path);
+        }
+      }
     }
     
-    // Reset shadow effects after drawing
+    // Reset shadow effects
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
   }
 
   /**
-   * Creates a physics body with optimized properties for perfectly elastic collisions
-   * This helper ensures consistent physics properties across all particle bodies
+   * Creates a physics body optimized for perfectly elastic collisions
    */
   private createPerfectlyElasticBody(
     x: number, 
@@ -576,15 +556,21 @@ export class CanvasController {
     radius: number, 
     collisionFilter: Matter.ICollisionFilter
   ): Matter.Body {
-    return Matter.Bodies.circle(x, y, radius, {
-      friction: 0.0,         // No surface friction
-      frictionAir: 0.0,      // No air resistance
-      frictionStatic: 0.0,   // No static friction
-      restitution: 1.0,      // Perfect elasticity (bounces with no energy loss)
-      mass: 0.4,             // Light mass for responsive physics
-      slop: 0.01,            // Minimal slop for precise collisions
-      collisionFilter        // Custom collision filter passed as parameter
+    // Create the body with precise collision parameters
+    const body = Matter.Bodies.circle(x, y, radius, {
+      friction: 0,
+      frictionAir: 0,
+      frictionStatic: 0,
+      restitution: 1.0,
+      mass: 0.4,
+      slop: 0.005,         // Reduced slop for more precise collisions 
+      collisionFilter
     });
+    
+    // Set inertia to Infinity to prevent rotation which can cause energy loss
+    Matter.Body.setInertia(body, Infinity);
+    
+    return body;
   }
   
   /**
@@ -697,8 +683,8 @@ export class CanvasController {
     const newOvalBody = Matter.Composite.create();
     this.ovalBody = newOvalBody;
     
-    // Number of segments to create a smooth ring
-    const segments = 17;
+    // Increased number of segments for smoother collisions
+    const segments = 32;
     
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
@@ -721,18 +707,18 @@ export class CanvasController {
       // Calculate angle of the segment
       const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
       
-      // Create a small rectangle body for this segment with consistent physics properties
+      // Create a small rectangle body for this segment with optimized physics properties
       const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
-        isStatic: true, // Oval segments must be static
+        isStatic: true,
         angle: segmentAngle,
-        restitution: 1.0, // Perfect elasticity
-        friction: 0,      // No friction for smooth, energy-preserving collisions
-        frictionAir: 0,   // No air resistance
-        frictionStatic: 0, // No static friction
-        slop: 0.01,       // Minimal slop for precise collisions
+        restitution: 1.0,
+        friction: 0,
+        frictionAir: 0,
+        frictionStatic: 0,
+        slop: 0.005,     // Reduced slop for more precise collisions
         collisionFilter: {
           category: 0x0002,
-          mask: 0x0001,   // Only collide with particles
+          mask: 0x0001,
           group: 0
         }
       });
@@ -1042,23 +1028,40 @@ export class CanvasController {
   }
 
   private updatePhysics(timestamp: number) {
+    // Use fixed timestep for more consistent physics
+    const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
+    
     // Use a variable number of substeps based on whether oval is shown
-    // More steps for better collision accuracy when oval is present
-    // Fewer steps when no complex collisions are needed
-    const numSubSteps = this.params.showOval ? 3 : 1; // Reduced from 6 to 4 when oval shown, 2 when not
-    const subStepTime = CanvasController.PHYSICS_TIMESTEP_MS / numSubSteps;
+    const numSubSteps = this.params.showOval ? 4 : 2; // More substeps with oval present
+    const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
     for (let i = 0; i < numSubSteps; i++) {
-      // Apply zero frictionAir to all bodies before each physics update
-      // This ensures no velocity is lost due to air resistance
+      // Apply zero friction to all particles to ensure perfect elasticity
       Matter.Composite.allBodies(this.engine.world).forEach(body => {
-        // Ensure all bodies have zero friction to maintain perfectly elastic behavior
-        body.frictionAir = 0;
-        body.friction = 0;
-        body.frictionStatic = 0;
+        if (!body.isStatic) {
+          body.frictionAir = 0;
+          body.friction = 0; 
+          body.frictionStatic = 0;
+          
+          // Check for "stuck" particles that need a velocity boost
+          if (body.speed < 0.2 && !body.isStatic) {
+            // Get current velocity vector
+            const velocity = body.velocity;
+            // Calculate a normalizing factor based on current speed
+            const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+            if (currentSpeed > 0) {
+              const boost = 2; // Gentle boost for stuck particles
+              Matter.Body.setVelocity(body, {
+                x: velocity.x * boost / currentSpeed,
+                y: velocity.y * boost / currentSpeed
+              });
+            }
+          }
+        }
       });
       
+      // Use fixed time step for more consistent physics
       Matter.Engine.update(this.engine, subStepTime);
     }
 
