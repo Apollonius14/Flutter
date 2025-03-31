@@ -69,7 +69,7 @@ export class CanvasController {
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.05; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 5.0; // Increased to 6.0 for dramatically more pronounced wavefronts
+  private static readonly BASE_LINE_WIDTH: number = 1.0; // Reduced to 1.0 (5x thinner) as requested for debugging
   private static readonly PARTICLES_PER_RING: number = 19; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
@@ -436,8 +436,8 @@ export class CanvasController {
         if (!particlesByDirection.has(directionIndex)) continue;
         
         const groupParticles = particlesByDirection.get(directionIndex)!;
-        // Sort particles by their original indices to maintain consistency
-        const orderedParticles = [...groupParticles].sort((a, b) => a.index - b.index);
+        // Sort particles by y-coordinate (greatest to smallest) as requested
+        const orderedParticles = [...groupParticles].sort((a, b) => b.body.position.y - a.body.position.y);
         
         // Extract just the particle positions for the wave front
         const points: Point2D[] = orderedParticles.map(p => ({
@@ -989,10 +989,10 @@ export class CanvasController {
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const particleSize = 0.8;
+                const particleSize = 4.0; // Increased 5x (from 0.8 to 4.0) as requested for debugging
                 const particleOpacity = opacity * 0.6;
                 
-                // Draw a small dot for each particle
+                // Draw a larger dot for each particle for better visualization
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
                 this.ctx.fillStyle = `rgba(255, 50, 200, ${particleOpacity})`;
@@ -1021,9 +1021,9 @@ export class CanvasController {
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const particleSize = 0.8;
+                const particleSize = 4.0; // Increased 5x (from 0.8 to 4.0) as requested for debugging
                 
-                // Draw a filled circle with neon pink glow effect
+                // Draw a larger filled circle with neon pink glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
                 this.ctx.fillStyle = `rgba(255, 50, 200, ${opacity * 0.6})`; // Neon pink, decays
