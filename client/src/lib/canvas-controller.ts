@@ -10,7 +10,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; // Normalized position (0-1) for oval's horizontal position
   ovalEccentricity: number; // 0-1 value representing eccentricity
-  curveType: "cubic" | "quadratic" | "linear"; // Type of curve to use for rendering
+  curveType: "cubic" | "quadratic" | "linear" | "chaikin"; // Type of curve to use for rendering
 }
 
 interface Particle {
@@ -116,7 +116,7 @@ export class CanvasController {
       showOval: false,
       ovalPosition: 0.5, // Default to center
       ovalEccentricity: 0.7, // Default eccentricity
-      curveType: "cubic" // Default to cubic curves
+      curveType: "chaikin" // Default to Chaikin's algorithm for better performance
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -391,7 +391,8 @@ export class CanvasController {
   }
   
   /**
-   * Generates a path through a set of points using cubic or quadratic Bézier curves, or linear segments
+   * Generates a path through a set of points using cubic or quadratic Bézier curves, linear segments,
+   * or Chaikin's corner cutting algorithm for smooth curves
    * Simplified version with fewer calculations for better performance
    * Uses the curveType parameter from AnimationParams
    * Connects the last point back to the first to create a closed loop
@@ -405,11 +406,9 @@ export class CanvasController {
       return path;
     }
     
-    // Start the path at the first point
-    path.moveTo(points[0].x, points[0].y);
-    
     // If only two points, draw a straight line and close the path
     if (points.length === 2) {
+      path.moveTo(points[0].x, points[0].y);
       path.lineTo(points[1].x, points[1].y);
       path.closePath();
       return path;
@@ -418,8 +417,58 @@ export class CanvasController {
     // Use the curve type from params
     const curveType = this.params.curveType;
     
-    if (curveType === "linear") {
+    if (curveType === "chaikin") {
+      // Implementation of Chaikin's corner cutting algorithm
+      // Create a closed loop of points for Chaikin's algorithm
+      const closedPoints = [...points];
+      
+      // Only add the first point to close the loop if the first and last points aren't already the same
+      if (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y) {
+        closedPoints.push(points[0]);
+      }
+      
+      // Apply Chaikin's algorithm with 3 iterations
+      const iterations = 3;
+      let currentPoints = closedPoints;
+      
+      for (let iter = 0; iter < iterations; iter++) {
+        const newPoints: Point2D[] = [];
+        
+        // Process each edge to create two new points
+        for (let i = 0; i < currentPoints.length - 1; i++) {
+          const p0 = currentPoints[i];
+          const p1 = currentPoints[i+1];
+          
+          // Cut corner at 1/4 and 3/4 marks
+          // Q = 0.75 * P0 + 0.25 * P1
+          // R = 0.25 * P0 + 0.75 * P1
+          const qx = 0.75 * p0.x + 0.25 * p1.x;
+          const qy = 0.75 * p0.y + 0.25 * p1.y;
+          const rx = 0.25 * p0.x + 0.75 * p1.x;
+          const ry = 0.25 * p0.y + 0.75 * p1.y;
+          
+          if (i === 0) {
+            newPoints.push({ x: qx, y: qy });
+          }
+          newPoints.push({ x: rx, y: ry });
+        }
+        
+        // Update points for next iteration
+        currentPoints = newPoints;
+      }
+      
+      // Draw the resulting smooth curve
+      if (currentPoints.length > 0) {
+        path.moveTo(currentPoints[0].x, currentPoints[0].y);
+        for (let i = 1; i < currentPoints.length; i++) {
+          path.lineTo(currentPoints[i].x, currentPoints[i].y);
+        }
+        path.closePath();
+      }
+    }
+    else if (curveType === "linear") {
       // Simplest and fastest option: just draw straight lines
+      path.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) {
         path.lineTo(points[i].x, points[i].y);
       }
@@ -429,6 +478,7 @@ export class CanvasController {
       // Quadratic curves - more efficient than cubic
       const controlFactor = 0.4; // Controls curve tightness
       
+      path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i];
         const p2 = points[i+1];
@@ -453,6 +503,7 @@ export class CanvasController {
       // Fixed control point factor
       const controlPointFactor = 0.4;
       
+      path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i];
         const p2 = points[i+1];

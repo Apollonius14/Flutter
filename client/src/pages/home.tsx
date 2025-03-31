@@ -23,7 +23,8 @@ const translations = {
     curveType: "Curve Type",
     cubic: "Cubic",
     quadratic: "Quadratic",
-    linear: "Linear"
+    linear: "Linear",
+    chaikin: "Chaikin"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -40,7 +41,8 @@ const translations = {
     curveType: "نوع المنحنى",
     cubic: "مكعب",
     quadratic: "تربيعي",
-    linear: "خطي"
+    linear: "خطي",
+    chaikin: "شيكن"
   }
 };
 
@@ -55,7 +57,7 @@ export default function Home() {
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
-  const [curveType, setCurveType] = useState<"cubic" | "quadratic" | "linear">("quadratic"); // default to quadratic for better performance
+  const [curveType, setCurveType] = useState<"cubic" | "quadratic" | "linear" | "chaikin">("chaikin"); // default to chaikin for best performance
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
@@ -275,10 +277,13 @@ export default function Home() {
                   type="single" 
                   value={curveType} 
                   onValueChange={(value) => {
-                    if (value) setCurveType(value as "cubic" | "quadratic" | "linear");
+                    if (value) setCurveType(value as "cubic" | "quadratic" | "linear" | "chaikin");
                   }}
                   className="justify-start"
                 >
+                  <ToggleGroupItem value="chaikin" size="sm" className="text-xs bg-green-500/10">
+                    {t.chaikin}
+                  </ToggleGroupItem>
                   <ToggleGroupItem value="cubic" size="sm" className="text-xs">
                     {t.cubic}
                   </ToggleGroupItem>
