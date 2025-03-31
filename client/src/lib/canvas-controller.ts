@@ -2,7 +2,7 @@ import * as Matter from 'matter-js';
 
 // Path rendering type - can be set to either "CUBIC" or "QUADRATIC"
 // QUADRATIC is more performant but may look slightly less smooth
-const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "QUADRATIC";
+const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "CUBIC";
 
 interface AnimationParams {
   power: number;
@@ -59,15 +59,15 @@ interface RenderParams {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.8; // Cycle duration in milliseconds
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4; // Cycle duration in milliseconds
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12.5; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.01; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 2.7; // Base thickness for particle trails
-  private static readonly PARTICLES_PER_RING: number = 19; // Number of particles in each ring
+  private static readonly BASE_LINE_WIDTH: number = 4.0; // Increased from 2.7 to 4.0 for more pronounced wavefronts
+  private static readonly PARTICLES_PER_RING: number = 25; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -103,9 +103,9 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 3,
-      velocityIterations: 3,
-      constraintIterations: 2
+      positionIterations: 5,    // Increased for better physics accuracy
+      velocityIterations: 6,    // Increased for smoother motion
+      constraintIterations: 3
     }); 
     this.params = {
       power: 12,
@@ -134,14 +134,14 @@ export class CanvasController {
     const outerPositions = [1, 8];
     const farthestPositions = [0, 9];
 
-    // Increased thickness factors for more visual distinction between waves
-    if (centralPositions.includes(waveIndex)) return 2.0;    // Was 1.8
-    if (innerPositions.includes(waveIndex)) return 1.4;      // Was 1.6
-    if (middlePositions.includes(waveIndex)) return 1.2;     // Was 1.3
-    if (outerPositions.includes(waveIndex)) return 0.9;      // Was 1.05
-    if (farthestPositions.includes(waveIndex)) return 0.8;   // Was 1.0
+    // More dramatic thickness differences for clearer wave visualization
+    if (centralPositions.includes(waveIndex)) return 3.0;    // Increased from 2.0 to 3.0
+    if (innerPositions.includes(waveIndex)) return 1.8;      // Increased from 1.4 to 1.8
+    if (middlePositions.includes(waveIndex)) return 1.3;     // Slightly increased from 1.2
+    if (outerPositions.includes(waveIndex)) return 0.7;      // Decreased from 0.9 to 0.7
+    if (farthestPositions.includes(waveIndex)) return 0.5;   // Decreased from 0.8 to 0.5
 
-    return 0.8;
+    return 0.5; // Default for any other positions
   }
 
   /**
@@ -166,7 +166,7 @@ export class CanvasController {
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - 0.5 * compressionFactor);
+      const transformedAngle = angle * (1 - 1.5 * compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
 
       particleAngles.push(normalizedAngle);
@@ -270,7 +270,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 3.9; 
+        const baseSpeed = 5.9; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
         const directedSpeed = baseSpeed * (1 + 0.7 * horizontalAlignment);
@@ -482,27 +482,62 @@ export class CanvasController {
     // Energy factor determines line thickness
     const energyFactor = energy / (power || 1);
     
+    // Calculate opacity based on whether this is the primary wavefront or a trailing one
+    // If this is the first wavefront from its bubble, make it more prominent
+    // Get the cycle number for this wavefront
+    const cycleNumber = this.currentCycleNumber - this.bubbles[0]?.cycleNumber || 0;
+    
+    // Exponentially decrease opacity for trailing waves
+    // First wave: 1.0x opacity, second: 0.3x opacity, third: 0.1x opacity
+    let opacityMultiplier = 1.0;
+    if (cycleNumber === 1) {
+      opacityMultiplier = 0.3;  // Second wave is much less visible
+    } else if (cycleNumber >= 2) {
+      opacityMultiplier = 0.1;  // Third and subsequent waves are barely visible
+    }
+    
+    // Apply exponential decay to thickness as well
+    let thicknessMultiplier = 1.0;
+    if (cycleNumber === 1) {
+      thicknessMultiplier = 0.4;  // Second wave is thinner
+    } else if (cycleNumber >= 2) {
+      thicknessMultiplier = 0.2;  // Third and subsequent waves are very thin
+    }
+    
     // Draw a glow effect with multiple layers (fewer layers for better performance)
     const numLayers = showShadow ? 4 : 2;
     
     for (let layer = numLayers - 1; layer >= 0; layer--) {
-      // Fade out each successive blur layer
-      const layerOpacity = baseOpacity * (1 - layer * 0.2);
+      // Fade out each successive blur layer, with more pronounced contrast
+      const layerOpacity = baseOpacity * opacityMultiplier * (1 - layer * 0.25);
       
       // Only apply shadow effects if enabled and on higher power settings
       if (showShadow && power > 1) {
-        ctx.shadowColor = 'rgba(0, 220, 255, 0.5)';
-        ctx.shadowBlur = 8 * (power / 3); // Scale blur with power setting
+        // Stronger shadow color for better visualization
+        ctx.shadowColor = 'rgba(0, 220, 255, 0.7)';
+        ctx.shadowBlur = 12 * (power / 3); // Scale blur with power setting, increased from 8 to 12
       } else {
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
       }
       
-      // Apply wave-specific styling
+      // Apply wave-specific styling with more saturated color
       ctx.strokeStyle = `rgba(20, 210, 255, ${layerOpacity})`;
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH;
+      
+      // Apply exponential thickness decrease for trailing waves
+      ctx.lineWidth = energyFactor * thicknessFactor * thicknessMultiplier * 
+                      CanvasController.BASE_LINE_WIDTH * 1.5; // Base increase of 50% for more pronounced effect
       
       // Render the path once for this layer
+      ctx.stroke(path);
+    }
+    
+    // Add an extra highlight stroke for the primary wavefront to make it even more pronounced
+    if (cycleNumber === 0) {
+      ctx.shadowColor = 'rgba(120, 230, 255, 0.9)';
+      ctx.shadowBlur = 15;
+      ctx.strokeStyle = 'rgba(120, 230, 255, 0.8)';
+      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5;
       ctx.stroke(path);
     }
     
@@ -643,7 +678,7 @@ export class CanvasController {
     this.ovalBody = newOvalBody;
     
     // Number of segments to create a smooth ring
-    const segments = 20;
+    const segments = 17;
     
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
@@ -723,7 +758,7 @@ export class CanvasController {
     }
 
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.03)'; // Reduced from 0.06 to 0.03 (another 50% reduction)
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.021)'; // Further reduced by 30% from 0.03 to 0.021
     this.ctx.fillRect(0, 0, width, height);
     
     // =====================================
