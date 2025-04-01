@@ -1094,10 +1094,7 @@ export class CanvasController {
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
   }
-};
 
-
-  
   private animate() {
     if (!this.startTime) return;
 
@@ -1152,7 +1149,7 @@ export class CanvasController {
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
     
     // Use a variable number of substeps based on whether oval is shown
-    const numSubSteps = this.params.showOval ? 6 : 3; // Doubled substeps: 8 when oval present, 4 when not
+    const numSubSteps = this.params.showOval ? 8 : 4; // Doubled substeps: 8 when oval present, 4 when not
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
