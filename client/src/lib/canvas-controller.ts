@@ -1,18 +1,15 @@
 import * as Matter from 'matter-js';
 
-// Path rendering type - can be set to either "CUBIC" or "QUADRATIC"
-// QUADRATIC is more performant but may look slightly less smooth
-const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "CUBIC";
 
-// Control whether to join the last particle to the first in path calculations
+// Path Loop Closed or Open
 const JOIN_CURVE_ENDS: boolean = false;
 
 interface AnimationParams {
   power: number;
   frequency: number;
   showOval: boolean;
-  ovalPosition: number; // Normalized position (0-1) for oval's horizontal position
-  ovalEccentricity: number; // 0-1 value representing eccentricity
+  ovalPosition: number; 
+  ovalEccentricity: number; // 
   curveType: "cubic" | "quadratic" | "linear" | "chaikin"; // Type of curve to use for rendering
 }
 
@@ -45,41 +42,36 @@ interface Point2D {
 
 // New interface for particle wavefronts
 interface WaveFront {
-  points: Point2D[];           // Sorted array of particle positions
-  energy: number;              // Energy level for this wavefront
-  waveIndex: number;           // Position index in the wave pattern
-  thicknessFactor: number;     // Calculated thickness for this wavefront
-  baseOpacity: number;         // Base opacity for this wavefront
-  cycleNumber: number;         // The cycle number this wavefront belongs to
+  points: Point2D[];
+  energy: number;
+  waveIndex: number;
+  thicknessFactor: number;
+  baseOpacity: number;  
+  cycleNumber: number; 
 }
 
 // Interface for rendering parameters
 interface RenderParams {
-  showShadow: boolean;         // Whether to show shadow effects
-  power: number;               // Current power setting
-  screenBounds: {              // Screen bounds for culling
+  showShadow: boolean;     
+  power: number;  
+  screenBounds: {
     min: Point2D;
     max: Point2D;
   };
 }
 
 export class CanvasController {
-  // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 ; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
-  private static readonly PHYSICS_TIMESTEP_MS: number = 12; // Physics engine update interval (80fps)
-  // Layout constants
-  private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
-  // Particle appearance constants
-  private static readonly OPACITY_DECAY_RATE: number = 0.4; // How much opacity decreases per cycle
-  private static readonly BASE_LINE_WIDTH: number = 1.0; // Reduced to 1.0 (5x thinner) as requested for debugging
-  private static readonly PARTICLES_PER_RING: number = 14; // Number of particles in each ring
-  private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
-  private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
+  private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
+  private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
+  private static readonly OPACITY_DECAY_RATE: number = 0.4;
+  private static readonly BASE_LINE_WIDTH: number = 1.0;
+  private static readonly PARTICLES_PER_RING: number = 26;
+  private static readonly PARTICLE_RADIUS: number = 0.9;
+  private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; 
   
-  // Precomputed particle angles for better performance
   private static readonly PARTICLE_ANGLES: number[] = (() => {
-    // This calculation is now done once at class initialization
     const particleAngles: number[] = [];
     const baseAngles: number[] = [];
     const particleCount = CanvasController.PARTICLES_PER_RING;
@@ -97,12 +89,7 @@ export class CanvasController {
 
     // Apply compression to focus particles toward the front
     for (const angle of baseAngles) {
-      const absAngle = Math.abs(angle);
-      const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - 0.5 * compressionFactor);
-      const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
-
-      particleAngles.push(normalizedAngle);
+      particleAngles.push(angle);
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -204,11 +191,7 @@ export class CanvasController {
     // Apply compression to focus particles toward the front
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
-      const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - 0.5 * compressionFactor); // Added space around *
-      const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
-
-      particleAngles.push(normalizedAngle);
+      particleAngles.push(angle);
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -221,20 +204,18 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    // Keep the compression factor high to spread the 9 positions across the increased canvas height
     const compressionFactor = 0.1; // Higher value to use more vertical space
     const center = canvasHeight / 2;
-    const numPositions = 9; // Back to the original 9 positions as requested
+    const numPositions = 9; 
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 2);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
-    // Using exactly 9 positions but spread across the taller canvas
     positions.push(center - halfSpacing - baseSpacing * 4);
     positions.push(center - halfSpacing - baseSpacing * 3);
     positions.push(center - halfSpacing - baseSpacing * 2);
     positions.push(center - halfSpacing - baseSpacing);
-    positions.push(center); // Center position (no offset)
+    positions.push(center);
     positions.push(center + halfSpacing + baseSpacing);
     positions.push(center + halfSpacing + baseSpacing * 2);
     positions.push(center + halfSpacing + baseSpacing * 3);
@@ -254,42 +235,22 @@ export class CanvasController {
     // Calculate wave positions using our helper method
     this.positions = this.calculateWavePositions(height);
 
-    // Always use the activation line position for spawning particles
-    // This ensures particles only appear at the activation line
     x = this.activationLineX;
-
-    // Find the center position for radius calculation
     const centerY = height / 2;
 
     this.positions.forEach(y => {
-      // Calculate a radius multiplier based on the distance from center
-      // Use a cosine function to create a smooth bow curve
-      // Normalize the position to be between -1 and 1, where 0 is center
+      // Bubble radius multiplier based on the distance from center
       const normalizedPos = (y - centerY) / (height / 2);
-      
-      // Use cosine function to create a smooth curve, with center being largest
-      // Multiplier will be between 0.7 (edges) and 2.1 (center) - 3x difference
       const radiusMultiplier = 0.7 + 1.4 * Math.cos(normalizedPos * Math.PI);
-      
-      // Apply the multiplier to get the actual radius for this position
       const bubbleRadius = baseRadius * radiusMultiplier;
-      
       const intensity = 2.0;
-
-      // Generate a unique group ID for this ring of particles
       const groupId = this.currentGroupId++;
 
       const particles: Particle[] = [];
-      // Use our constant for the number of particles per ring
       const numParticlesInRing = CanvasController.PARTICLES_PER_RING;
-
-      // Keep track of power factor for maxAge calculation
-      const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
-
-      // Use precomputed angles instead of generating them each time
+      const particlePowerFactor = this.params.power / 3;
       const particleAngles = CanvasController.PARTICLE_ANGLES;
 
-      // Create particles at the calculated angles
       particleAngles.forEach((angle, idx) => {
         const particleX = x + Math.cos(angle) * bubbleRadius;
         const particleY = y + Math.sin(angle) * bubbleRadius;
@@ -310,25 +271,22 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 0.5; 
-        const horizontalAlignment = Math.abs(Math.cos(angle));
-
-        const directedSpeed = baseSpeed * (1 + 1.1 * horizontalAlignment) ;
+        const baseSpeed = 2.5; 
+        
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
-          x: Math.cos(angle) * directedSpeed,
-          y: Math.sin(angle) * directedSpeed
+          x: Math.cos(angle) * baseSpeed,
+          y: Math.sin(angle) * baseSpeed
         });
 
         Matter.Composite.add(this.engine.world, body);
-        // Create a properly typed particle with cycle number and index
         const particle: Particle = {
           body,
           intensity: intensity,
-          groupId: groupId,  // Assign the same group ID to all particles in this ring
-          cycleNumber: this.currentCycleNumber,  // Assign current cycle number
-          index: idx  // Assign fixed index based on position in the angle array
+          groupId: groupId,
+          cycleNumber: this.currentCycleNumber,
+          index: idx
         };
         particles.push(particle);
       });
@@ -340,8 +298,8 @@ export class CanvasController {
         initialRadius: bubbleRadius,
         intensity: intensity,
         particles,
-        groupId: groupId,  // Assign the same group ID to the bubble
-        cycleNumber: this.currentCycleNumber,  // Assign current cycle number
+        groupId: groupId,
+        cycleNumber: this.currentCycleNumber,
         energy: this.params.power,
         initialEnergy: this.params.power
       });
@@ -440,14 +398,14 @@ export class CanvasController {
       }
       
       const dotProductRanges: DotProductRange[] = [
-        { min: 0.2, max: 0.3 },
-        { min: 0.3, max: 0.4 },
-        { min: 0.4, max: 0.6 },
-        { min: 0.6, max: 1.0 },
-        { min: -0.3, max: -0.2 },
-        { min: -0.4, max: -0.3 },
-        { min: -0.6, max: -0.4 },
-        { min: -1.0, max: -0.6}
+        { min: 0.1, max: 0.4 },
+        { min: 0.4, max: 0.7 },
+        { min: 0.7, max: 0.85 },
+        { min: 0.9, max: 1.0 },
+        { min: -0.4, max: -0.1 },
+        { min: -0.7, max: -0.4 },
+        { min: -0.85, max: -0.7 },
+        { min: -1.0, max: -0.85}
       ];
       
       // Group particles by their dot product range
@@ -488,8 +446,8 @@ export class CanvasController {
         const baseOpacity = 0.9; 
         waveFronts.push({
           points,
-          energy: avgEnergy * 5, // Scale energy for visual effect
-          waveIndex: directionIndex, // Use direction index for wave index
+          energy: avgEnergy * 5,
+          waveIndex: directionIndex, 
           thicknessFactor,
           baseOpacity,
           cycleNumber
@@ -500,21 +458,11 @@ export class CanvasController {
     return waveFronts;
   }
   
-  /**
-   * Generates a path through a set of points using cubic or quadratic Bézier curves, linear segments,
-   * or Chaikin's corner cutting algorithm for smooth curves
-   * Simplified version with fewer calculations for better performance
-   * Uses the curveType parameter from AnimationParams
-   * Optionally connects the last point back to the first based on JOIN_CURVE_ENDS setting
-   */
-  /**
-   * Closes the path if JOIN_CURVE_ENDS is true
-   * Helper method to reduce code duplication in path calculation
-   */
+  /** Generates a path through a set of points using cubic or quadratic Bézier curves, linear segments **/
+  
   private closePathIfNeeded(path: Path2D, points: Point2D[]): void {
     if (JOIN_CURVE_ENDS) {
       if (points.length > 2) {
-        // For complex paths, ensure we connect back to the start point
         const pFirst = points[0];
         const pLast = points[points.length - 1];
         
@@ -528,39 +476,22 @@ export class CanvasController {
   }
 
   private calculatePath(points: Point2D[]): Path2D {
-    // Create a new path
     const path = new Path2D();
     
-    // If not enough points, return empty path
     if (points.length < 2) {
       return path;
-    }
-    
-    // If only two points, draw a straight line and close the path if JOIN_CURVE_ENDS is true
-    if (points.length === 2) {
-      path.moveTo(points[0].x, points[0].y);
-      path.lineTo(points[1].x, points[1].y);
-      this.closePathIfNeeded(path, points);
-      return path;
-    }
-    
-    // Use the curve type from params
+    }    
     const curveType = this.params.curveType;
     
     if (curveType === "chaikin") {
-      // Implementation of Chaikin's corner cutting algorithm
-      // Create a closed loop of points for Chaikin's algorithm
+      // Chaikin's corner cutting algorithm
       const closedPoints = [...points];
-      
-      // Only add the first point to close the loop if JOIN_CURVE_ENDS is true
-      // and if the first and last points aren't already the same
       if (JOIN_CURVE_ENDS && 
           (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y)) {
         closedPoints.push(points[0]);
       }
-      
-      // Apply Chaikin's algorithm with 3 iterations
-      const iterations = 3;
+
+      const iterations = 5;
       let currentPoints = closedPoints;
       
       for (let iter = 0; iter < iterations; iter++) {
@@ -607,8 +538,7 @@ export class CanvasController {
       this.closePathIfNeeded(path, points);
     } 
     else if (curveType === "quadratic") {
-      // Quadratic curves - more efficient than cubic
-      const controlFactor = 0.4; // Controls curve tightness
+      const controlFactor = 0.1; // Controls curve tightness
       
       path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
@@ -650,7 +580,7 @@ export class CanvasController {
     } 
     else { // "cubic" - use only when needed for quality
       // Fixed control point factor
-      const controlPointFactor = 0.4;
+      const controlPointFactor = 0.1;
       
       path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
@@ -693,13 +623,6 @@ export class CanvasController {
     return path;
   }
   
-  /**
-   * Renders an individual particle with consistent styling
-   * @param ctx Canvas rendering context
-   * @param position Position of the particle
-   * @param opacity Base opacity value
-   * @param size Size of the particle to render
-   */
   private renderParticle(
     ctx: CanvasRenderingContext2D,
     position: Point2D,
@@ -728,16 +651,12 @@ export class CanvasController {
     // No shadows for better performance
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
-    
-    // Make everything half as thick and twice as transparent
-    const adjustedOpacity = baseOpacity * 0.8; // Half the opacity
-    
-    // Base blue color for all waves with adjusted opacity
+    const adjustedOpacity = baseOpacity * 0.8;
     ctx.strokeStyle = `rgba(20, 210, 255, ${adjustedOpacity})`;
-    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5; // Half as thick (1.5 * 0.5)
+    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5; 
     ctx.stroke(path);
     
-    // Add highlight layer for higher energy waves
+
     if (energyFactor > 0.8) {
       ctx.strokeStyle = `rgba(160, 240, 255, ${adjustedOpacity * 0.8})`;
       ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.2; // Half as thick (0.4 * 0.5)
@@ -754,7 +673,7 @@ export class CanvasController {
     radius: number, 
     collisionFilter: Matter.ICollisionFilter
   ): Matter.Body {
-    // Create the body with precise collision parameters
+
     const body = Matter.Bodies.circle(x, y, radius, {
       friction: 0,
       frictionAir: 0,
@@ -762,12 +681,10 @@ export class CanvasController {
       restitution: 1.0,
       inertia: Infinity,
       mass: 1,
-      slop: 0.05,         // Reduced slop for more precise collisions 
+      slop: 0.05,
       collisionFilter
     });
     
-    // Set inertia to Infinity to prevent rotation which can cause energy loss
-    Matter.Body.setInertia(body, Infinity);
     
     return body;
   }
@@ -853,13 +770,10 @@ export class CanvasController {
     majorAxis: number,
     minorAxis: number
   ): Matter.Composite {
-    // Wall thickness for the ring
     const wallThickness = 9;
-    
-    // Create a composite for all the small segments that will form our ring
     const ovalBody = Matter.Composite.create();
     
-    // Increased number of segments for smoother collisions
+
     const segments = 29;
     
     for (let i = 0; i < segments; i++) {
@@ -1073,7 +987,7 @@ export class CanvasController {
         }
 
         // Draw all particles with bezier curves, using our modular approach
-        if (bubble.particles.length > 1) {
+        if (bubble.particles.length > 3) {
           // Get visible particles for rendering
           const visibleParticles = bubble.particles.filter(p => {
             const pos = p.body.position;
@@ -1082,7 +996,7 @@ export class CanvasController {
           });
           
           // If we have enough particles, use wave front rendering
-          if (visibleParticles.length > 2) {
+          if (visibleParticles.length > 3) {
             // =====================================
             // Step 4: Calculate wave fronts using our dedicated function
             // =====================================
@@ -1205,9 +1119,7 @@ export class CanvasController {
       this.currentCycleNumber++;
       console.log(`Starting cycle ${this.currentCycleNumber}`);
 
-      // Kill bubbles and their particles if they're too old
-
-      // Remove particles from physics engine that are no longer in any bubble
+      // Kill bubbles and their particles if they're too old or no longer in a bubble
       const activeBodies = new Set(this.bubbles.flatMap(b => b.particles.map(p => p.body)));
       Matter.Composite.allBodies(this.engine.world).forEach(body => {
         // Skip walls and other static bodies
@@ -1245,7 +1157,7 @@ export class CanvasController {
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
     
     // Use a variable number of substeps based on whether oval is shown
-    const numSubSteps = this.params.showOval ? 8 : 4; // Doubled substeps: 8 when oval present, 4 when not
+    const numSubSteps = this.params.showOval ? 6 : 3; // Doubled substeps: 8 when oval present, 4 when not
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
