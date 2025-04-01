@@ -1163,6 +1163,8 @@ export class CanvasController {
           body.frictionAir = 0;
           body.friction = 0; 
           body.frictionStatic = 0;
+        }
+      });
           
       // Use fixed time step for more consistent physics
       Matter.Engine.update(this.engine, subStepTime);
