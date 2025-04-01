@@ -654,10 +654,6 @@ export class CanvasController {
     return path;
   }
   
-  /**
-   * Renders a wave front path based on its energy level and direction
-   * Uses different colors for forward and backward moving waves
-   */
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
     path: Path2D, 
@@ -673,9 +669,7 @@ export class CanvasController {
     // No shadows for better performance
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
-    
-    // Determine wave intensity by position in the wave pattern
-    // Make all curves blue with varying opacity/thickness as requested
+
     
     // Make everything half as thick and twice as transparent
     const adjustedOpacity = baseOpacity * 0.8; // Half the opacity
@@ -769,15 +763,12 @@ export class CanvasController {
         prevEccentricity !== params.ovalEccentricity) {
       this.updateOval();
       
-      // Only force a redraw when oval parameters change
       if (this.animationFrame === null) {
         // Only manually redraw if animation is not running
         this.drawFrame(0);
       }
     }
     
-    // Don't call drawFrame here as it causes performance issues
-    // with slider interactions by forcing constant redraws
   }
   
   private updateOval() {
@@ -796,8 +787,7 @@ export class CanvasController {
     const width = this.canvas.width;
     const height = this.canvas.height;
     
-    // Calculate dimensions based on canvas size and eccentricity
-    // Use a fixed width for the majorAxis (80% of canvas width)
+   
     const majorAxis = width * 0.8; 
     const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
     
@@ -836,7 +826,6 @@ export class CanvasController {
       // Calculate angle of the segment
       const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
       
-      // Create a small rectangle body for this segment with optimized physics properties
       const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
         isStatic: true,
         angle: segmentAngle,
@@ -844,7 +833,7 @@ export class CanvasController {
         friction: 0,
         frictionAir: 0,
         frictionStatic: 0,
-        slop: 0.005,     // Reduced slop for more precise collisions
+        slop: 0.005,  
         collisionFilter: {
           category: 0x0002,
           mask: 0x0001,
@@ -893,7 +882,7 @@ export class CanvasController {
     }
 
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.5)'; // Increased to 0.5 to reduce motion blur effect
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.15)'; 
     this.ctx.fillRect(0, 0, width, height);
     
     // =====================================
@@ -922,7 +911,7 @@ export class CanvasController {
     // =====================================
     // Step 3: Define screen bounds for physics and rendering optimization
     // =====================================
-    const bufferMargin = 50; // Increased margin to prevent abrupt changes (20px → 50px)
+    const bufferMargin = 20; // Increased margin to prevent abrupt changes (20px → 50px)
     const screenBounds = {
       min: { x: -bufferMargin, y: -bufferMargin },
       max: { x: width + bufferMargin, y: height + bufferMargin }
@@ -974,9 +963,6 @@ export class CanvasController {
           return true; // Skip rendering but keep for physics until properly cleaned up
         }
 
-        // We skip drawing individual particles here to avoid double-rendering
-        // since they'll be drawn with the bezier curves below
-        
         // Draw all particles with bezier curves, using our modular approach
         if (bubble.particles.length > 1) {
           // Get visible particles for rendering
@@ -1025,7 +1011,7 @@ export class CanvasController {
                 // Draw a larger dot for each particle for better visualization
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(20, 210, 255, ${particleOpacity})`;
+                this.ctx.fillStyle = `rgba(254, 58, 0, ${particleOpacity})`;
                 this.ctx.fill();
               });
             }
@@ -1056,7 +1042,7 @@ export class CanvasController {
                 // Draw a larger filled circle with blue glow effect
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(20, 210, 255, ${opacity * 0.6})`; // Now blue to match other elements
+                this.ctx.fillStyle = `rgba(255, 58, 0, ${opacity * 0.6})`; // Now blue to match other elements
                 this.ctx.fill();
               });
             }
@@ -1084,7 +1070,7 @@ export class CanvasController {
       
       // Draw the oval outline without glow effects
       this.ctx.beginPath();
-      
+
       // Iterate through each segment body and draw it
       bodies.forEach(body => {
         const vertices = body.vertices;
@@ -1108,6 +1094,7 @@ export class CanvasController {
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
   }
+};
 
 
   
@@ -1165,7 +1152,7 @@ export class CanvasController {
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
     
     // Use a variable number of substeps based on whether oval is shown
-    const numSubSteps = this.params.showOval ? 8 : 4; // Doubled substeps: 8 when oval present, 4 when not
+    const numSubSteps = this.params.showOval ? 6 : 3; // Doubled substeps: 8 when oval present, 4 when not
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
@@ -1177,23 +1164,6 @@ export class CanvasController {
           body.friction = 0; 
           body.frictionStatic = 0;
           
-          // Check for "stuck" particles that need a velocity boost
-          if (body.speed < 0.2 && !body.isStatic) {
-            // Get current velocity vector
-            const velocity = body.velocity;
-            // Calculate a normalizing factor based on current speed
-            const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
-            if (currentSpeed > 0) {
-              const boost = 2; // Gentle boost for stuck particles
-              Matter.Body.setVelocity(body, {
-                x: velocity.x * boost / currentSpeed,
-                y: velocity.y * boost / currentSpeed
-              });
-            }
-          }
-        }
-      });
-      
       // Use fixed time step for more consistent physics
       Matter.Engine.update(this.engine, subStepTime);
     }
