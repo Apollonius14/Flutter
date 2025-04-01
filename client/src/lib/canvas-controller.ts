@@ -65,7 +65,7 @@ interface RenderParams {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3; // Cycle duration in milliseconds
+  private static readonly CYCLE_PERIOD_MS: number = 6667 ; // Cycle duration in milliseconds
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; // Physics engine update interval (80fps)
   // Layout constants
@@ -76,6 +76,37 @@ export class CanvasController {
   private static readonly PARTICLES_PER_RING: number = 14; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
+  
+  // Precomputed particle angles for better performance
+  private static readonly PARTICLE_ANGLES: number[] = (() => {
+    // This calculation is now done once at class initialization
+    const particleAngles: number[] = [];
+    const baseAngles: number[] = [];
+    const particleCount = CanvasController.PARTICLES_PER_RING;
+    const halfCount = Math.floor(particleCount / 2);
+
+    // Add center particle at 0°
+    baseAngles.push(0);
+
+    // Add symmetric pairs of particles
+    for (let i = 1; i <= halfCount; i++) {
+      const angle = (i / halfCount) * Math.PI;
+      baseAngles.push(angle);
+      baseAngles.push(-angle);
+    }
+
+    // Apply compression to focus particles toward the front
+    for (const angle of baseAngles) {
+      const absAngle = Math.abs(angle);
+      const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
+      const transformedAngle = angle * (1 - 0.5 * compressionFactor);
+      const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
+
+      particleAngles.push(normalizedAngle);
+    }
+
+    return particleAngles.sort((a, b) => a - b);
+  })();
 
   // State variables
   private canvas: HTMLCanvasElement;
@@ -255,8 +286,8 @@ export class CanvasController {
       // Keep track of power factor for maxAge calculation
       const particlePowerFactor = this.params.power / 3; // Adjusted for new triple lifetime
 
-      // Generate the particle angles using our helper method
-      const particleAngles = this.generateParticleAngles(numParticlesInRing);
+      // Use precomputed angles instead of generating them each time
+      const particleAngles = CanvasController.PARTICLE_ANGLES;
 
       // Create particles at the calculated angles
       particleAngles.forEach((angle, idx) => {
@@ -279,10 +310,10 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 2; 
+        const baseSpeed = 0.5; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 + 2 * horizontalAlignment) ;
+        const directedSpeed = baseSpeed * (1 + 1.1 * horizontalAlignment) ;
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -335,7 +366,7 @@ export class CanvasController {
   }
 
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.003));
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
   }
 
   /**
@@ -476,6 +507,26 @@ export class CanvasController {
    * Uses the curveType parameter from AnimationParams
    * Optionally connects the last point back to the first based on JOIN_CURVE_ENDS setting
    */
+  /**
+   * Closes the path if JOIN_CURVE_ENDS is true
+   * Helper method to reduce code duplication in path calculation
+   */
+  private closePathIfNeeded(path: Path2D, points: Point2D[]): void {
+    if (JOIN_CURVE_ENDS) {
+      if (points.length > 2) {
+        // For complex paths, ensure we connect back to the start point
+        const pFirst = points[0];
+        const pLast = points[points.length - 1];
+        
+        // If first and last points aren't already the same, connect them
+        if (pFirst.x !== pLast.x || pFirst.y !== pLast.y) {
+          path.lineTo(pFirst.x, pFirst.y);
+        }
+      }
+      path.closePath();
+    }
+  }
+
   private calculatePath(points: Point2D[]): Path2D {
     // Create a new path
     const path = new Path2D();
@@ -489,9 +540,7 @@ export class CanvasController {
     if (points.length === 2) {
       path.moveTo(points[0].x, points[0].y);
       path.lineTo(points[1].x, points[1].y);
-      if (JOIN_CURVE_ENDS) {
-        path.closePath();
-      }
+      this.closePathIfNeeded(path, points);
       return path;
     }
     
@@ -546,9 +595,7 @@ export class CanvasController {
         for (let i = 1; i < currentPoints.length; i++) {
           path.lineTo(currentPoints[i].x, currentPoints[i].y);
         }
-        if (JOIN_CURVE_ENDS) {
-          path.closePath();
-        }
+        this.closePathIfNeeded(path, currentPoints);
       }
     }
     else if (curveType === "linear") {
@@ -557,9 +604,7 @@ export class CanvasController {
       for (let i = 1; i < points.length; i++) {
         path.lineTo(points[i].x, points[i].y);
       }
-      if (JOIN_CURVE_ENDS) {
-        path.closePath();
-      }
+      this.closePathIfNeeded(path, points);
     } 
     else if (curveType === "quadratic") {
       // Quadratic curves - more efficient than cubic
@@ -583,27 +628,24 @@ export class CanvasController {
         path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
       }
       
-      // Connect back to start only if JOIN_CURVE_ENDS is true
-      if (JOIN_CURVE_ENDS) {
-        // Connect last point to first with a curve if needed
-        if (points.length > 2) {
-          const pLast = points[points.length - 1];
-          const pFirst = points[0];
-          
-          const midX = (pLast.x + pFirst.x) / 2;
-          const midY = (pLast.y + pFirst.y) / 2;
-          
-          const dx = pFirst.x - pLast.x;
-          const dy = pFirst.y - pLast.y;
-          const cpx = midX + dy * controlFactor;
-          const cpy = midY - dx * controlFactor;
-          
-          path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
-        } else {
-          // If only two points, use a straight line to close
-          path.lineTo(points[0].x, points[0].y);
-        }
+      // Special handling for quadratic curves with path closing
+      if (JOIN_CURVE_ENDS && points.length > 2) {
+        const pLast = points[points.length - 1];
+        const pFirst = points[0];
+        
+        const midX = (pLast.x + pFirst.x) / 2;
+        const midY = (pLast.y + pFirst.y) / 2;
+        
+        const dx = pFirst.x - pLast.x;
+        const dy = pFirst.y - pLast.y;
+        const cpx = midX + dy * controlFactor;
+        const cpy = midY - dx * controlFactor;
+        
+        path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
         path.closePath();
+      } 
+      else {
+        this.closePathIfNeeded(path, points);
       }
     } 
     else { // "cubic" - use only when needed for quality
@@ -627,33 +669,50 @@ export class CanvasController {
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
       
-      // Connect back to start only if JOIN_CURVE_ENDS is true
-      if (JOIN_CURVE_ENDS) {
-        // Connect last point to first with a curve if needed
-        if (points.length > 2) {
-          const pLast = points[points.length - 1];
-          const pFirst = points[0];
-          
-          const dx = pFirst.x - pLast.x;
-          const dy = pFirst.y - pLast.y;
-          
-          const cp1x = pLast.x + dx * controlPointFactor;
-          const cp1y = pLast.y + dy * controlPointFactor;
-          const cp2x = pFirst.x - dx * controlPointFactor;
-          const cp2y = pFirst.y - dy * controlPointFactor;
-          
-          path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
-        } else {
-          // If only two points, use a straight line to close
-          path.lineTo(points[0].x, points[0].y);
-        }
+      // Special handling for cubic curves with path closing
+      if (JOIN_CURVE_ENDS && points.length > 2) {
+        const pLast = points[points.length - 1];
+        const pFirst = points[0];
+        
+        const dx = pFirst.x - pLast.x;
+        const dy = pFirst.y - pLast.y;
+        
+        const cp1x = pLast.x + dx * controlPointFactor;
+        const cp1y = pLast.y + dy * controlPointFactor;
+        const cp2x = pFirst.x - dx * controlPointFactor;
+        const cp2y = pFirst.y - dy * controlPointFactor;
+        
+        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
         path.closePath();
+      } 
+      else {
+        this.closePathIfNeeded(path, points);
       }
     }
     
     return path;
   }
   
+  /**
+   * Renders an individual particle with consistent styling
+   * @param ctx Canvas rendering context
+   * @param position Position of the particle
+   * @param opacity Base opacity value
+   * @param size Size of the particle to render
+   */
+  private renderParticle(
+    ctx: CanvasRenderingContext2D,
+    position: Point2D,
+    opacity: number,
+    size: number = 4.0
+  ): void {
+    // Draw a filled circle for the particle
+    ctx.beginPath();
+    ctx.arc(position.x, position.y, size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(254, 58, 0, ${opacity * 0.6})`;
+    ctx.fill();
+  }
+
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
     path: Path2D, 
@@ -669,7 +728,6 @@ export class CanvasController {
     // No shadows for better performance
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
-
     
     // Make everything half as thick and twice as transparent
     const adjustedOpacity = baseOpacity * 0.8; // Half the opacity
@@ -754,53 +812,52 @@ export class CanvasController {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
+    const prevCurveType = this.params.curveType;
     
     this.params = params;
     
     // Check if oval-related parameters have changed
-    if (prevShowOval !== params.showOval || 
-        prevPosition !== params.ovalPosition || 
-        prevEccentricity !== params.ovalEccentricity) {
-      this.updateOval();
+    const ovalChanged = prevShowOval !== params.showOval || 
+                        prevPosition !== params.ovalPosition || 
+                        prevEccentricity !== params.ovalEccentricity;
+                        
+    // Check if visualization parameters have changed
+    const visualChanged = prevCurveType !== params.curveType;
+    
+    if (ovalChanged) {
+      // If position changed, but eccentricity stayed the same, we can optimize
+      const eccentricityChanged = prevEccentricity !== params.ovalEccentricity;
       
-      if (this.animationFrame === null) {
-        // Only manually redraw if animation is not running
-        this.drawFrame(0);
+      // If we need to create a new oval, delete the old one first
+      if (this.ovalBody && (eccentricityChanged || prevShowOval !== params.showOval)) {
+        Matter.Composite.remove(this.engine.world, this.ovalBody);
+        this.ovalBody = null;
       }
+      
+      this.updateOval();
     }
     
+    // Redraw the frame if any parameters changed and animation is not running
+    if ((ovalChanged || visualChanged) && this.animationFrame === null) {
+      this.drawFrame(0);
+    }
   }
   
-  private updateOval() {
-    // If the oval exists, remove it from the world
-    if (this.ovalBody) {
-      Matter.Composite.remove(this.engine.world, this.ovalBody);
-      this.ovalBody = null;
-    }
-    
-    // If oval is not supposed to be shown, we're done
-    if (!this.params.showOval) {
-      return;
-    }
-    
-    // Otherwise, create a new oval ring based on current parameters
-    const width = this.canvas.width;
-    const height = this.canvas.height;
-    
-   
-    const majorAxis = width * 0.8; 
-    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
-    
-    // Calculate position based on ovalPosition parameter
-    const centerX = width * this.params.ovalPosition;
-    const centerY = height / 2; // Always centered vertically
-    
+  /**
+   * Creates a new oval composite
+   * Separated from updateOval for better code organization
+   */
+  private createOvalBody(
+    centerX: number,
+    centerY: number,
+    majorAxis: number,
+    minorAxis: number
+  ): Matter.Composite {
     // Wall thickness for the ring
     const wallThickness = 9;
     
     // Create a composite for all the small segments that will form our ring
-    const newOvalBody = Matter.Composite.create();
-    this.ovalBody = newOvalBody;
+    const ovalBody = Matter.Composite.create();
     
     // Increased number of segments for smoother collisions
     const segments = 29;
@@ -842,11 +899,63 @@ export class CanvasController {
       });
       
       // Add the segment to our composite
-      Matter.Composite.add(this.ovalBody, segment);
+      Matter.Composite.add(ovalBody, segment);
     }
     
-    // Add the entire composite to the world
-    Matter.Composite.add(this.engine.world, this.ovalBody);
+    return ovalBody;
+  }
+
+  private updateOval() {
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    const newCenterX = width * this.params.ovalPosition;
+    const centerY = height / 2; // Always centered vertically
+    const majorAxis = width * 0.8; 
+    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
+    
+    // If oval shouldn't be shown, remove it if it exists
+    if (!this.params.showOval) {
+      if (this.ovalBody) {
+        Matter.Composite.remove(this.engine.world, this.ovalBody);
+        this.ovalBody = null;
+      }
+      return;
+    }
+    
+    // If oval body doesn't exist yet or eccentricity changed, create a new one
+    if (!this.ovalBody) {
+      // Create and add a new oval
+      this.ovalBody = this.createOvalBody(newCenterX, centerY, majorAxis, minorAxis);
+      Matter.Composite.add(this.engine.world, this.ovalBody);
+      return;
+    }
+    
+    // If only the position changed, we can just translate the existing oval
+    // This is more efficient than removing and recreating
+    const bodies = Matter.Composite.allBodies(this.ovalBody);
+    if (bodies.length > 0) {
+      // Calculate the center of the current oval by averaging all body positions
+      let totalX = 0;
+      bodies.forEach(body => {
+        totalX += body.position.x;
+      });
+      const currentCenterX = totalX / bodies.length;
+      
+      // Calculate the translation vector
+      const dx = newCenterX - currentCenterX;
+      
+      // Check if position actually changed and eccentricity is the same
+      if (Math.abs(dx) > 0.1) {
+        // Translate all bodies in the oval composite
+        Matter.Composite.translate(this.ovalBody, { x: dx, y: 0 });
+      }
+    } 
+    else {
+      // If somehow the oval is empty, create a new one
+      Matter.Composite.remove(this.engine.world, this.ovalBody);
+      this.ovalBody = this.createOvalBody(newCenterX, centerY, majorAxis, minorAxis);
+      Matter.Composite.add(this.engine.world, this.ovalBody);
+    }
   }
 
   play() {
@@ -1005,14 +1114,7 @@ export class CanvasController {
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const particleSize = 4.0; // Increased 5x (from 0.8 to 4.0) as requested for debugging
-                const particleOpacity = opacity * 0.6;
-                
-                // Draw a larger dot for each particle for better visualization
-                this.ctx.beginPath();
-                this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(254, 58, 0, ${particleOpacity})`;
-                this.ctx.fill();
+                this.renderParticle(this.ctx, pos, opacity);
               });
             }
           } 
@@ -1033,17 +1135,11 @@ export class CanvasController {
 
             this.ctx.stroke();
 
-            // Also draw the particle dots in neon pink for consistency if showParticles is true
+            // Also draw the particle dots if showParticles is true
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                const particleSize = 4.0; // Increased 5x (from 0.8 to 4.0) as requested for debugging
-                
-                // Draw a larger filled circle with blue glow effect
-                this.ctx.beginPath();
-                this.ctx.arc(pos.x, pos.y, particleSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = `rgba(255, 58, 0, ${opacity * 0.6})`; // Now blue to match other elements
-                this.ctx.fill();
+                this.renderParticle(this.ctx, pos, opacity);
               });
             }
           }
@@ -1153,16 +1249,8 @@ export class CanvasController {
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
+    // No need to reset friction values every update as they're set during body creation
     for (let i = 0; i < numSubSteps; i++) {
-      // Apply zero friction to all particles to ensure perfect elasticity
-      Matter.Composite.allBodies(this.engine.world).forEach(body => {
-        if (!body.isStatic) {
-          body.frictionAir = 0;
-          body.friction = 0; 
-          body.frictionStatic = 0;
-        }
-      });
-          
       // Use fixed time step for more consistent physics
       Matter.Engine.update(this.engine, subStepTime);
     }
