@@ -10,7 +10,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number; // 
-  curveType: "cubic" | "quadratic" | "linear" | "chaikin"; // Type of curve to use for rendering
+  curveType: "cubic" | "quadratic" | "linear"; // Type of curve to use for rendering
 }
 
 interface Particle {
@@ -136,7 +136,7 @@ export class CanvasController {
       showOval: false,
       ovalPosition: 0.5, // Default to center
       ovalEccentricity: 0.7, // Default eccentricity
-      curveType: "chaikin" // Default to Chaikin's algorithm for better performance
+      curveType: "cubic" // Default to cubic Bézier curves
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -477,53 +477,7 @@ export class CanvasController {
     }    
     const curveType = this.params.curveType;
 
-    if (curveType === "chaikin") {
-      // Chaikin's corner cutting algorithm
-      const closedPoints = [...points];
-      if (JOIN_CURVE_ENDS && 
-          (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y)) {
-        closedPoints.push(points[0]);
-      }
-
-      const iterations = 5;
-      let currentPoints = closedPoints;
-
-      for (let iter = 0; iter < iterations; iter++) {
-        const newPoints: Point2D[] = [];
-
-        // Process each edge to create two new points
-        for (let i = 0; i < currentPoints.length - 1; i++) {
-          const p0 = currentPoints[i];
-          const p1 = currentPoints[i+1];
-
-          // Cut corner at 1/4 and 3/4 marks
-          // Q = 0.75 * P0 + 0.25 * P1
-          // R = 0.25 * P0 + 0.75 * P1
-          const qx = 0.75 * p0.x + 0.25 * p1.x;
-          const qy = 0.75 * p0.y + 0.25 * p1.y;
-          const rx = 0.25 * p0.x + 0.75 * p1.x;
-          const ry = 0.25 * p0.y + 0.75 * p1.y;
-
-          if (i === 0) {
-            newPoints.push({ x: qx, y: qy });
-          }
-          newPoints.push({ x: rx, y: ry });
-        }
-
-        // Update points for next iteration
-        currentPoints = newPoints;
-      }
-
-      // Draw the resulting smooth curve
-      if (currentPoints.length > 0) {
-        path.moveTo(currentPoints[0].x, currentPoints[0].y);
-        for (let i = 1; i < currentPoints.length; i++) {
-          path.lineTo(currentPoints[i].x, currentPoints[i].y);
-        }
-        this.closePathIfNeeded(path, currentPoints);
-      }
-    }
-    else if (curveType === "linear") {
+    if (curveType === "linear") {
       // Simplest and fastest option: just draw straight lines
       path.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) {
