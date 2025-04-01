@@ -15,7 +15,6 @@ interface AnimationParams {
 
 interface Particle {
   body: Matter.Body;
-  intensity: number;
   groupId: number;
   cycleNumber: number;
   index: number; // Fixed index in the bubble's particles array
@@ -26,7 +25,6 @@ interface Bubble {
   y: number;
   radius: number;
   initialRadius: number;
-  intensity: number;
   particles: Particle[];
   groupId: number;
   cycleNumber: number;
@@ -70,7 +68,7 @@ export class CanvasController {
   private static readonly PARTICLES_PER_RING: number = 26;
   private static readonly PARTICLE_RADIUS: number = 0.9;
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; 
-  
+
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
     const baseAngles: number[] = [];
@@ -143,12 +141,12 @@ export class CanvasController {
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
-    
+
     // Initialize the oval if needed
     this.updateOval();
   }
 
-  
+
   /**
    * Calculate thickness factor based on wave position
    * Enhanced to make differences between waves more pronounced
@@ -243,7 +241,6 @@ export class CanvasController {
       const normalizedPos = (y - centerY) / (height / 2);
       const radiusMultiplier = 0.7 + 1.4 * Math.cos(normalizedPos * Math.PI);
       const bubbleRadius = baseRadius * radiusMultiplier;
-      const intensity = 2.0;
       const groupId = this.currentGroupId++;
 
       const particles: Particle[] = [];
@@ -271,8 +268,8 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 2.5; 
-        
+        const baseSpeed = 2.5 * power; 
+
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -283,7 +280,6 @@ export class CanvasController {
         Matter.Composite.add(this.engine.world, body);
         const particle: Particle = {
           body,
-          intensity: intensity,
           groupId: groupId,
           cycleNumber: this.currentCycleNumber,
           index: idx
@@ -296,7 +292,6 @@ export class CanvasController {
         y,
         radius: bubbleRadius,
         initialRadius: bubbleRadius,
-        intensity: intensity,
         particles,
         groupId: groupId,
         cycleNumber: this.currentCycleNumber,
@@ -314,7 +309,6 @@ export class CanvasController {
       y,
       radius: CanvasController.FIXED_BUBBLE_RADIUS,
       initialRadius: CanvasController.FIXED_BUBBLE_RADIUS,
-      intensity,
       particles: [],
       groupId: this.currentGroupId++,
       cycleNumber: this.currentCycleNumber,
@@ -333,16 +327,16 @@ export class CanvasController {
    */
   private calculateWaveFronts(bubbles: Bubble[], screenBounds: {min: Point2D, max: Point2D}): WaveFront[] {
     const waveFronts: WaveFront[] = [];
-    
+
     // Step 1: Group all particles by cycle number
     const particlesByCycle: Map<number, Particle[]> = new Map();
-    
+
     for (const bubble of bubbles) {
       // Skip bubbles with no energy
       if (bubble.energy <= 0 || bubble.particles.length === 0) {
         continue;
       }
-      
+
       // Add particles to their cycle group
       const cycleNumber = bubble.cycleNumber;
       if (!particlesByCycle.has(cycleNumber)) {
@@ -350,7 +344,7 @@ export class CanvasController {
       }
       particlesByCycle.get(cycleNumber)!.push(...bubble.particles);
     }
-    
+
     // Process each cycle group
     // Convert Map entries to array for TypeScript compatibility
     Array.from(particlesByCycle.entries()).forEach(([cycleNumber, cycleParticles]) => {
@@ -362,26 +356,26 @@ export class CanvasController {
                pos.y >= screenBounds.min.y && 
                pos.y <= screenBounds.max.y;
       });
-      
+
       if (visibleParticles.length < 3) {
         return; // Skip if not enough particles for a meaningful wavefront
       }
-      
+
       // Step 3: Calculate dot product of velocity with positive X-axis
       // and filter out particles moving close to vertical
       interface ParticleWithDirection {
         particle: Particle;
         dotProduct: number;
       }
-      
+
       const directionBasedParticles = visibleParticles.map((p: Particle): ParticleWithDirection => {
         const velocity = p.body.velocity;
         const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
-        
+
         // Calculate normalized dot product (cosine of angle with x-axis)
         // If speed is 0, use 0 as the dot product
         const dotProduct = speed === 0 ? 0 : velocity.x / speed;
-        
+
         return {
           particle: p,
           dotProduct
@@ -390,13 +384,13 @@ export class CanvasController {
         // Filter out particles moving nearly vertically (dot product close to 0)
         return Math.abs(item.dotProduct) >= 0.2;
       });
-      
+
       // Step 4: Group particles into buckets based on dot product
       interface DotProductRange {
         min: number;
         max: number;
       }
-      
+
       const dotProductRanges: DotProductRange[] = [
         { min: 0.1, max: 0.4 },
         { min: 0.4, max: 0.7 },
@@ -407,41 +401,41 @@ export class CanvasController {
         { min: -0.85, max: -0.7 },
         { min: -1.0, max: -0.85}
       ];
-      
+
       // Group particles by their dot product range
       const particlesByDirection: Map<number, Particle[]> = new Map();
-      
+
       for (let i = 0; i < dotProductRanges.length; i++) {
         const range = dotProductRanges[i];
         const particlesInRange = directionBasedParticles.filter((item: ParticleWithDirection) => 
           item.dotProduct >= range.min && item.dotProduct <= range.max
         ).map((item: ParticleWithDirection) => item.particle);
-        
+
         // Only add groups with enough particles
         if (particlesInRange.length >= 2) {
           particlesByDirection.set(i, particlesInRange);
         }
       }
-      
+
       // Step 5: Create wavefronts from each direction group
       for (let directionIndex = 0; directionIndex < dotProductRanges.length; directionIndex++) {
         // Skip if no particles in this direction bucket
         if (!particlesByDirection.has(directionIndex)) continue;
-        
+
         const groupParticles = particlesByDirection.get(directionIndex)!;
         // Sort particles by y-coordinate (greatest to smallest) as requested
         const orderedParticles = [...groupParticles].sort((a, b) => b.body.position.y - a.body.position.y);
-        
+
         // Extract just the particle positions for the wave front
         const points: Point2D[] = orderedParticles.map(p => ({
           x: p.body.position.x,
           y: p.body.position.y
         }));
-        
+
         // Calculate average energy and position index from constituent particles
-        const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.intensity, 0) / orderedParticles.length;
-        
-     
+        const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.body.velocity.x, 0) / orderedParticles.length;
+
+
         const thicknessFactor = 2;
         const baseOpacity = 0.9; 
         waveFronts.push({
@@ -454,18 +448,18 @@ export class CanvasController {
         });
       }
     });
-    
+
     return waveFronts;
   }
-  
+
   /** Generates a path through a set of points using cubic or quadratic Bézier curves, linear segments **/
-  
+
   private closePathIfNeeded(path: Path2D, points: Point2D[]): void {
     if (JOIN_CURVE_ENDS) {
       if (points.length > 2) {
         const pFirst = points[0];
         const pLast = points[points.length - 1];
-        
+
         // If first and last points aren't already the same, connect them
         if (pFirst.x !== pLast.x || pFirst.y !== pLast.y) {
           path.lineTo(pFirst.x, pFirst.y);
@@ -477,12 +471,12 @@ export class CanvasController {
 
   private calculatePath(points: Point2D[]): Path2D {
     const path = new Path2D();
-    
+
     if (points.length < 2) {
       return path;
     }    
     const curveType = this.params.curveType;
-    
+
     if (curveType === "chaikin") {
       // Chaikin's corner cutting algorithm
       const closedPoints = [...points];
@@ -493,15 +487,15 @@ export class CanvasController {
 
       const iterations = 5;
       let currentPoints = closedPoints;
-      
+
       for (let iter = 0; iter < iterations; iter++) {
         const newPoints: Point2D[] = [];
-        
+
         // Process each edge to create two new points
         for (let i = 0; i < currentPoints.length - 1; i++) {
           const p0 = currentPoints[i];
           const p1 = currentPoints[i+1];
-          
+
           // Cut corner at 1/4 and 3/4 marks
           // Q = 0.75 * P0 + 0.25 * P1
           // R = 0.25 * P0 + 0.75 * P1
@@ -509,17 +503,17 @@ export class CanvasController {
           const qy = 0.75 * p0.y + 0.25 * p1.y;
           const rx = 0.25 * p0.x + 0.75 * p1.x;
           const ry = 0.25 * p0.y + 0.75 * p1.y;
-          
+
           if (i === 0) {
             newPoints.push({ x: qx, y: qy });
           }
           newPoints.push({ x: rx, y: ry });
         }
-        
+
         // Update points for next iteration
         currentPoints = newPoints;
       }
-      
+
       // Draw the resulting smooth curve
       if (currentPoints.length > 0) {
         path.moveTo(currentPoints[0].x, currentPoints[0].y);
@@ -539,38 +533,38 @@ export class CanvasController {
     } 
     else if (curveType === "quadratic") {
       const controlFactor = 0.1; // Controls curve tightness
-      
+
       path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i];
         const p2 = points[i+1];
-        
+
         // Simple midpoint calculation with offset
         const midX = (p1.x + p2.x) / 2;
         const midY = (p1.y + p2.y) / 2;
-        
+
         // Simple perpendicular offset for the control point
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         const cpx = midX + dy * controlFactor;
         const cpy = midY - dx * controlFactor;
-        
+
         path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
       }
-      
+
       // Special handling for quadratic curves with path closing
       if (JOIN_CURVE_ENDS && points.length > 2) {
         const pLast = points[points.length - 1];
         const pFirst = points[0];
-        
+
         const midX = (pLast.x + pFirst.x) / 2;
         const midY = (pLast.y + pFirst.y) / 2;
-        
+
         const dx = pFirst.x - pLast.x;
         const dy = pFirst.y - pLast.y;
         const cpx = midX + dy * controlFactor;
         const cpy = midY - dx * controlFactor;
-        
+
         path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
         path.closePath();
       } 
@@ -581,37 +575,37 @@ export class CanvasController {
     else { // "cubic" - use only when needed for quality
       // Fixed control point factor
       const controlPointFactor = 0.1;
-      
+
       path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i];
         const p2 = points[i+1];
-        
+
         // Simplified control points using just current and next point
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
-        
+
         const cp1x = p1.x + dx * controlPointFactor;
         const cp1y = p1.y + dy * controlPointFactor;
         const cp2x = p2.x - dx * controlPointFactor;
         const cp2y = p2.y - dy * controlPointFactor;
-        
+
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
-      
+
       // Special handling for cubic curves with path closing
       if (JOIN_CURVE_ENDS && points.length > 2) {
         const pLast = points[points.length - 1];
         const pFirst = points[0];
-        
+
         const dx = pFirst.x - pLast.x;
         const dy = pFirst.y - pLast.y;
-        
+
         const cp1x = pLast.x + dx * controlPointFactor;
         const cp1y = pLast.y + dy * controlPointFactor;
         const cp2x = pFirst.x - dx * controlPointFactor;
         const cp2y = pFirst.y - dy * controlPointFactor;
-        
+
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
         path.closePath();
       } 
@@ -619,10 +613,10 @@ export class CanvasController {
         this.closePathIfNeeded(path, points);
       }
     }
-    
+
     return path;
   }
-  
+
   private renderParticle(
     ctx: CanvasRenderingContext2D,
     position: Point2D,
@@ -644,10 +638,10 @@ export class CanvasController {
   ): void {
     const { power } = renderParams;
     const { baseOpacity, thicknessFactor, energy, waveIndex } = waveFront;
-    
+
     // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
-    
+
     // No shadows for better performance
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
@@ -655,7 +649,7 @@ export class CanvasController {
     ctx.strokeStyle = `rgba(20, 210, 255, ${adjustedOpacity})`;
     ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5; 
     ctx.stroke(path);
-    
+
 
     if (energyFactor > 0.8) {
       ctx.strokeStyle = `rgba(160, 240, 255, ${adjustedOpacity * 0.8})`;
@@ -684,18 +678,18 @@ export class CanvasController {
       slop: 0.05,
       collisionFilter
     });
-    
-    
+
+
     return body;
   }
-  
+
   /**
    * Draws UI elements like sweep lines and activation lines
    * Simplified version with fewer draw calls for better performance
    */
   private drawUIElements(width: number, height: number, progress: number): void {
     const timeX = width * progress;
-    
+
     // Single sweep line without glow effect
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
@@ -730,36 +724,36 @@ export class CanvasController {
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
     const prevCurveType = this.params.curveType;
-    
+
     this.params = params;
-    
+
     // Check if oval-related parameters have changed
     const ovalChanged = prevShowOval !== params.showOval || 
                         prevPosition !== params.ovalPosition || 
                         prevEccentricity !== params.ovalEccentricity;
-                        
+
     // Check if visualization parameters have changed
     const visualChanged = prevCurveType !== params.curveType;
-    
+
     if (ovalChanged) {
       // If position changed, but eccentricity stayed the same, we can optimize
       const eccentricityChanged = prevEccentricity !== params.ovalEccentricity;
-      
+
       // If we need to create a new oval, delete the old one first
       if (this.ovalBody && (eccentricityChanged || prevShowOval !== params.showOval)) {
         Matter.Composite.remove(this.engine.world, this.ovalBody);
         this.ovalBody = null;
       }
-      
+
       this.updateOval();
     }
-    
+
     // Redraw the frame if any parameters changed and animation is not running
     if ((ovalChanged || visualChanged) && this.animationFrame === null) {
       this.drawFrame(0);
     }
   }
-  
+
   /**
    * Creates a new oval composite
    * Separated from updateOval for better code organization
@@ -772,31 +766,31 @@ export class CanvasController {
   ): Matter.Composite {
     const wallThickness = 9;
     const ovalBody = Matter.Composite.create();
-    
+
 
     const segments = 29;
-    
+
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
       const angle = (i / segments) * Math.PI * 2;
       const nextAngle = ((i + 1) / segments) * Math.PI * 2;
-      
+
       // Calculate current position on the ellipse
       const x1 = centerX + (majorAxis / 2) * Math.cos(angle);
       const y1 = centerY + (minorAxis / 2) * Math.sin(angle);
-      
+
       // Calculate next position on the ellipse
       const x2 = centerX + (majorAxis / 2) * Math.cos(nextAngle);
       const y2 = centerY + (minorAxis / 2) * Math.sin(nextAngle);
-      
+
       // Calculate midpoint and length of segment
       const midX = (x1 + x2) / 2;
       const midY = (y1 + y2) / 2;
       const segmentLength = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-      
+
       // Calculate angle of the segment
       const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
-      
+
       const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
         isStatic: true,
         angle: segmentAngle,
@@ -811,11 +805,11 @@ export class CanvasController {
           group: 0
         }
       });
-      
+
       // Add the segment to our composite
       Matter.Composite.add(ovalBody, segment);
     }
-    
+
     return ovalBody;
   }
 
@@ -826,7 +820,7 @@ export class CanvasController {
     const centerY = height / 2; // Always centered vertically
     const majorAxis = width * 0.8; 
     const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
-    
+
     // If oval shouldn't be shown, remove it if it exists
     if (!this.params.showOval) {
       if (this.ovalBody) {
@@ -835,7 +829,7 @@ export class CanvasController {
       }
       return;
     }
-    
+
     // If oval body doesn't exist yet or eccentricity changed, create a new one
     if (!this.ovalBody) {
       // Create and add a new oval
@@ -843,9 +837,9 @@ export class CanvasController {
       Matter.Composite.add(this.engine.world, this.ovalBody);
       return;
     }
-    
+
     // If only the position changed, we can just translate the existing oval
-    // This is more efficient than removing and recreating
+    // Thisis more efficient than removing and recreating
     const bodies = Matter.Composite.allBodies(this.ovalBody);
     if (bodies.length > 0) {
       // Calculate the center of the current oval by averaging all body positions
@@ -854,10 +848,10 @@ export class CanvasController {
         totalX += body.position.x;
       });
       const currentCenterX = totalX / bodies.length;
-      
+
       // Calculate the translation vector
       const dx = newCenterX - currentCenterX;
-      
+
       // Check if position actually changed and eccentricity is the same
       if (Math.abs(dx) > 0.1) {
         // Translate all bodies in the oval composite
@@ -907,17 +901,17 @@ export class CanvasController {
     // Reduce motion blur effect to make particles stay visible longer
     this.ctx.fillStyle = 'rgba(26, 26, 26, 0.15)'; 
     this.ctx.fillRect(0, 0, width, height);
-    
+
     // =====================================
     // Step 1: Draw UI elements (sweep lines, activation lines)
     // =====================================
     this.drawUIElements(width, height, progress);
-    
+
     // =====================================
     // Step 2: Handle particle spawning at activation line
     // =====================================
     const timeX = width * progress;
-    
+
     // Check if the sweep line has crossed the activation line (left to right only)
     const hasPassedActivationLine = 
       (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX);
@@ -980,7 +974,7 @@ export class CanvasController {
       if (bubble.particles.length > 0) {
         // Use energy for opacity control
         let opacity = bubble.energy / bubble.initialEnergy;
-        
+
         // Skip rendering if no energy left
         if (opacity <= 0) {
           return true; // Skip rendering but keep for physics until properly cleaned up
@@ -994,36 +988,36 @@ export class CanvasController {
             return pos.x >= 0 && pos.x <= this.canvas.width && 
                    pos.y >= 0 && pos.y <= this.canvas.height;
           });
-          
+
           // If we have enough particles, use wave front rendering
           if (visibleParticles.length > 3) {
             // =====================================
             // Step 4: Calculate wave fronts using our dedicated function
             // =====================================
             const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
-            
+
             // Prepare rendering parameters
             const renderParams: RenderParams = {
               showShadow: this.params.power > 1,
               power: this.params.power,
               screenBounds
             };
-            
+
             // Process each wave front
             for (const waveFront of waveFronts) {
               if (waveFront.points.length < 2) continue;
-              
+
               // =====================================
               // Step 5: Calculate the path once using our path generation function
               // =====================================
               const path = this.calculatePath(waveFront.points);
-              
+
               // =====================================
               // Step 6: Render the path with appropriate styling using our rendering function
               // =====================================
               this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
             }
-            
+
             // Draw individual particles if needed
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
@@ -1077,30 +1071,30 @@ export class CanvasController {
       // Since the oval is now a composite of multiple segments,
       // we need to iterate through each body in the composite
       const bodies = Matter.Composite.allBodies(this.ovalBody);
-      
+
       // Draw the oval outline without glow effects
       this.ctx.beginPath();
 
       // Iterate through each segment body and draw it
       bodies.forEach(body => {
         const vertices = body.vertices;
-        
+
         this.ctx.moveTo(vertices[0].x, vertices[0].y);
-        
+
         for (let i = 1; i < vertices.length; i++) {
           this.ctx.lineTo(vertices[i].x, vertices[i].y);
         }
-        
+
         // Close the path for this segment
         this.ctx.lineTo(vertices[0].x, vertices[0].y);
       });
-      
+
       // Simple solid stroke without shadows
       this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
       this.ctx.lineWidth = 1.5;
       this.ctx.stroke();
     }
-    
+
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
   }
@@ -1139,27 +1133,27 @@ export class CanvasController {
 
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
-    
+
     // Always update physics
     this.updatePhysics(elapsed);
-    
+
     // Render only every other frame to improve performance
     this.frameCounter++;
     if (this.frameCounter % 2 === 0) {
       this.drawFrame(progress);
     }
-    
+
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
 
   private updatePhysics(timestamp: number) {
     // Use fixed timestep for more consistent physics
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
-    
+
     // Use a variable number of substeps based on whether oval is shown
     const numSubSteps = this.params.showOval ? 6 : 3; // Doubled substeps: 8 when oval present, 4 when not
     const subStepTime = fixedDeltaTime / numSubSteps;
-    
+
     // Perform physics updates in substeps for better stability
     // No need to reset friction values every update as they're set during body creation
     for (let i = 0; i < numSubSteps; i++) {
