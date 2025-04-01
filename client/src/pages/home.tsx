@@ -23,7 +23,8 @@ const translations = {
     curveType: "Curve Type",
     cubic: "Cubic",
     quadratic: "Quadratic",
-    linear: "Linear"
+    linear: "Linear",
+    glow: "Glow"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -40,7 +41,8 @@ const translations = {
     curveType: "نوع المنحنى",
     cubic: "مكعب",
     quadratic: "تربيعي",
-    linear: "خطي"
+    linear: "خطي",
+    glow: "توهج"
   }
 };
 
@@ -55,7 +57,7 @@ export default function Home() {
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
-  const [curveType, setCurveType] = useState<"cubic" | "quadratic" | "linear">("cubic"); // default to cubic for best quality
+  const [curveType, setCurveType] = useState<"cubic" | "quadratic" | "linear" | "glow">("cubic"); // default to cubic for best quality
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
@@ -275,7 +277,7 @@ export default function Home() {
                   type="single" 
                   value={curveType} 
                   onValueChange={(value) => {
-                    if (value) setCurveType(value as "cubic" | "quadratic" | "linear");
+                    if (value) setCurveType(value as "cubic" | "quadratic" | "linear" | "glow");
                   }}
                   className="justify-start"
                 >
@@ -287,6 +289,9 @@ export default function Home() {
                   </ToggleGroupItem>
                   <ToggleGroupItem value="linear" size="sm" className="text-xs">
                     {t.linear}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="glow" size="sm" className="text-xs bg-opacity-50 hover:bg-opacity-70">
+                    {t.glow}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>

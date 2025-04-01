@@ -10,7 +10,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number; // 
-  curveType: "cubic" | "quadratic" | "linear"; // Type of curve to use for rendering
+  curveType: "cubic" | "quadratic" | "linear" | "glow"; // Type of curve to use for rendering
 }
 
 interface Particle {
@@ -48,6 +48,13 @@ interface WaveFront {
   cycleNumber: number; 
 }
 
+// Interface for segment glow data
+interface SegmentGlow {
+  intensity: number;
+  timestamp: number;
+  segmentId: number;
+}
+
 // Interface for rendering parameters
 interface RenderParams {
   showShadow: boolean;     
@@ -59,13 +66,13 @@ interface RenderParams {
 }
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6;
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
-  private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
+  private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
   private static readonly OPACITY_DECAY_RATE: number = 0.4;
   private static readonly BASE_LINE_WIDTH: number = 1.0;
-  private static readonly PARTICLES_PER_RING: number = 26;
+  private static readonly PARTICLES_PER_RING: number = 13;
   private static readonly PARTICLE_RADIUS: number = 0.9;
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; 
 
@@ -116,6 +123,7 @@ export class CanvasController {
   private isRTL: boolean = false;
   private showParticles: boolean = true;
   private ovalBody: Matter.Composite | null = null;
+  private segmentGlows: SegmentGlow[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -144,6 +152,53 @@ export class CanvasController {
 
     // Initialize the oval if needed
     this.updateOval();
+    
+    // Set up collision detection for the glow effect
+    Matter.Events.on(this.engine, 'collisionStart', (event) => {
+      // Only process collisions when glow visualization is active
+      if (this.params.curveType === "glow" && this.params.showOval && this.ovalBody) {
+        const pairs = event.pairs;
+        
+        // Process each collision pair
+        for (const pair of pairs) {
+          // We need to identify which body is the oval segment
+          // Particles have category 0x0001, oval segments have 0x0002
+          let segment, particle;
+          
+          if (pair.bodyA.collisionFilter.category === 0x0002) {
+            segment = pair.bodyA;
+            particle = pair.bodyB;
+          } else if (pair.bodyB.collisionFilter.category === 0x0002) {
+            segment = pair.bodyB;
+            particle = pair.bodyA;
+          } else {
+            continue; // Skip if neither is an oval segment
+          }
+          
+          // Get segment index - we use body.id to identify the segment
+          const segmentId = segment.id;
+          
+          // Calculate collision intensity based on relative velocity
+          const relVelocity = {
+            x: particle.velocity.x - segment.velocity.x,
+            y: particle.velocity.y - segment.velocity.y
+          };
+          
+          // Calculate magnitude of relative velocity
+          const speed = Math.sqrt(relVelocity.x * relVelocity.x + relVelocity.y * relVelocity.y);
+          
+          // Normalize to a reasonable range (0 to 1)
+          const normalizedIntensity = Math.min(speed / 10, 1);
+          
+          // Add or update the segment glow
+          this.segmentGlows.push({
+            segmentId,
+            intensity: normalizedIntensity,
+            timestamp: Date.now()
+          });
+        }
+      }
+    });
   }
 
 
@@ -181,7 +236,7 @@ export class CanvasController {
 
     // Add symmetric pairs of particles
     for (let i = 1; i <= halfCount; i++) {
-      const angle = (i / halfCount) * Math.PI;
+      const angle = (Math.sqrt(i) / halfCount) * Math.PI;
       baseAngles.push(angle);
       baseAngles.push(-angle);
     }
@@ -202,7 +257,7 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.1; // Higher value to use more vertical space
+    const compressionFactor = 0.3; // Higher value to use more vertical space
     const center = canvasHeight / 2;
     const numPositions = 9; 
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 2);
@@ -239,7 +294,7 @@ export class CanvasController {
     this.positions.forEach(y => {
       // Bubble radius multiplier based on the distance from center
       const normalizedPos = (y - centerY) / (height / 2);
-      const radiusMultiplier = 0.7 + 1.4 * Math.cos(normalizedPos * Math.PI);
+      const radiusMultiplier = 0.7 + 3 * Math.cos(normalizedPos * Math.PI);
       const bubbleRadius = baseRadius * radiusMultiplier;
       const groupId = this.currentGroupId++;
 
@@ -268,7 +323,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 2.5 * power; 
+        const baseSpeed = 5.5; 
 
 
         // Set velocity - still using the original angle, but with adjusted speed
@@ -318,7 +373,7 @@ export class CanvasController {
   }
 
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.002));
+    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.0015));
   }
 
   /**
@@ -395,7 +450,7 @@ export class CanvasController {
         { min: 0.1, max: 0.4 },
         { min: 0.4, max: 0.7 },
         { min: 0.7, max: 0.85 },
-        { min: 0.9, max: 1.0 },
+        { min: 0.85, max: 1.0 },
         { min: -0.4, max: -0.1 },
         { min: -0.7, max: -0.4 },
         { min: -0.85, max: -0.7 },
@@ -582,6 +637,62 @@ export class CanvasController {
     ctx.arc(position.x, position.y, size, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(254, 58, 0, ${opacity * 0.6})`;
     ctx.fill();
+  }
+  
+  /**
+   * Renders glowing oval segments based on collision data
+   */
+  private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number) {
+    if (!this.ovalBody || !this.params.showOval) return;
+    
+    // Get all segments of the oval
+    const segments = Matter.Composite.allBodies(this.ovalBody);
+    
+    // Filter out old glows based on decay rate
+    const now = timestamp;
+    const decayFactor = CanvasController.OPACITY_DECAY_RATE;
+    
+    // Process each segment glow
+    this.segmentGlows = this.segmentGlows.filter(glow => {
+      // Calculate age of glow in seconds
+      const age = (now - glow.timestamp) / 1000;
+      // Return false to remove glows older than 2 seconds
+      return age < 2;
+    });
+    
+    // Draw glow for each segment
+    segments.forEach(segment => {
+      // Find all glows for this segment
+      const segmentGlows = this.segmentGlows.filter(glow => glow.segmentId === segment.id);
+      
+      if (segmentGlows.length === 0) return;
+      
+      // Calculate the current intensity based on decay
+      let maxIntensity = 0;
+      segmentGlows.forEach(glow => {
+        const age = (now - glow.timestamp) / 1000;
+        const intensity = glow.intensity * Math.exp(-decayFactor * age);
+        maxIntensity = Math.max(maxIntensity, intensity);
+      });
+      
+      // Render segment with pink glow
+      const vertices = segment.vertices;
+      
+      ctx.beginPath();
+      ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      ctx.closePath();
+      
+      // Create gradient for glow effect
+      const opacity = maxIntensity * 0.8; // Max opacity of 80%
+      ctx.fillStyle = `rgba(255, 105, 180, ${opacity})`;
+      ctx.strokeStyle = `rgba(255, 20, 147, ${opacity * 1.2})`;
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+    });
   }
 
   private renderWaveFrontPath(
@@ -969,7 +1080,10 @@ export class CanvasController {
               // =====================================
               // Step 6: Render the path with appropriate styling using our rendering function
               // =====================================
-              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+              // Only render wave paths in non-glow mode
+              if (this.params.curveType !== 'glow') {
+                this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+              }
             }
 
             // Draw individual particles if needed
@@ -1022,31 +1136,37 @@ export class CanvasController {
 
     // Draw the oval if it exists and is supposed to be shown
     if (this.params.showOval && this.ovalBody) {
-      // Since the oval is now a composite of multiple segments,
-      // we need to iterate through each body in the composite
-      const bodies = Matter.Composite.allBodies(this.ovalBody);
-
-      // Draw the oval outline without glow effects
-      this.ctx.beginPath();
-
-      // Iterate through each segment body and draw it
-      bodies.forEach(body => {
-        const vertices = body.vertices;
-
-        this.ctx.moveTo(vertices[0].x, vertices[0].y);
-
-        for (let i = 1; i < vertices.length; i++) {
-          this.ctx.lineTo(vertices[i].x, vertices[i].y);
-        }
-
-        // Close the path for this segment
-        this.ctx.lineTo(vertices[0].x, vertices[0].y);
-      });
-
-      // Simple solid stroke without shadows
-      this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
-      this.ctx.lineWidth = 1.5;
-      this.ctx.stroke();
+      if (this.params.curveType === 'glow') {
+        // In glow mode, render the glow effect on oval segments
+        this.renderOvalGlow(this.ctx, performance.now());
+      } else {
+        // In all other modes, draw the standard oval outline
+        // Since the oval is now a composite of multiple segments,
+        // we need to iterate through each body in the composite
+        const bodies = Matter.Composite.allBodies(this.ovalBody);
+  
+        // Draw the oval outline without glow effects
+        this.ctx.beginPath();
+  
+        // Iterate through each segment body and draw it
+        bodies.forEach(body => {
+          const vertices = body.vertices;
+  
+          this.ctx.moveTo(vertices[0].x, vertices[0].y);
+  
+          for (let i = 1; i < vertices.length; i++) {
+            this.ctx.lineTo(vertices[i].x, vertices[i].y);
+          }
+  
+          // Close the path for this segment
+          this.ctx.lineTo(vertices[0].x, vertices[0].y);
+        });
+  
+        // Simple solid stroke without shadows
+        this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.stroke();
+      }
     }
 
     // Restore canvas state (important for RTL transformation)
