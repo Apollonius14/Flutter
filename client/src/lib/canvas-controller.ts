@@ -4,6 +4,9 @@ import * as Matter from 'matter-js';
 // QUADRATIC is more performant but may look slightly less smooth
 const BEZIER_CURVE_TYPE: "CUBIC" | "QUADRATIC" = "CUBIC";
 
+// Control whether to join the last particle to the first in path calculations
+const JOIN_CURVE_ENDS: boolean = false;
+
 interface AnimationParams {
   power: number;
   frequency: number;
@@ -62,15 +65,15 @@ interface RenderParams {
 
 export class CanvasController {
   // Core timing constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4; // Cycle duration in milliseconds
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2; // How many cycles particles live
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3; // Cycle duration in milliseconds
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3; // How many cycles particles live
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; // Physics engine update interval (80fps)
   // Layout constants
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; // 30% of canvas width
   // Particle appearance constants
   private static readonly OPACITY_DECAY_RATE: number = 0.4; // How much opacity decreases per cycle
   private static readonly BASE_LINE_WIDTH: number = 1.0; // Reduced to 1.0 (5x thinner) as requested for debugging
-  private static readonly PARTICLES_PER_RING: number = 11; // Number of particles in each ring
+  private static readonly PARTICLES_PER_RING: number = 14; // Number of particles in each ring
   private static readonly PARTICLE_RADIUS: number = 0.9; // Physics body radius for particles
   private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; // Fixed radius for bubbles
 
@@ -90,6 +93,7 @@ export class CanvasController {
   private spawnInterval: number = 1000;
   private lastCycleTime: number = 0;
   public onCycleStart: (() => void) | null = null;
+  private frameCounter: number = 0;
   private currentGroupId: number = 0;
   private currentCycleNumber: number = 0;
   private positions: number[] = [];
@@ -170,7 +174,7 @@ export class CanvasController {
     for (const angle of baseAngles) {
       const absAngle = Math.abs(angle);
       const compressionFactor = (absAngle / Math.PI) * (absAngle / Math.PI);
-      const transformedAngle = angle * (1 - compressionFactor);
+      const transformedAngle = angle * (1 - 0.5* compressionFactor);
       const normalizedAngle = (transformedAngle + 2 * Math.PI) % (2 * Math.PI);
 
       particleAngles.push(normalizedAngle);
@@ -275,10 +279,10 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 6.9; 
+        const baseSpeed = 2; 
         const horizontalAlignment = Math.abs(Math.cos(angle));
 
-        const directedSpeed = baseSpeed * (1 + 0.1 * horizontalAlignment);
+        const directedSpeed = baseSpeed * (1 + 2 * horizontalAlignment) ;
 
         // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
@@ -470,7 +474,7 @@ export class CanvasController {
    * or Chaikin's corner cutting algorithm for smooth curves
    * Simplified version with fewer calculations for better performance
    * Uses the curveType parameter from AnimationParams
-   * Connects the last point back to the first to create a closed loop
+   * Optionally connects the last point back to the first based on JOIN_CURVE_ENDS setting
    */
   private calculatePath(points: Point2D[]): Path2D {
     // Create a new path
@@ -481,11 +485,13 @@ export class CanvasController {
       return path;
     }
     
-    // If only two points, draw a straight line and close the path
+    // If only two points, draw a straight line and close the path if JOIN_CURVE_ENDS is true
     if (points.length === 2) {
       path.moveTo(points[0].x, points[0].y);
       path.lineTo(points[1].x, points[1].y);
-      path.closePath();
+      if (JOIN_CURVE_ENDS) {
+        path.closePath();
+      }
       return path;
     }
     
@@ -497,8 +503,10 @@ export class CanvasController {
       // Create a closed loop of points for Chaikin's algorithm
       const closedPoints = [...points];
       
-      // Only add the first point to close the loop if the first and last points aren't already the same
-      if (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y) {
+      // Only add the first point to close the loop if JOIN_CURVE_ENDS is true
+      // and if the first and last points aren't already the same
+      if (JOIN_CURVE_ENDS && 
+          (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y)) {
         closedPoints.push(points[0]);
       }
       
@@ -538,7 +546,9 @@ export class CanvasController {
         for (let i = 1; i < currentPoints.length; i++) {
           path.lineTo(currentPoints[i].x, currentPoints[i].y);
         }
-        path.closePath();
+        if (JOIN_CURVE_ENDS) {
+          path.closePath();
+        }
       }
     }
     else if (curveType === "linear") {
@@ -547,7 +557,9 @@ export class CanvasController {
       for (let i = 1; i < points.length; i++) {
         path.lineTo(points[i].x, points[i].y);
       }
-      path.closePath();
+      if (JOIN_CURVE_ENDS) {
+        path.closePath();
+      }
     } 
     else if (curveType === "quadratic") {
       // Quadratic curves - more efficient than cubic
@@ -571,8 +583,28 @@ export class CanvasController {
         path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
       }
       
-      // Connect back to start with a simple line
-      path.lineTo(points[0].x, points[0].y);
+      // Connect back to start only if JOIN_CURVE_ENDS is true
+      if (JOIN_CURVE_ENDS) {
+        // Connect last point to first with a curve if needed
+        if (points.length > 2) {
+          const pLast = points[points.length - 1];
+          const pFirst = points[0];
+          
+          const midX = (pLast.x + pFirst.x) / 2;
+          const midY = (pLast.y + pFirst.y) / 2;
+          
+          const dx = pFirst.x - pLast.x;
+          const dy = pFirst.y - pLast.y;
+          const cpx = midX + dy * controlFactor;
+          const cpy = midY - dx * controlFactor;
+          
+          path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
+        } else {
+          // If only two points, use a straight line to close
+          path.lineTo(points[0].x, points[0].y);
+        }
+        path.closePath();
+      }
     } 
     else { // "cubic" - use only when needed for quality
       // Fixed control point factor
@@ -595,8 +627,28 @@ export class CanvasController {
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
       
-      // Connect back to start with a simple line
-      path.lineTo(points[0].x, points[0].y);
+      // Connect back to start only if JOIN_CURVE_ENDS is true
+      if (JOIN_CURVE_ENDS) {
+        // Connect last point to first with a curve if needed
+        if (points.length > 2) {
+          const pLast = points[points.length - 1];
+          const pFirst = points[0];
+          
+          const dx = pFirst.x - pLast.x;
+          const dy = pFirst.y - pLast.y;
+          
+          const cp1x = pLast.x + dx * controlPointFactor;
+          const cp1y = pLast.y + dy * controlPointFactor;
+          const cp2x = pFirst.x - dx * controlPointFactor;
+          const cp2y = pFirst.y - dy * controlPointFactor;
+          
+          path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
+        } else {
+          // If only two points, use a straight line to close
+          path.lineTo(points[0].x, points[0].y);
+        }
+        path.closePath();
+      }
     }
     
     return path;
@@ -1057,6 +1109,8 @@ export class CanvasController {
     this.ctx.restore();
   }
 
+
+  
   private animate() {
     if (!this.startTime) return;
 
@@ -1093,8 +1147,16 @@ export class CanvasController {
 
     // Get normalized progress through current cycle (0 to 1)
     const progress = (elapsed % cyclePeriod) / cyclePeriod;
+    
+    // Always update physics
     this.updatePhysics(elapsed);
-    this.drawFrame(progress);
+    
+    // Render only every other frame to improve performance
+    this.frameCounter++;
+    if (this.frameCounter % 2 === 0) {
+      this.drawFrame(progress);
+    }
+    
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
 
@@ -1103,7 +1165,7 @@ export class CanvasController {
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
     
     // Use a variable number of substeps based on whether oval is shown
-    const numSubSteps = this.params.showOval ? 4 : 2; // More substeps with oval present
+    const numSubSteps = this.params.showOval ? 8 : 4; // Doubled substeps: 8 when oval present, 4 when not
     const subStepTime = fixedDeltaTime / numSubSteps;
     
     // Perform physics updates in substeps for better stability
