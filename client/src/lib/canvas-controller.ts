@@ -18,6 +18,8 @@ interface Particle {
   groupId: number;
   cycleNumber: number;
   index: number; // Fixed index in the bubble's particles array
+  energy: number; // Current energy level
+  initialEnergy: number; // Starting energy level
 }
 
 interface Bubble {
@@ -66,15 +68,14 @@ interface RenderParams {
 }
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.8; 
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
-  private static readonly OPACITY_DECAY_RATE: number = 6.0; // Increased from 0.4 to 2.0 for faster decay
   private static readonly BASE_LINE_WIDTH: number = 1.0;
-  private static readonly PARTICLES_PER_RING: number = 13;
+  private static readonly PARTICLES_PER_RING: number = 35;
   private static readonly PARTICLE_RADIUS: number = 0.9;
-  private static readonly FIXED_BUBBLE_RADIUS: number = 7.2; 
+  private static readonly FIXED_BUBBLE_RADIUS: number = 5; 
 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
@@ -94,7 +95,7 @@ export class CanvasController {
 
     // Apply compression to focus particles toward the front
     for (const angle of baseAngles) {
-      particleAngles.push(angle);
+      particleAngles.push(angle * (1 - 0.8 * Math.sin(angle) * Math.sin(angle)));
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -112,8 +113,6 @@ export class CanvasController {
   private engine: Matter.Engine;
   private previousSweepLineX: number = 0;
   private activationLineX: number = 0;
-  private lastSpawnTime: number = 0;
-  private spawnInterval: number = 1000;
   private lastCycleTime: number = 0;
   public onCycleStart: (() => void) | null = null;
   private frameCounter: number = 0;
@@ -136,15 +135,15 @@ export class CanvasController {
       gravity: { x: 0, y: 0 },
       positionIterations: 4,    // Increased for better physics accuracy
       velocityIterations: 4,    // Increased for smoother motion
-      constraintIterations: 2
+      constraintIterations: 3
     }); 
     this.params = {
       power: 12,
       frequency: 0.3,
       showOval: false,
-      ovalPosition: 0.5, // Default to center
-      ovalEccentricity: 0.7, // Default eccentricity
-      curveType: "cubic" // Default to cubic Bézier curves
+      ovalPosition: 0.5,
+      ovalEccentricity: 0.7,
+      curveType: "cubic"
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -181,7 +180,7 @@ export class CanvasController {
           
           // Calculate collision intensity based on relative velocity
           const relVelocity = {
-            x: particle.velocity.x - segment.velocity.x,
+            x: this.params.power * particle.velocity.x - segment.velocity.x,
             y: particle.velocity.y - segment.velocity.y
           };
           
@@ -197,7 +196,7 @@ export class CanvasController {
           if (existingGlowIndex >= 0) {
             // Update existing glow intensity (add new intensity, capped at 1.0)
             const existingGlow = this.segmentGlows[existingGlowIndex];
-            existingGlow.intensity = Math.min(existingGlow.intensity + normalizedIntensity, 1.0);
+            existingGlow.intensity = Math.min(existingGlow.intensity + normalizedIntensity, 10.0);
             existingGlow.lastUpdateTime = now;
           } else {
             // Create new glow record
@@ -212,67 +211,16 @@ export class CanvasController {
     });
   }
 
-
-  /**
-   * Calculate thickness factor based on wave position
-   * Enhanced to make differences between waves more pronounced
-   */
-  private calculateThicknessFactor(waveIndex: number): number {
-    const centralPositions = [4, 5];
-    const innerPositions = [3, 6];
-    const middlePositions = [2, 7];
-    const outerPositions = [1, 8];
-    const farthestPositions = [0, 9];
-
-    // More dramatic thickness differences for clearer wave visualization
-    if (centralPositions.includes(waveIndex)) return 3.0;    // Increased from 2.0 to 3.0
-    if (innerPositions.includes(waveIndex)) return 1.8;      // Increased from 1.4 to 1.8
-    if (middlePositions.includes(waveIndex)) return 1.3;     // Slightly increased from 1.2
-    if (outerPositions.includes(waveIndex)) return 0.7;      // Decreased from 0.9 to 0.7
-    if (farthestPositions.includes(waveIndex)) return 0.5;   // Decreased from 0.8 to 0.5
-
-    return 0.5; // Default for any other positions
-  }
-
-  /**
-   * Generate particle angles for a wave ring with a forward-focused distribution
-   */
-  private generateParticleAngles(particleCount: number): number[] {
-    const particleAngles: number[] = [];
-    const baseAngles: number[] = [];
-    const halfCount = Math.floor(particleCount / 2);
-
-    // Add center particle at 0°
-    baseAngles.push(0);
-
-    // Add symmetric pairs of particles
-    for (let i = 1; i <= halfCount; i++) {
-      const angle = (Math.sqrt(i) / halfCount) * Math.PI;
-      baseAngles.push(angle);
-      baseAngles.push(-angle);
-    }
-
-    // Apply compression to focus particles toward the front
-    for (const angle of baseAngles) {
-      const absAngle = Math.abs(angle);
-      particleAngles.push(angle);
-    }
-
-    return particleAngles.sort((a, b) => a - b);
-  };
-
-
-
   /**
    * Calculate wave positions across the canvas height
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.3; // Higher value to use more vertical space
+    const compressionFactor = 0.2; // Higher value to use more vertical space
     const center = canvasHeight / 2;
     const numPositions = 9; 
-    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 2);
-    const halfSpacing = baseSpacing / 2;
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 3);
+    const halfSpacing = baseSpacing / 10;
 
     // Add positions from top to bottom, offset from center
     positions.push(center - halfSpacing - baseSpacing * 4);
@@ -289,9 +237,7 @@ export class CanvasController {
   }
 
   private generateBubbles(x: number): Bubble[] {
-    const { power } = this.params;
     const height = this.canvas.height;
-    const width = this.canvas.width;
 
     const bubbles: Bubble[] = [];
     const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
@@ -305,36 +251,34 @@ export class CanvasController {
     this.positions.forEach(y => {
       // Bubble radius multiplier based on the distance from center
       const normalizedPos = (y - centerY) / (height / 2);
-      const radiusMultiplier = 0.7 + 3 * Math.cos(normalizedPos * Math.PI);
+      const radiusMultiplier = 0.5 + 1 * Math.cos(normalizedPos * Math.PI);
       const bubbleRadius = baseRadius * radiusMultiplier;
       const groupId = this.currentGroupId++;
 
       const particles: Particle[] = [];
-      const numParticlesInRing = CanvasController.PARTICLES_PER_RING;
-      const particlePowerFactor = this.params.power / 3;
+      
       const particleAngles = CanvasController.PARTICLE_ANGLES;
-
       particleAngles.forEach((angle, idx) => {
         const particleX = x + Math.cos(angle) * bubbleRadius;
         const particleY = y + Math.sin(angle) * bubbleRadius;
 
         // Create physics body with size from our constant
         const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
-          friction: 0.0,         // No surface friction
-          frictionAir: 0.0,      // No air resistance
-          frictionStatic: 0.0,   // No static friction
-          restitution: 1.0,      // Perfect elasticity (no energy loss)
-          mass:1,             // Light mass for responsive physics
+          friction: 0.0,        
+          frictionAir: 0.0, 
+          frictionStatic: 0.0,
+          restitution: 1.0,
+          mass:1,
           inertia: Infinity,
-          slop: 0.01,            // Minimal slop for precise collisions
+          slop: 0.01, 
           collisionFilter: {
             category: 0x0001,
-            mask: 0x0002,        // Only collide with the oval (0x0002), not other particles
-            group: 0             // Using 0 instead of -1 to rely on mask for collision rules
+            mask: 0x0002, 
+            group: 0   
           }
         });
 
-        const baseSpeed = 5.5; 
+        const baseSpeed = 2.5; 
 
 
         // Set velocity - still using the original angle, but with adjusted speed
@@ -344,11 +288,14 @@ export class CanvasController {
         });
 
         Matter.Composite.add(this.engine.world, body);
+        // Initialize particle with energy based on the power parameter
         const particle: Particle = {
           body,
           groupId: groupId,
           cycleNumber: this.currentCycleNumber,
-          index: idx
+          index: idx,
+          energy: this.params.power,
+          initialEnergy: this.params.power
         };
         particles.push(particle);
       });
@@ -369,22 +316,47 @@ export class CanvasController {
     return bubbles;
   }
 
-  private initializeBubble(x: number, y: number, intensity: number): Bubble {
-    return {
-      x,
-      y,
-      radius: CanvasController.FIXED_BUBBLE_RADIUS,
-      initialRadius: CanvasController.FIXED_BUBBLE_RADIUS,
-      particles: [],
-      groupId: this.currentGroupId++,
-      cycleNumber: this.currentCycleNumber,
-      energy: this.params.power,
-      initialEnergy: this.params.power,
-    };
-  }
-
+  /**
+   * Updates the energy of individual particles based on their vertical velocity
+   * and then recalculates the bubble's total energy as the sum of its particles
+   * @param bubble The bubble to update energy for
+   */
   private updateBubbleEnergy(bubble: Bubble) {
-    bubble.energy = Math.max(0, bubble.energy - (bubble.initialEnergy * 0.0015));
+    // Create a copy of particles for safe iteration while potentially removing some
+    const particles = [...bubble.particles];
+    let totalEnergy = 0;
+    
+    // Process each particle's energy
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const particle = particles[i];
+      const body = particle.body;
+      
+      // Get the normalized vertical velocity component (absolute value)
+      const verticalVelocity = Math.abs(body.velocity.y);
+      
+      // Calculate decay factor - higher vertical velocity means faster decay
+      // This will penalize vertical motion, emphasizing horizontal waves
+      const velocityFactor = 1 + (verticalVelocity * 0.2); // 20% penalty per unit of vertical velocity
+      
+      // Apply time-based decay multiplied by the velocity factor
+      const decay = particle.initialEnergy * 0.001 * velocityFactor;
+      particle.energy = Math.max(0, particle.energy - decay);
+      
+      // Accumulate energy for bubble total
+      totalEnergy += particle.energy;
+      
+      // If particle energy is zero, remove it from physics and the bubble
+      if (particle.energy <= 0) {
+        // Mark for removal from the world in the next physics update
+        Matter.Composite.remove(this.engine.world, body);
+        
+        // Remove from the bubble's particles array
+        bubble.particles.splice(bubble.particles.indexOf(particle), 1);
+      }
+    }
+    
+    // Update bubble's total energy (sum of all its particles)
+    bubble.energy = totalEnergy;
   }
 
   /**
@@ -498,15 +470,16 @@ export class CanvasController {
           y: p.body.position.y
         }));
 
-        // Calculate average energy and position index from constituent particles
-        const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.body.velocity.x, 0) / orderedParticles.length;
+        // Calculate average energy from the particle's energy values
+        // This uses the energy property we set on each particle
+        const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.energy, 0) / orderedParticles.length;
 
 
         const thicknessFactor = 2;
         const baseOpacity = 0.9; 
         waveFronts.push({
           points,
-          energy: avgEnergy * 5,
+          energy: avgEnergy,  // Direct use of particle energy values without artificial multiplier
           waveIndex: directionIndex, 
           thicknessFactor,
           baseOpacity,
@@ -594,7 +567,7 @@ export class CanvasController {
     } 
     else { // "cubic" - use only when needed for quality
       // Fixed control point factor
-      const controlPointFactor = 0.1;
+      const controlPointFactor = 0.8;
 
       path.moveTo(points[0].x, points[0].y);
       for (let i = 0; i < points.length - 1; i++) {
@@ -637,16 +610,36 @@ export class CanvasController {
     return path;
   }
 
+  /**
+   * Renders a particle with opacity based on its energy level
+   * @param ctx Canvas rendering context
+   * @param position Position to render the particle
+   * @param opacity Base opacity value
+   * @param particle Optional particle object for energy-based rendering
+   * @param size Size of the particle 
+   */
   private renderParticle(
     ctx: CanvasRenderingContext2D,
     position: Point2D,
     opacity: number,
+    particle?: Particle,
     size: number = 4.0
   ): void {
+    // If we have a particle with energy data, use that to adjust opacity
+    let finalOpacity = opacity;
+    if (particle) {
+      // Use particle's energy level directly
+      const energyRatio = particle.energy / particle.initialEnergy;
+      finalOpacity = energyRatio * 0.8; // Slightly brighter than the base opacity
+    } else {
+      // Use passed opacity as fallback
+      finalOpacity = opacity * 0.6;
+    }
+    
     // Draw a filled circle for the particle
     ctx.beginPath();
     ctx.arc(position.x, position.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(254, 58, 0, ${opacity * 0.6})`;
+    ctx.fillStyle = `rgba(254, 58, 0, ${finalOpacity})`;
     ctx.fill();
   }
   
@@ -694,7 +687,7 @@ export class CanvasController {
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
       // Apply exponential decay to the intensity - using a 5x multiplier for faster decay
-      const currentIntensity = glow.intensity * Math.exp(-500 * glowAge);
+      const currentIntensity = glow.intensity * Math.exp(-8 * glowAge);
       
       // Skip rendering if the intensity is too low
       if (currentIntensity < 0.05) return;
@@ -747,31 +740,6 @@ export class CanvasController {
       ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.2; // Half as thick (0.4 * 0.5)
       ctx.stroke(path);
     }
-  }
-
-  /**
-   * Creates a physics body optimized for perfectly elastic collisions
-   */
-  private createPerfectlyElasticBody(
-    x: number, 
-    y: number, 
-    radius: number, 
-    collisionFilter: Matter.ICollisionFilter
-  ): Matter.Body {
-
-    const body = Matter.Bodies.circle(x, y, radius, {
-      friction: 0,
-      frictionAir: 0,
-      frictionStatic: 0,
-      restitution: 1.0,
-      inertia: Infinity,
-      mass: 1,
-      slop: 0.05,
-      collisionFilter
-    });
-
-
-    return body;
   }
 
   /**
@@ -855,11 +823,11 @@ export class CanvasController {
     majorAxis: number,
     minorAxis: number
   ): Matter.Composite {
-    const wallThickness = 9;
+    const wallThickness = 13;
     const ovalBody = Matter.Composite.create();
 
 
-    const segments = 29;
+    const segments = 35;
 
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
@@ -908,11 +876,10 @@ export class CanvasController {
     const width = this.canvas.width;
     const height = this.canvas.height;
     const newCenterX = width * this.params.ovalPosition;
-    const centerY = height / 2; // Always centered vertically
-    const majorAxis = width * 0.8; 
-    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8); // Eccentricity affects minor axis
-
-    // If oval shouldn't be shown, remove it if it exists
+    const centerY = height / 2; 
+    const majorAxis = width * 0.9; 
+    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8);
+    
     if (!this.params.showOval) {
       if (this.ovalBody) {
         Matter.Composite.remove(this.engine.world, this.ovalBody);
@@ -930,7 +897,6 @@ export class CanvasController {
     }
 
     // If only the position changed, we can just translate the existing oval
-    // Thisis more efficient than removing and recreating
     const bodies = Matter.Composite.allBodies(this.ovalBody);
     if (bodies.length > 0) {
       // Calculate the center of the current oval by averaging all body positions
@@ -1068,10 +1034,9 @@ export class CanvasController {
 
         // Skip rendering if no energy left
         if (opacity <= 0) {
-          return true; // Skip rendering but keep for physics until properly cleaned up
+          return true; 
         }
 
-        // Draw all particles with bezier curves, using our modular approach
         if (bubble.particles.length > 3) {
           // Get visible particles for rendering
           const visibleParticles = bubble.particles.filter(p => {
@@ -1116,7 +1081,8 @@ export class CanvasController {
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                this.renderParticle(this.ctx, pos, opacity);
+                // Pass the particle object to use its energy for rendering
+                this.renderParticle(this.ctx, pos, opacity, particle);
               });
             }
           } 
@@ -1141,7 +1107,8 @@ export class CanvasController {
             if (this.showParticles) {
               visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
-                this.renderParticle(this.ctx, pos, opacity);
+                // Pass the particle object to use its energy for rendering
+                this.renderParticle(this.ctx, pos, opacity, particle);
               });
             }
           }
@@ -1166,15 +1133,10 @@ export class CanvasController {
         // In glow mode, render the glow effect on oval segments
         this.renderOvalGlow(this.ctx, performance.now());
       } else {
-        // In all other modes, draw the standard oval outline
-        // Since the oval is now a composite of multiple segments,
-        // we need to iterate through each body in the composite
         const bodies = Matter.Composite.allBodies(this.ovalBody);
   
-        // Draw the oval outline without glow effects
         this.ctx.beginPath();
-  
-        // Draw one continuous path for all segments
+
         bodies.forEach(body => {
           const vertices = body.vertices;
           this.ctx.moveTo(vertices[0].x, vertices[0].y);
