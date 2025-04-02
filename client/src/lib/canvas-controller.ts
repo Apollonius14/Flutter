@@ -660,7 +660,22 @@ export class CanvasController {
       return age < 2;
     });
     
-    // Draw glow for each segment
+    // First draw all segments with a basic outline
+    ctx.beginPath();
+    segments.forEach(segment => {
+      const vertices = segment.vertices;
+      ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      ctx.lineTo(vertices[0].x, vertices[0].y);
+    });
+    // Simple outline for all segments
+    ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    
+    // Then draw only the segments with active glows
     segments.forEach(segment => {
       // Find all glows for this segment
       const segmentGlows = this.segmentGlows.filter(glow => glow.segmentId === segment.id);
@@ -674,6 +689,9 @@ export class CanvasController {
         const intensity = glow.intensity * Math.exp(-decayFactor * age);
         maxIntensity = Math.max(maxIntensity, intensity);
       });
+      
+      // Only render segments with enough intensity
+      if (maxIntensity < 0.05) return;
       
       // Render segment with pink glow
       const vertices = segment.vertices;
@@ -1148,21 +1166,20 @@ export class CanvasController {
         // Draw the oval outline without glow effects
         this.ctx.beginPath();
   
-        // Iterate through each segment body and draw it
+        // Draw one continuous path for all segments
         bodies.forEach(body => {
           const vertices = body.vertices;
-  
           this.ctx.moveTo(vertices[0].x, vertices[0].y);
-  
+          
           for (let i = 1; i < vertices.length; i++) {
             this.ctx.lineTo(vertices[i].x, vertices[i].y);
           }
-  
-          // Close the path for this segment
+          
+          // Connect to the first vertex to close this segment
           this.ctx.lineTo(vertices[0].x, vertices[0].y);
         });
   
-        // Simple solid stroke without shadows
+        // Simple outline stroke without fill
         this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
         this.ctx.lineWidth = 1.5;
         this.ctx.stroke();
