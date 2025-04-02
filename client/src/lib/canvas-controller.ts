@@ -70,7 +70,7 @@ export class CanvasController {
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
-  private static readonly OPACITY_DECAY_RATE: number = 0.4;
+  private static readonly OPACITY_DECAY_RATE: number = 2.0; // Increased from 0.4 to 2.0 for faster decay
   private static readonly BASE_LINE_WIDTH: number = 1.0;
   private static readonly PARTICLES_PER_RING: number = 13;
   private static readonly PARTICLE_RADIUS: number = 0.9;
@@ -656,8 +656,8 @@ export class CanvasController {
     this.segmentGlows = this.segmentGlows.filter(glow => {
       // Calculate age of glow in seconds
       const age = (now - glow.timestamp) / 1000;
-      // Return false to remove glows older than 2 seconds
-      return age < 2;
+      // Return false to remove glows older than 0.4 seconds (reduced from 2 seconds)
+      return age < 0.4;
     });
     
     // First draw all segments with a basic outline
@@ -704,10 +704,10 @@ export class CanvasController {
       ctx.closePath();
       
       // Create gradient for glow effect
-      const opacity = maxIntensity * 0.8; // Max opacity of 80%
-      ctx.fillStyle = `rgba(255, 105, 180, ${opacity})`;
-      ctx.strokeStyle = `rgba(255, 20, 147, ${opacity * 1.2})`;
-      ctx.lineWidth = 1.5;
+      const opacity = maxIntensity * 1.5; // Max opacity of 150% (increased from 0.8 to 1.5 for brighter glow)
+      ctx.fillStyle = `rgba(255, 105, 180, ${Math.min(opacity, 0.95)})`;
+      ctx.strokeStyle = `rgba(255, 20, 147, ${Math.min(opacity * 1.2, 1.0)})`;
+      ctx.lineWidth = 2.0; // Increased from 1.5 to 2.0 for more visibility
       ctx.fill();
       ctx.stroke();
     });
