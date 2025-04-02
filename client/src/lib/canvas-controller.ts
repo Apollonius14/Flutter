@@ -652,11 +652,9 @@ export class CanvasController {
     const now = timestamp;
     const decayFactor = CanvasController.OPACITY_DECAY_RATE;
     
-    // Process each segment glow
+    // Process each segment glow - remove glows older than 0.2 seconds
     this.segmentGlows = this.segmentGlows.filter(glow => {
-      // Calculate age of glow in seconds
       const age = (now - glow.timestamp) / 1000;
-      // Return false to remove glows older than 0.4 seconds (reduced from 2 seconds)
       return age < 0.2;
     });
     
@@ -678,20 +676,23 @@ export class CanvasController {
     // Then draw only the segments with active glows
     segments.forEach(segment => {
       // Find all glows for this segment
-      const segmentGlows = this.segmentGlows.filter(glow => glow.segmentId === segment.id);
+      const activeGlows = this.segmentGlows.filter(glow => glow.segmentId === segment.id);
       
-      if (segmentGlows.length === 0) return;
+      if (activeGlows.length === 0) return;
       
-      // Calculate the current intensity based on decay
-      let maxIntensity = 0;
-      segmentGlows.forEach(glow => {
-        const age = (now - glow.timestamp) / 1000;
-        const intensity = glow.intensity * Math.exp(-5 * decayFactor * age);
-        maxIntensity = Math.max(maxIntensity, intensity);
-      });
+      // Find the most recent glow for this segment to get the latest intensity
+      const latestGlow = activeGlows.reduce((newest, current) => {
+        return current.timestamp > newest.timestamp ? current : newest;
+      }, activeGlows[0]);
       
-      // Only render segments with enough intensity
-      if (maxIntensity < 0.05) return;
+      // Calculate how old this glow is in seconds
+      const glowAge = (now - latestGlow.timestamp) / 1000;
+      
+      // Apply exponential decay to the intensity - using a 5x multiplier for faster decay
+      const currentIntensity = latestGlow.intensity * Math.exp(-5 * decayFactor * glowAge);
+      
+      // Skip rendering if the intensity is too low
+      if (currentIntensity < 0.05) return;
       
       // Render segment with pink glow
       const vertices = segment.vertices;
@@ -703,11 +704,13 @@ export class CanvasController {
       }
       ctx.closePath();
       
-      // Create gradient for glow effect
-      const opacity = maxIntensity * 1.5; // Max opacity of 150% (increased from 0.8 to 1.5 for brighter glow)
-      ctx.fillStyle = `rgba(255, 105, 180, ${Math.min(opacity, 0.95)})`;
-      ctx.strokeStyle = `rgba(255, 20, 147, ${Math.min(opacity * 1.2, 1.0)})`;
-      ctx.lineWidth = 2.0; // Increased from 1.5 to 2.0 for more visibility
+      // Scale opacity directly proportional to intensity for consistent fill and glow
+      const fillOpacity = Math.min(currentIntensity * 1.5, 0.95);
+      const strokeOpacity = Math.min(currentIntensity * 1.8, 1.0);
+      
+      ctx.fillStyle = `rgba(255, 105, 180, ${fillOpacity})`;
+      ctx.strokeStyle = `rgba(255, 20, 147, ${strokeOpacity})`;
+      ctx.lineWidth = 2.0;
       ctx.fill();
       ctx.stroke();
     });
