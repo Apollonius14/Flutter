@@ -657,7 +657,7 @@ export class CanvasController {
       // Calculate age of glow in seconds
       const age = (now - glow.timestamp) / 1000;
       // Return false to remove glows older than 0.4 seconds (reduced from 2 seconds)
-      return age < 0.4;
+      return age < 0.2;
     });
     
     // First draw all segments with a basic outline
@@ -686,7 +686,7 @@ export class CanvasController {
       let maxIntensity = 0;
       segmentGlows.forEach(glow => {
         const age = (now - glow.timestamp) / 1000;
-        const intensity = glow.intensity * Math.exp(-decayFactor * age);
+        const intensity = glow.intensity * Math.exp(-5 * decayFactor * age);
         maxIntensity = Math.max(maxIntensity, intensity);
       });
       
