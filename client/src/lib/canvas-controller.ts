@@ -51,7 +51,7 @@ interface WaveFront {
 // Interface for segment glow data
 interface SegmentGlow {
   intensity: number;
-  timestamp: number;
+  lastUpdateTime: number;
   segmentId: number;
 }
 
@@ -70,7 +70,7 @@ export class CanvasController {
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
-  private static readonly OPACITY_DECAY_RATE: number = 2.0; // Increased from 0.4 to 2.0 for faster decay
+  private static readonly OPACITY_DECAY_RATE: number = 6.0; // Increased from 0.4 to 2.0 for faster decay
   private static readonly BASE_LINE_WIDTH: number = 1.0;
   private static readonly PARTICLES_PER_RING: number = 13;
   private static readonly PARTICLE_RADIUS: number = 0.9;
@@ -158,6 +158,7 @@ export class CanvasController {
       // Only process collisions when glow visualization is active
       if (this.params.curveType === "glow" && this.params.showOval && this.ovalBody) {
         const pairs = event.pairs;
+        const now = performance.now(); // Use performance.now() for consistent timing
         
         // Process each collision pair
         for (const pair of pairs) {
@@ -190,12 +191,22 @@ export class CanvasController {
           // Normalize to a reasonable range (0 to 1)
           const normalizedIntensity = Math.min(speed / 10, 1);
           
-          // Add or update the segment glow
-          this.segmentGlows.push({
-            segmentId,
-            intensity: normalizedIntensity,
-            timestamp: Date.now()
-          });
+          // Check if there's already a glow for this segment
+          const existingGlowIndex = this.segmentGlows.findIndex(glow => glow.segmentId === segmentId);
+          
+          if (existingGlowIndex >= 0) {
+            // Update existing glow intensity (add new intensity, capped at 1.0)
+            const existingGlow = this.segmentGlows[existingGlowIndex];
+            existingGlow.intensity = Math.min(existingGlow.intensity + normalizedIntensity, 1.0);
+            existingGlow.lastUpdateTime = now;
+          } else {
+            // Create new glow record
+            this.segmentGlows.push({
+              segmentId,
+              intensity: normalizedIntensity,
+              lastUpdateTime: now
+            });
+          }
         }
       }
     });
@@ -650,12 +661,11 @@ export class CanvasController {
     
     // Filter out old glows based on decay rate
     const now = timestamp;
-    const decayFactor = CanvasController.OPACITY_DECAY_RATE;
     
-    // Process each segment glow - remove glows older than 0.2 seconds
+    // Process each segment glow - remove glows older than 5 seconds
     this.segmentGlows = this.segmentGlows.filter(glow => {
-      const age = (now - glow.timestamp) / 1000;
-      return age < 0.2;
+      const age = (now - glow.lastUpdateTime) / 1000;
+      return age < 5;
     });
     
     // First draw all segments with a basic outline
@@ -675,21 +685,16 @@ export class CanvasController {
     
     // Then draw only the segments with active glows
     segments.forEach(segment => {
-      // Find all glows for this segment
-      const activeGlows = this.segmentGlows.filter(glow => glow.segmentId === segment.id);
+      // Find the glow for this segment
+      const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
       
-      if (activeGlows.length === 0) return;
-      
-      // Find the most recent glow for this segment to get the latest intensity
-      const latestGlow = activeGlows.reduce((newest, current) => {
-        return current.timestamp > newest.timestamp ? current : newest;
-      }, activeGlows[0]);
+      if (!glow) return;
       
       // Calculate how old this glow is in seconds
-      const glowAge = (now - latestGlow.timestamp) / 1000;
+      const glowAge = (now - glow.lastUpdateTime) / 1000;
       
       // Apply exponential decay to the intensity - using a 5x multiplier for faster decay
-      const currentIntensity = latestGlow.intensity * Math.exp(-5 * decayFactor * glowAge);
+      const currentIntensity = glow.intensity * Math.exp(-500 * glowAge);
       
       // Skip rendering if the intensity is too low
       if (currentIntensity < 0.05) return;
