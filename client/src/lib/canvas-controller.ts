@@ -781,55 +781,37 @@ export class CanvasController {
       return age < 5;
     });
     
-    // First draw a simplified outline of the oval (just the outer contour)
-    // We'll create a smooth path instead of connecting all segments
-    ctx.beginPath();
-    
-    // Draw only every other segment for a cleaner, less segmented look
-    for (let i = 0; i < segments.length; i += 2) {
-      const segment = segments[i];
+    // First draw all segments with a very faint pink fill (no borders)
+    segments.forEach(segment => {
       const vertices = segment.vertices;
       
-      // For each segment, only draw the outer edge (avoid inner radial lines)
-      // Find the two outer vertices (those farthest from center)
-      const outerVertices = [...vertices].sort((a, b) => {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        const distA = Math.pow(a.x - centerX, 2) + Math.pow(a.y - centerY, 2);
-        const distB = Math.pow(b.x - centerX, 2) + Math.pow(b.y - centerY, 2);
-        return distB - distA; // Sort by distance from center (descending)
-      }).slice(0, 2); // Take the two farthest points
-      
-      // Draw just a line connecting the outer vertices
-      if (i === 0) {
-        ctx.moveTo(outerVertices[0].x, outerVertices[0].y);
+      ctx.beginPath();
+      ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(vertices[i].x, vertices[i].y);
       }
-      ctx.lineTo(outerVertices[0].x, outerVertices[0].y);
-      ctx.lineTo(outerVertices[1].x, outerVertices[1].y);
-    }
+      ctx.closePath();
+      
+      // Very faint pink fill for the base oval
+      ctx.fillStyle = 'rgba(255, 200, 230, 0.15)'; // Extremely faint pink
+      ctx.fill();
+      // No stroke for the default state
+    });
     
-    // Close the path for a complete oval
-    ctx.closePath();
-    
-    // Simple outline for the oval structure
-    ctx.strokeStyle = 'rgba(220, 50, 255, 0.3)'; // Slightly more transparent
-    ctx.lineWidth = 1.8; // Slightly thicker
-    ctx.stroke();
-    
-    // Then draw only the segments with active glows
+    // Then draw only the segments with active glows with more vibrant colors
     segments.forEach(segment => {
       // Find the glow for this segment
       const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
       
-      if (!glow) return;
+      if (!glow) return; // Skip segments with no collision glow
       
       // Calculate how old this glow is in seconds
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
-      // Apply exponential decay to the intensity - using a faster decay rate
-      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge); // Slower decay rate
+      // Apply exponential decay to the intensity - using a slightly slower decay rate
+      const currentIntensity = glow.intensity * Math.exp(-6.5 * glowAge); // Slower decay for more visible effects
       
-      // Skip rendering if the intensity is too low
+      // Skip rendering if the intensity is too low (already covered by the base faint pink)
       if (currentIntensity < 0.05) return;
       
       // Render segment with enhanced pink glow
@@ -843,26 +825,23 @@ export class CanvasController {
       ctx.closePath();
       
       // Enhanced opacity scaling for more dramatic effects
-      // Use a power function (x^1.5) to emphasize higher intensities
+      // Use a power function to emphasize higher intensities
       const intensityPower = Math.pow(currentIntensity, 1.2); // Apply power scaling
       
       // Scale opacity with enhanced range for more dramatic effects
-      const fillOpacity = Math.min(intensityPower * 2.0, 0.98); // Increase max to 0.98 (from 0.95)
-      const strokeOpacity = Math.min(intensityPower * 2.5, 1.0); // Increase multiplier to 2.5 (from 1.8)
+      const fillOpacity = Math.min(intensityPower * 2.2, 0.98); // Increase max opacity
       
       // Brighter hot pink for high intensities
       const r = 255;
       const g = Math.max(20, Math.min(160, 105 + intensityPower * 55)); // Dynamic green value based on intensity
       const b = Math.max(147, Math.min(230, 180 + intensityPower * 50)); // Dynamic blue value based on intensity
       
+      // Only use fill, no stroke for a more fluid look
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
-      ctx.strokeStyle = `rgba(255, 20, 147, ${strokeOpacity})`;
-      ctx.lineWidth = 2.2; // Slightly thicker for better visibility
       ctx.fill();
-      ctx.stroke();
       
       // Add a subtle outer glow for high-intensity collisions
-      if (intensityPower > 0.7) {
+      if (intensityPower > 0.6) {
         ctx.beginPath();
         ctx.moveTo(vertices[0].x, vertices[0].y);
         for (let i = 1; i < vertices.length; i++) {
@@ -871,11 +850,10 @@ export class CanvasController {
         ctx.closePath();
         
         // Outer glow with low opacity
-        ctx.shadowColor = `rgba(255, 50, 160, ${intensityPower * 0.8})`;
-        ctx.shadowBlur = 8 + intensityPower * 7; // Dynamic blur based on intensity
-        ctx.strokeStyle = `rgba(255, 50, 180, ${intensityPower * 0.4})`;
-        ctx.lineWidth = 1.0;
-        ctx.stroke();
+        ctx.shadowColor = `rgba(255, 50, 160, ${intensityPower * 0.9})`;
+        ctx.shadowBlur = 10 + intensityPower * 8; // Dynamic blur based on intensity
+        ctx.fillStyle = `rgba(255, 50, 160, ${intensityPower * 0.5})`;
+        ctx.fill();
         
         // Reset shadow to avoid affecting other rendering
         ctx.shadowColor = 'transparent';
