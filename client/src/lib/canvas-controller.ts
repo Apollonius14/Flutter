@@ -9,8 +9,7 @@ interface AnimationParams {
   frequency: number;
   showOval: boolean;
   ovalPosition: number; 
-  ovalEccentricity: number; // 
-  curveType: "cubic" | "quadratic" | "linear" | "glow"; // Type of curve to use for rendering
+  ovalEccentricity: number;
 }
 
 interface Particle {
@@ -142,8 +141,7 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.7,
-      curveType: "cubic"
+      ovalEccentricity: 0.7
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -152,10 +150,10 @@ export class CanvasController {
     // Initialize the oval if needed
     this.updateOval();
     
-    // Set up collision detection for the glow effect
+    // Set up collision detection for the oval effect
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      // Only process collisions when glow visualization is active
-      if (this.params.curveType === "glow" && this.params.showOval && this.ovalBody) {
+      // Process collisions when oval is active
+      if (this.params.showOval && this.ovalBody) {
         const pairs = event.pairs;
         const now = performance.now(); // Use performance.now() for consistent timing
         
@@ -584,8 +582,7 @@ export class CanvasController {
   }
 
   /**
-   * Calculates a path through a set of points using different curve types
-   * Applies smoothing for all curve types
+   * Calculates a path through a set of points using cubic Bézier curves
    * @param points Array of 2D points
    * @returns Path2D object for rendering
    */
@@ -595,137 +592,54 @@ export class CanvasController {
     if (points.length < 2) {
       return path;
     }    
-    const curveType = this.params.curveType;
     
-    // Apply smoothing with different intensity based on curve type
-    let smoothedPoints: Point2D[];
-    if (curveType === "linear") {
-      // For linear, apply minimal smoothing
-      smoothedPoints = this.smoothPoints(points, 1);
-    } else if (curveType === "quadratic") {
-      // For quadratic, apply moderate smoothing
-      smoothedPoints = this.smoothPoints(points, 2);
-    } else {
-      // For cubic, apply more smoothing iterations
-      smoothedPoints = this.smoothPoints(points, 2);
-    }
+    // Use points directly without smoothing
+    const smoothedPoints = points;
     
-    // Draw the curves based on curve type
-    if (curveType === "linear") {
-      // Enhanced linear approach - still uses lineTo but with smoothed points
-      path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
-      for (let i = 1; i < smoothedPoints.length; i++) {
-        path.lineTo(smoothedPoints[i].x, smoothedPoints[i].y);
-      }
-      this.closePathIfNeeded(path, smoothedPoints);
-    } 
-    else if (curveType === "quadratic") {
-      const controlFactor = 0.12; // Slightly increased for smoother curves
+    // Only use cubic Bézier curves
+    const controlPointFactor = 0.3;
 
-      path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
-      for (let i = 0; i < smoothedPoints.length - 1; i++) {
-        const p1 = smoothedPoints[i];
-        const p2 = smoothedPoints[i+1];
-
-        // Improved midpoint calculation with offset
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
-
-        // Perpendicular offset for the control point
+    path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
+    
+    // For better cubic Bezier results with 3+ points, use the previous and next points
+    // to determine control points when possible
+    for (let i = 0; i < smoothedPoints.length - 1; i++) {
+      const p1 = smoothedPoints[i];
+      const p2 = smoothedPoints[i+1];
+      
+      let cp1x, cp1y, cp2x, cp2y;
+      
+      if (i > 0 && i < smoothedPoints.length - 2) {
+        // Use points before and after for better tangent approximation
+        const p0 = smoothedPoints[i-1];
+        const p3 = smoothedPoints[i+2];
+        
+        // Calculate tangent directions based on surrounding points
+        const dx1 = p2.x - p0.x;
+        const dy1 = p2.y - p0.y;
+        const dx2 = p3.x - p1.x;
+        const dy2 = p3.y - p1.y;
+        
+        // Scale the tangent vectors
+        cp1x = p1.x + dx1 * controlPointFactor;
+        cp1y = p1.y + dy1 * controlPointFactor;
+        cp2x = p2.x - dx2 * controlPointFactor;
+        cp2y = p2.y - dy2 * controlPointFactor;
+      } else {
+        // Fall back to simpler method for edge points
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
-        const cpx = midX + dy * controlFactor;
-        const cpy = midY - dx * controlFactor;
 
-        path.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
+        cp1x = p1.x + dx * controlPointFactor;
+        cp1y = p1.y + dy * controlPointFactor;
+        cp2x = p2.x - dx * controlPointFactor;
+        cp2y = p2.y - dy * controlPointFactor;
       }
 
-      // Special handling for quadratic curves with path closing
-      if (JOIN_CURVE_ENDS && smoothedPoints.length > 2) {
-        const pLast = smoothedPoints[smoothedPoints.length - 1];
-        const pFirst = smoothedPoints[0];
-
-        const midX = (pLast.x + pFirst.x) / 2;
-        const midY = (pLast.y + pFirst.y) / 2;
-
-        const dx = pFirst.x - pLast.x;
-        const dy = pFirst.y - pLast.y;
-        const cpx = midX + dy * controlFactor;
-        const cpy = midY - dx * controlFactor;
-
-        path.quadraticCurveTo(cpx, cpy, pFirst.x, pFirst.y);
-        path.closePath();
-      } 
-      else {
-        this.closePathIfNeeded(path, smoothedPoints);
-      }
-    } 
-    else { // "cubic" - highest quality curves
-      // Improved control point factor
-      const controlPointFactor = 0.3; // Reduced from 0.8 for smoother transition
-
-      path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
-      
-      // For better cubic Bezier results with 3+ points, use the previous and next points
-      // to determine control points when possible
-      for (let i = 0; i < smoothedPoints.length - 1; i++) {
-        const p1 = smoothedPoints[i];
-        const p2 = smoothedPoints[i+1];
-        
-        let cp1x, cp1y, cp2x, cp2y;
-        
-        if (i > 0 && i < smoothedPoints.length - 2) {
-          // Use points before and after for better tangent approximation
-          const p0 = smoothedPoints[i-1];
-          const p3 = smoothedPoints[i+2];
-          
-          // Calculate tangent directions based on surrounding points
-          const dx1 = p2.x - p0.x;
-          const dy1 = p2.y - p0.y;
-          const dx2 = p3.x - p1.x;
-          const dy2 = p3.y - p1.y;
-          
-          // Scale the tangent vectors
-          cp1x = p1.x + dx1 * controlPointFactor;
-          cp1y = p1.y + dy1 * controlPointFactor;
-          cp2x = p2.x - dx2 * controlPointFactor;
-          cp2y = p2.y - dy2 * controlPointFactor;
-        } else {
-          // Fall back to simpler method for edge points
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-
-          cp1x = p1.x + dx * controlPointFactor;
-          cp1y = p1.y + dy * controlPointFactor;
-          cp2x = p2.x - dx * controlPointFactor;
-          cp2y = p2.y - dy * controlPointFactor;
-        }
-
-        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-      }
-
-      // Special handling for cubic curves with path closing
-      if (JOIN_CURVE_ENDS && smoothedPoints.length > 2) {
-        const pLast = smoothedPoints[smoothedPoints.length - 1];
-        const pFirst = smoothedPoints[0];
-        const pSecond = smoothedPoints[1];
-        
-        // For closing the path, use the second point to calculate tangent
-        const dx1 = pSecond.x - pLast.x;
-        const dy1 = pSecond.y - pLast.y;
-        
-        const cp1x = pLast.x + dx1 * controlPointFactor;
-        const cp1y = pLast.y + dy1 * controlPointFactor;
-        const cp2x = pFirst.x - dx1 * controlPointFactor;
-        const cp2y = pFirst.y - dy1 * controlPointFactor;
-
-        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
-        path.closePath();
-      } 
-      else {
-        this.closePathIfNeeded(path, smoothedPoints);
-      }
+      path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
     }
+
+    this.closePathIfNeeded(path, smoothedPoints);
 
     return path;
   }
@@ -1020,7 +934,6 @@ export class CanvasController {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
-    const prevCurveType = this.params.curveType;
 
     this.params = params;
 
@@ -1028,9 +941,6 @@ export class CanvasController {
     const ovalChanged = prevShowOval !== params.showOval || 
                         prevPosition !== params.ovalPosition || 
                         prevEccentricity !== params.ovalEccentricity;
-
-    // Check if visualization parameters have changed
-    const visualChanged = prevCurveType !== params.curveType;
 
     if (ovalChanged) {
       // If position changed, but eccentricity stayed the same, we can optimize
@@ -1045,8 +955,8 @@ export class CanvasController {
       this.updateOval();
     }
 
-    // Redraw the frame if any parameters changed and animation is not running
-    if ((ovalChanged || visualChanged) && this.animationFrame === null) {
+    // Redraw the frame if parameters changed and animation is not running
+    if (ovalChanged && this.animationFrame === null) {
       this.drawFrame(0);
     }
   }
@@ -1309,10 +1219,8 @@ export class CanvasController {
               // =====================================
               // Step 6: Render the path with appropriate styling using our rendering function
               // =====================================
-              // Only render wave paths in non-glow mode
-              if (this.params.curveType !== 'glow') {
-                this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
-              }
+              // Always render the wave paths
+              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
             }
 
             // Draw individual particles if needed
@@ -1367,31 +1275,8 @@ export class CanvasController {
 
     // Draw the oval if it exists and is supposed to be shown
     if (this.params.showOval && this.ovalBody) {
-      if (this.params.curveType === 'glow') {
-        // In glow mode, render the glow effect on oval segments
-        this.renderOvalGlow(this.ctx, performance.now());
-      } else {
-        const bodies = Matter.Composite.allBodies(this.ovalBody);
-  
-        this.ctx.beginPath();
-
-        bodies.forEach(body => {
-          const vertices = body.vertices;
-          this.ctx.moveTo(vertices[0].x, vertices[0].y);
-          
-          for (let i = 1; i < vertices.length; i++) {
-            this.ctx.lineTo(vertices[i].x, vertices[i].y);
-          }
-          
-          // Connect to the first vertex to close this segment
-          this.ctx.lineTo(vertices[0].x, vertices[0].y);
-        });
-  
-        // Simple outline stroke without fill
-        this.ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
-        this.ctx.lineWidth = 1.5;
-        this.ctx.stroke();
-      }
+      // Always render the glow effect on oval segments
+      this.renderOvalGlow(this.ctx, performance.now());
     }
 
     // Restore canvas state (important for RTL transformation)

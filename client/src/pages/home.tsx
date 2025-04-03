@@ -57,7 +57,6 @@ export default function Home() {
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
-  const [curveType, setCurveType] = useState<"cubic" | "quadratic" | "linear" | "glow">("cubic"); // default to cubic for best quality
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
@@ -107,8 +106,7 @@ export default function Home() {
         frequency: 0.15, // Fixed frequency value
         showOval,
         ovalPosition,
-        ovalEccentricity,
-        curveType
+        ovalEccentricity
       });
       lastPowerValue.current = powerValue;
       setCycleStarted(true);
@@ -116,7 +114,7 @@ export default function Home() {
       // Reset cycle tracking when paused
       setCycleStarted(false);
     }
-  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, curveType]);
+  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity]);
   
   // Add a listener to know when a cycle starts
   useEffect(() => {
@@ -130,8 +128,7 @@ export default function Home() {
           frequency: 0.15, // Fixed frequency value
           showOval,
           ovalPosition,
-          ovalEccentricity,
-          curveType
+          ovalEccentricity
         });
         lastPowerValue.current = powerValue;
       }
@@ -146,7 +143,7 @@ export default function Home() {
         controller.onCycleStart = null;
       }
     };
-  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, curveType]);
+  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity]);
 
   useEffect(() => {
     if (!controller) return;
@@ -177,10 +174,9 @@ export default function Home() {
       frequency: 0.15,
       showOval,
       ovalPosition,
-      ovalEccentricity,
-      curveType
+      ovalEccentricity
     });
-  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, curveType]);
+  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
@@ -268,34 +264,6 @@ export default function Home() {
                 </div>
               </div>
               
-              {/* Curve type selection */}
-              <div className="flex flex-col space-y-2 pt-2">
-                <Label className={`text-gray-200 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
-                  {t.curveType}
-                </Label>
-                <ToggleGroup 
-                  type="single" 
-                  value={curveType} 
-                  onValueChange={(value) => {
-                    if (value) setCurveType(value as "cubic" | "quadratic" | "linear" | "glow");
-                  }}
-                  className="justify-start"
-                >
-                  <ToggleGroupItem value="cubic" size="sm" className="text-xs">
-                    {t.cubic}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="quadratic" size="sm" className="text-xs">
-                    {t.quadratic}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="linear" size="sm" className="text-xs">
-                    {t.linear}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="glow" size="sm" className="text-xs bg-opacity-50 hover:bg-opacity-70">
-                    {t.glow}
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-
               {/* Direction and particles controls in a row */}
               <div className="flex justify-center items-center gap-4">
                 <Button
