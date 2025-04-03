@@ -178,17 +178,41 @@ export class CanvasController {
           // Get segment index - we use body.id to identify the segment
           const segmentId = segment.id;
           
-          // Calculate collision intensity based on relative velocity
-          const relVelocity = {
-            x: this.params.power * particle.velocity.x - segment.velocity.x,
-            y: particle.velocity.y - segment.velocity.y
+          // Get collision normal (unit vector perpendicular to the surface at collision point)
+          const collision = pair.collision;
+          const normal = collision ? { x: collision.normal.x, y: collision.normal.y } : { x: 0, y: 0 };
+          
+          // Get particle velocity
+          const velocity = {
+            x: this.params.power * particle.velocity.x,
+            y: particle.velocity.y
           };
           
-          // Calculate magnitude of relative velocity
-          const speed = Math.sqrt(relVelocity.x * relVelocity.x + relVelocity.y * relVelocity.y);
+          // Calculate dot product of velocity and normal (scalar projection of velocity onto normal)
+          // This gives us the component of velocity perpendicular to the collision surface
+          const dotProduct = velocity.x * normal.x + velocity.y * normal.y;
+          
+          // Take absolute value since we care about magnitude of impact, not direction
+          const impactMagnitude = Math.abs(dotProduct);
+          
+          // Get particle's energy if it's available (particles are stored in this.bubbles[i].particles)
+          let particleEnergy = 1.0; // Default if we can't find the particle
+          
+          // Find the corresponding Particle object by searching through all bubbles
+          for (const bubble of this.bubbles) {
+            for (const p of bubble.particles) {
+              if (p.body.id === particle.id) {
+                particleEnergy = p.energy / p.initialEnergy; // Use energy ratio
+                break;
+              }
+            }
+          }
+          
+          // Scale impact by energy and power
+          const scaledImpact = impactMagnitude * particleEnergy * this.params.power;
           
           // Normalize to a reasonable range (0 to 1)
-          const normalizedIntensity = Math.min(speed / 10, 1);
+          const normalizedIntensity = Math.min(scaledImpact, 1);
           
           // Check if there's already a glow for this segment
           const existingGlowIndex = this.segmentGlows.findIndex(glow => glow.segmentId === segmentId);
