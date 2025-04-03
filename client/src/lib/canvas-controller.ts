@@ -1,9 +1,5 @@
 import * as Matter from 'matter-js';
 
-
-// Path Loop Closed or Open
-const JOIN_CURVE_ENDS: boolean = false;
-
 interface AnimationParams {
   power: number;
   frequency: number;
@@ -76,6 +72,7 @@ export class CanvasController {
   private static readonly PARTICLE_RADIUS: number = 0.9;
   private static readonly FIXED_BUBBLE_RADIUS: number = 5; 
 
+  private static readonly JOIN_CURVE_ENDS: boolean = false;
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
     const baseAngles: number[] = [];
@@ -519,7 +516,7 @@ export class CanvasController {
   /** Generates a path through a set of points using cubic or quadratic Bézier curves, linear segments **/
 
   private closePathIfNeeded(path: Path2D, points: Point2D[]): void {
-    if (JOIN_CURVE_ENDS) {
+    if (CanvasController.JOIN_CURVE_ENDS) {
       if (points.length > 2) {
         const pFirst = points[0];
         const pLast = points[points.length - 1];
@@ -540,45 +537,8 @@ export class CanvasController {
    * @param iterations Number of smoothing iterations
    * @returns Smoothed points array
    */
-  private smoothPoints(points: Point2D[], iterations: number = 1): Point2D[] {
-    if (points.length <= 2 || iterations <= 0) {
-      return points;
-    }
-    
-    // Create a copy to avoid modifying the original
-    let result = [...points];
-    
-    for (let iter = 0; iter < iterations; iter++) {
-      const smoothed: Point2D[] = [];
-      
-      // Always keep the first point
-      smoothed.push(result[0]);
-      
-      // Apply corner cutting to generate smoother intermediate points
-      for (let i = 0; i < result.length - 1; i++) {
-        const p0 = result[i];
-        const p1 = result[i + 1];
-        
-        // Q point (25% from p0 to p1)
-        const qx = p0.x * 0.75 + p1.x * 0.25;
-        const qy = p0.y * 0.75 + p1.y * 0.25;
-        
-        // R point (75% from p0 to p1)
-        const rx = p0.x * 0.25 + p1.x * 0.75;
-        const ry = p0.y * 0.25 + p1.y * 0.75;
-        
-        smoothed.push({ x: qx, y: qy });
-        smoothed.push({ x: rx, y: ry });
-      }
-      
-      // Always keep the last point
-      smoothed.push(result[result.length - 1]);
-      
-      // Use the smoothed points for the next iteration
-      result = smoothed;
-    }
-    
-    return result;
+  private smoothPoints(points: Point2D[]): Point2D[] {
+    return points;
   }
 
   /**
@@ -777,64 +737,7 @@ export class CanvasController {
   }
 
   /**
-   * Applies a motion blur effect by drawing multiple semi-transparent
-   * strokes with slight offsets and varying thickness
-   * @param ctx Canvas context
-   * @param path Path to draw
-   * @param color Base color (rgb values)
-   * @param opacity Base opacity
-   * @param baseWidth Base line width
-   * @param trailFactor How far the motion trail extends 
-   * @param direction Direction of motion (normalized vector)
-   */
-  private applyMotionBlur(
-    ctx: CanvasRenderingContext2D,
-    path: Path2D,
-    color: { r: number, g: number, b: number },
-    opacity: number,
-    baseWidth: number,
-    trailFactor: number = 3,
-    direction: { x: number, y: number } = { x: 1, y: 0 }
-  ): void {
-    // Save context state
-    ctx.save();
-    
-    // For performance, limit blur layers
-    const blurLayers = 3;
-    
-    // Main stroke (most visible)
-    ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${opacity})`;
-    ctx.lineWidth = baseWidth;
-    ctx.stroke(path);
-    
-    // Motion blur/trail layers
-    for (let i = 1; i <= blurLayers; i++) {
-      // Decrease opacity as we go back in the trail
-      const layerOpacity = opacity * (1 - (i / blurLayers) * 0.8);
-      
-      // Decrease width as we go back
-      const layerWidth = baseWidth * (1 - (i / blurLayers) * 0.5);
-      
-      // Set the style for this layer
-      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${layerOpacity})`;
-      ctx.lineWidth = layerWidth;
-      
-      // Calculate offset based on direction and trail factor
-      const offsetX = -direction.x * i * trailFactor; 
-      const offsetY = -direction.y * i * trailFactor;
-      
-      // Apply translation, draw, then reset
-      ctx.translate(offsetX, offsetY);
-      ctx.stroke(path);
-      ctx.translate(-offsetX, -offsetY);
-    }
-    
-    // Restore context
-    ctx.restore();
-  }
-
-  /**
-   * Renders a wavefront path with motion blur effect
+   * Renders a wavefront path with a simple stroke
    */
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
@@ -843,55 +746,39 @@ export class CanvasController {
     renderParams: RenderParams
   ): void {
     const { power } = renderParams;
-    const { baseOpacity, thicknessFactor, energy, waveIndex } = waveFront;
+    const { baseOpacity, thicknessFactor, energy } = waveFront;
 
     // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
     
-    // Calculate motion blur direction based on wavefront index
-    // Positive indices are moving right, negative indices are moving left
-    const isMovingRight = waveIndex < 4; // First 4 ranges are positive dot products
-    const direction = { 
-      x: isMovingRight ? 1 : -1, 
-      y: 0 
-    };
-
     // Base width for the line
     const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5;
     
-    // Apply motion blur with primary color
-    const primaryColor = { r: 20, g: 210, b: 255 }; // Bright blue
-    const adjustedOpacity = baseOpacity * 0.7; // Slightly more transparent for better blur effect
+    // Save context state
+    ctx.save();
     
-    // Apply blur with stronger effect for high energy waves
-    const trailFactor = energyFactor > 0.5 ? 4 : 2;
+    // Primary color - bright blue
+    const primaryColor = { r: 20, g: 210, b: 255 };
+    const adjustedOpacity = baseOpacity * 0.8;
     
-    this.applyMotionBlur(
-      ctx, 
-      path, 
-      primaryColor, 
-      adjustedOpacity, 
-      baseWidth, 
-      trailFactor,
-      direction
-    );
-
+    // Set style and draw main stroke
+    ctx.strokeStyle = `rgba(${primaryColor.r}, ${primaryColor.g}, ${primaryColor.b}, ${adjustedOpacity})`;
+    ctx.lineWidth = baseWidth;
+    ctx.stroke(path);
+    
     // Add a secondary glow effect for high energy waves
     if (energyFactor > 0.8) {
       const secondaryColor = { r: 160, g: 240, b: 255 }; // Lighter blue
       const secondaryOpacity = adjustedOpacity * 0.6;
       const secondaryWidth = baseWidth * 0.4; // Thinner secondary stroke
       
-      this.applyMotionBlur(
-        ctx, 
-        path, 
-        secondaryColor, 
-        secondaryOpacity, 
-        secondaryWidth,
-        trailFactor * 0.5, // Less trail for secondary effect
-        direction
-      );
+      ctx.strokeStyle = `rgba(${secondaryColor.r}, ${secondaryColor.g}, ${secondaryColor.b}, ${secondaryOpacity})`;
+      ctx.lineWidth = secondaryWidth;
+      ctx.stroke(path);
     }
+    
+    // Restore context
+    ctx.restore();
   }
 
   /**
