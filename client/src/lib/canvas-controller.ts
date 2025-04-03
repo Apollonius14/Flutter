@@ -12,9 +12,9 @@ interface Particle {
   body: Matter.Body;
   groupId: number;
   cycleNumber: number;
-  index: number; // Fixed index in the bubble's particles array
-  energy: number; // Current energy level
-  initialEnergy: number; // Starting energy level
+  index: number; 
+  energy: number; 
+  initialEnergy: number;
 }
 
 interface Bubble {
@@ -63,12 +63,12 @@ interface RenderParams {
 }
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
   private static readonly BASE_LINE_WIDTH: number = 1.0;
-  private static readonly PARTICLES_PER_RING: number = 71;
+  private static readonly PARTICLES_PER_RING: number = 91;
   private static readonly PARTICLE_RADIUS: number = 0.9;
   private static readonly FIXED_BUBBLE_RADIUS: number = 5; 
 
@@ -91,7 +91,7 @@ export class CanvasController {
 
     // Apply compression to focus particles toward the front
     for (const angle of baseAngles) {
-      particleAngles.push(angle * (1 - 0.8 * Math.sin(angle) * Math.sin(angle)));
+      particleAngles.push(angle * (1 - 0.85 * Math.sin(angle) * Math.sin(angle)));
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -129,8 +129,8 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 4,    // Increased for better physics accuracy
-      velocityIterations: 4,    // Increased for smoother motion
+      positionIterations: 4,
+      velocityIterations: 4,
       constraintIterations: 3
     }); 
     this.params = {
@@ -147,17 +147,14 @@ export class CanvasController {
     // Initialize the oval if needed
     this.updateOval();
     
-    // Set up collision detection for the oval effect
+
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       // Process collisions when oval is active
       if (this.params.showOval && this.ovalBody) {
         const pairs = event.pairs;
-        const now = performance.now(); // Use performance.now() for consistent timing
-        
-        // Process each collision pair
+        const now = performance.now(); 
         for (const pair of pairs) {
           // We need to identify which body is the oval segment
-          // Particles have category 0x0001, oval segments have 0x0002
           let segment, particle;
           
           if (pair.bodyA.collisionFilter.category === 0x0002) {
@@ -167,13 +164,12 @@ export class CanvasController {
             segment = pair.bodyB;
             particle = pair.bodyA;
           } else {
-            continue; // Skip if neither is an oval segment
+            continue; 
           }
-          
-          // Get segment index - we use body.id to identify the segment
+
           const segmentId = segment.id;
           
-          // Get collision normal (unit vector perpendicular to the surface at collision point)
+
           const collision = pair.collision;
           const normal = collision ? { x: collision.normal.x, y: collision.normal.y } : { x: 0, y: 0 };
           
@@ -183,8 +179,8 @@ export class CanvasController {
             y: particle.velocity.y
           };
           
-          // Calculate dot product of velocity and normal (scalar projection of velocity onto normal)
-          // This gives us the component of velocity perpendicular to the collision surface
+          // Calculate dot product of velocity and normal for collision
+          
           const dotProduct = velocity.x * normal.x + velocity.y * normal.y;
           
           // Take absolute value since we care about magnitude of impact, not direction
@@ -193,21 +189,8 @@ export class CanvasController {
           // Square the dot product to emphasize stronger collisions (quadratic scaling)
           const squaredImpact = impactMagnitude * impactMagnitude;
           
-          // Get particle's energy if it's available (particles are stored in this.bubbles[i].particles)
-          let particleEnergy = 1.0; // Default if we can't find the particle
-          
-          // Find the corresponding Particle object by searching through all bubbles
-          for (const bubble of this.bubbles) {
-            for (const p of bubble.particles) {
-              if (p.body.id === particle.id) {
-                particleEnergy = p.energy / p.initialEnergy; // Use energy ratio
-                break;
-              }
-            }
-          }
-          
-          // Scale impact by energy and power (with squared impact for more emphasis on direct hits)
-          const scaledImpact = squaredImpact * particleEnergy * this.params.power * 1.5; // Multiply by 1.5 to increase intensity
+
+          const scaledImpact = squaredImpact * this.params.power * 1.5; 
           
           // Normalize to a reasonable range (0 to 1.5) - allowing higher maximum for more dramatic effects
           const normalizedIntensity = Math.min(scaledImpact, 1.5);
@@ -300,7 +283,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 4.0; 
+        const baseSpeed = 7.0; 
 
 
         // Set velocity - still using the original angle, but with adjusted speed
@@ -361,7 +344,7 @@ export class CanvasController {
       const velocityFactor = 1 + (verticalVelocity * 1); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.0015 * velocityFactor;
+      const decay = particle.initialEnergy * 0.002 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -513,39 +496,10 @@ export class CanvasController {
     return waveFronts;
   }
 
-  /** Generates a path through a set of points using cubic or quadratic Bézier curves, linear segments **/
+  /** Generates a path through a set of points using cubic Bézier curves **/
 
-  private closePathIfNeeded(path: Path2D, points: Point2D[]): void {
-    if (CanvasController.JOIN_CURVE_ENDS) {
-      if (points.length > 2) {
-        const pFirst = points[0];
-        const pLast = points[points.length - 1];
+  
 
-        // If first and last points aren't already the same, connect them
-        if (pFirst.x !== pLast.x || pFirst.y !== pLast.y) {
-          path.lineTo(pFirst.x, pFirst.y);
-        }
-      }
-      path.closePath();
-    }
-  }
-
-  /**
-   * Apply a simple smoothing algorithm to a set of points
-   * Uses the Chaikin's corner cutting algorithm for curve smoothing
-   * @param points Original points
-   * @param iterations Number of smoothing iterations
-   * @returns Smoothed points array
-   */
-  private smoothPoints(points: Point2D[]): Point2D[] {
-    return points;
-  }
-
-  /**
-   * Calculates a path through a set of points using cubic Bézier curves
-   * @param points Array of 2D points
-   * @returns Path2D object for rendering
-   */
   private calculatePath(points: Point2D[]): Path2D {
     const path = new Path2D();
 
@@ -599,18 +553,12 @@ export class CanvasController {
       path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
     }
 
-    this.closePathIfNeeded(path, smoothedPoints);
 
     return path;
   }
 
   /**
    * Renders a particle with opacity based on its energy level
-   * @param ctx Canvas rendering context
-   * @param position Position to render the particle
-   * @param opacity Base opacity value
-   * @param particle Optional particle object for energy-based rendering
-   * @param size Size of the particle 
    */
   private renderParticle(
     ctx: CanvasRenderingContext2D,
@@ -723,15 +671,9 @@ export class CanvasController {
         }
         ctx.closePath();
         
-        // Outer glow with low opacity
-        ctx.shadowColor = `rgba(255, 50, 160, ${intensityPower * 0.9})`;
-        ctx.shadowBlur = 10 + intensityPower * 8; // Dynamic blur based on intensity
         ctx.fillStyle = `rgba(255, 50, 160, ${intensityPower * 0.5})`;
         ctx.fill();
         
-        // Reset shadow to avoid affecting other rendering
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
       }
     });
   }
@@ -752,7 +694,7 @@ export class CanvasController {
     const energyFactor = energy / (power || 1);
     
     // Base width for the line
-    const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5;
+    const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.1;
     
     // Save context state
     ctx.save();
@@ -1020,7 +962,7 @@ export class CanvasController {
     // =====================================
     // Step 3: Define screen bounds for physics and rendering optimization
     // =====================================
-    const bufferMargin = 20; // Increased margin to prevent abrupt changes (20px → 50px)
+    const bufferMargin = 10;
     const screenBounds = {
       min: { x: -bufferMargin, y: -bufferMargin },
       max: { x: width + bufferMargin, y: height + bufferMargin }
@@ -1081,11 +1023,11 @@ export class CanvasController {
           });
 
           // If we have enough particles, use wave front rendering
-          if (visibleParticles.length > 3) {
+        //  if (visibleParticles.length > 3) {
             // =====================================
             // Step 4: Calculate wave fronts using our dedicated function
             // =====================================
-            const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
+            //const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
 
             // Prepare rendering parameters
             const renderParams: RenderParams = {
@@ -1095,20 +1037,20 @@ export class CanvasController {
             };
 
             // Process each wave front
-            for (const waveFront of waveFronts) {
-              if (waveFront.points.length < 2) continue;
+           // for (const waveFront of waveFronts) {
+              // if // (waveFront.points.length < 2) continue;
 
               // =====================================
               // Step 5: Calculate the path once using our path generation function
               // =====================================
-              const path = this.calculatePath(waveFront.points);
+              //const path = this.calculatePath(waveFront.points);
 
               // =====================================
               // Step 6: Render the path with appropriate styling using our rendering function
               // =====================================
               // Always render the wave paths
-              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
-            }
+            //this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+            
 
             // Draw individual particles if needed
             if (this.showParticles) {
@@ -1146,7 +1088,7 @@ export class CanvasController {
             }
           }
         }
-      }
+      })
 
       // Check if the bubble has expired based on its cycle number
       if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
@@ -1158,7 +1100,7 @@ export class CanvasController {
         return false;
       }
       return true;
-    });
+    };
 
     // Draw the oval if it exists and is supposed to be shown
     if (this.params.showOval && this.ovalBody) {
