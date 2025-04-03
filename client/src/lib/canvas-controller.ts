@@ -1023,34 +1023,34 @@ export class CanvasController {
           });
 
           // If we have enough particles, use wave front rendering
-      //    if (visibleParticles.length > 3) {
+          if (visibleParticles.length > 3) {
             // =====================================
             // Step 4: Calculate wave fronts using our dedicated function
             // =====================================
- //           const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
+            const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
 
             // Prepare rendering parameters
-        //    const renderParams: RenderParams = {
-        //      showShadow: this.params.power > 1,
-           //   power: this.params.power,
-          //    screenBounds
-       //     };
+            const renderParams: RenderParams = {
+              showShadow: this.params.power > 1,
+              power: this.params.power,
+              screenBounds
+            };
 
             // Process each wave front
-      //      for (const waveFront of waveFronts) {
-      //        if (waveFront.points.length < 2) continue;
+            for (const waveFront of waveFronts) {
+              if (waveFront.points.length < 2) continue;
 
               // =====================================
               // Step 5: Calculate the path once using our path generation function
               // =====================================
-        //      const path = this.calculatePath(waveFront.points);
+              const path = this.calculatePath(waveFront.points);
 
               // =====================================
               // Step 6: Render the path with appropriate styling using our rendering function
               // =====================================
               // Always render the wave paths
-              // this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
-          //  }
+              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+            }
 
             // Draw individual particles if needed
             if (this.showParticles) {
@@ -1061,8 +1061,26 @@ export class CanvasController {
               });
             }
           } 
+          // If we have some particles but not enough for a curve, draw simple lines
+          else if (visibleParticles.length > 1) {
+            this.ctx.beginPath();
+            const baseOpacity = bubble.energy / bubble.initialEnergy;
+            const lineOpacity = baseOpacity * 0.4;
+            this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
+            this.ctx.lineWidth = 0.8;
+
+            for (let i = 0; i < visibleParticles.length - 1; i++) {
+              const pos1 = visibleParticles[i].body.position;
+              const pos2 = visibleParticles[i + 1].body.position;
+              this.ctx.moveTo(pos1.x, pos1.y);
+              this.ctx.lineTo(pos2.x, pos2.y);
+            }
+
+            this.ctx.stroke();
+
             // Also draw the particle dots if showParticles is true
-            if (this.showParticles) {        visibleParticles.forEach(particle => {
+            if (this.showParticles) {
+              visibleParticles.forEach(particle => {
                 const pos = particle.body.position;
                 // Pass the particle object to use its energy for rendering
                 this.renderParticle(this.ctx, pos, opacity, particle);
