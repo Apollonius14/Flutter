@@ -195,6 +195,9 @@ export class CanvasController {
           // Take absolute value since we care about magnitude of impact, not direction
           const impactMagnitude = Math.abs(dotProduct);
           
+          // Square the dot product to emphasize stronger collisions (quadratic scaling)
+          const squaredImpact = impactMagnitude * impactMagnitude;
+          
           // Get particle's energy if it's available (particles are stored in this.bubbles[i].particles)
           let particleEnergy = 1.0; // Default if we can't find the particle
           
@@ -208,11 +211,11 @@ export class CanvasController {
             }
           }
           
-          // Scale impact by energy and power
-          const scaledImpact = impactMagnitude * particleEnergy * this.params.power;
+          // Scale impact by energy and power (with squared impact for more emphasis on direct hits)
+          const scaledImpact = squaredImpact * particleEnergy * this.params.power * 1.5; // Multiply by 1.5 to increase intensity
           
-          // Normalize to a reasonable range (0 to 1)
-          const normalizedIntensity = Math.min(scaledImpact, 1);
+          // Normalize to a reasonable range (0 to 1.5) - allowing higher maximum for more dramatic effects
+          const normalizedIntensity = Math.min(scaledImpact, 1.5);
           
           // Check if there's already a glow for this segment
           const existingGlowIndex = this.segmentGlows.findIndex(glow => glow.segmentId === segmentId);
@@ -778,19 +781,39 @@ export class CanvasController {
       return age < 5;
     });
     
-    // First draw all segments with a basic outline
+    // First draw a simplified outline of the oval (just the outer contour)
+    // We'll create a smooth path instead of connecting all segments
     ctx.beginPath();
-    segments.forEach(segment => {
+    
+    // Draw only every other segment for a cleaner, less segmented look
+    for (let i = 0; i < segments.length; i += 2) {
+      const segment = segments[i];
       const vertices = segment.vertices;
-      ctx.moveTo(vertices[0].x, vertices[0].y);
-      for (let i = 1; i < vertices.length; i++) {
-        ctx.lineTo(vertices[i].x, vertices[i].y);
+      
+      // For each segment, only draw the outer edge (avoid inner radial lines)
+      // Find the two outer vertices (those farthest from center)
+      const outerVertices = [...vertices].sort((a, b) => {
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        const distA = Math.pow(a.x - centerX, 2) + Math.pow(a.y - centerY, 2);
+        const distB = Math.pow(b.x - centerX, 2) + Math.pow(b.y - centerY, 2);
+        return distB - distA; // Sort by distance from center (descending)
+      }).slice(0, 2); // Take the two farthest points
+      
+      // Draw just a line connecting the outer vertices
+      if (i === 0) {
+        ctx.moveTo(outerVertices[0].x, outerVertices[0].y);
       }
-      ctx.lineTo(vertices[0].x, vertices[0].y);
-    });
-    // Simple outline for all segments
-    ctx.strokeStyle = 'rgba(220, 50, 255, 0.4)';
-    ctx.lineWidth = 1.5;
+      ctx.lineTo(outerVertices[0].x, outerVertices[0].y);
+      ctx.lineTo(outerVertices[1].x, outerVertices[1].y);
+    }
+    
+    // Close the path for a complete oval
+    ctx.closePath();
+    
+    // Simple outline for the oval structure
+    ctx.strokeStyle = 'rgba(220, 50, 255, 0.3)'; // Slightly more transparent
+    ctx.lineWidth = 1.8; // Slightly thicker
     ctx.stroke();
     
     // Then draw only the segments with active glows
@@ -803,13 +826,13 @@ export class CanvasController {
       // Calculate how old this glow is in seconds
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
-      // Apply exponential decay to the intensity - using a 5x multiplier for faster decay
-      const currentIntensity = glow.intensity * Math.exp(-8 * glowAge);
+      // Apply exponential decay to the intensity - using a faster decay rate
+      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge); // Slower decay rate
       
       // Skip rendering if the intensity is too low
       if (currentIntensity < 0.05) return;
       
-      // Render segment with pink glow
+      // Render segment with enhanced pink glow
       const vertices = segment.vertices;
       
       ctx.beginPath();
@@ -819,15 +842,45 @@ export class CanvasController {
       }
       ctx.closePath();
       
-      // Scale opacity directly proportional to intensity for consistent fill and glow
-      const fillOpacity = Math.min(currentIntensity * 1.5, 0.95);
-      const strokeOpacity = Math.min(currentIntensity * 1.8, 1.0);
+      // Enhanced opacity scaling for more dramatic effects
+      // Use a power function (x^1.5) to emphasize higher intensities
+      const intensityPower = Math.pow(currentIntensity, 1.2); // Apply power scaling
       
-      ctx.fillStyle = `rgba(255, 105, 180, ${fillOpacity})`;
+      // Scale opacity with enhanced range for more dramatic effects
+      const fillOpacity = Math.min(intensityPower * 2.0, 0.98); // Increase max to 0.98 (from 0.95)
+      const strokeOpacity = Math.min(intensityPower * 2.5, 1.0); // Increase multiplier to 2.5 (from 1.8)
+      
+      // Brighter hot pink for high intensities
+      const r = 255;
+      const g = Math.max(20, Math.min(160, 105 + intensityPower * 55)); // Dynamic green value based on intensity
+      const b = Math.max(147, Math.min(230, 180 + intensityPower * 50)); // Dynamic blue value based on intensity
+      
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
       ctx.strokeStyle = `rgba(255, 20, 147, ${strokeOpacity})`;
-      ctx.lineWidth = 2.0;
+      ctx.lineWidth = 2.2; // Slightly thicker for better visibility
       ctx.fill();
       ctx.stroke();
+      
+      // Add a subtle outer glow for high-intensity collisions
+      if (intensityPower > 0.7) {
+        ctx.beginPath();
+        ctx.moveTo(vertices[0].x, vertices[0].y);
+        for (let i = 1; i < vertices.length; i++) {
+          ctx.lineTo(vertices[i].x, vertices[i].y);
+        }
+        ctx.closePath();
+        
+        // Outer glow with low opacity
+        ctx.shadowColor = `rgba(255, 50, 160, ${intensityPower * 0.8})`;
+        ctx.shadowBlur = 8 + intensityPower * 7; // Dynamic blur based on intensity
+        ctx.strokeStyle = `rgba(255, 50, 180, ${intensityPower * 0.4})`;
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+        
+        // Reset shadow to avoid affecting other rendering
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+      }
     });
   }
 
