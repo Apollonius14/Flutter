@@ -68,12 +68,12 @@ interface RenderParams {
 }
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.8; 
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.6;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
   private static readonly BASE_LINE_WIDTH: number = 1.0;
-  private static readonly PARTICLES_PER_RING: number = 35;
+  private static readonly PARTICLES_PER_RING: number = 71;
   private static readonly PARTICLE_RADIUS: number = 0.9;
   private static readonly FIXED_BUBBLE_RADIUS: number = 5; 
 
@@ -278,7 +278,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 2.5; 
+        const baseSpeed = 4.0; 
 
 
         // Set velocity - still using the original angle, but with adjusted speed
@@ -336,10 +336,10 @@ export class CanvasController {
       
       // Calculate decay factor - higher vertical velocity means faster decay
       // This will penalize vertical motion, emphasizing horizontal waves
-      const velocityFactor = 1 + (verticalVelocity * 0.2); // 20% penalty per unit of vertical velocity
+      const velocityFactor = 1 + (verticalVelocity * 1); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.001 * velocityFactor;
+      const decay = particle.initialEnergy * 0.0015 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -508,6 +508,60 @@ export class CanvasController {
     }
   }
 
+  /**
+   * Apply a simple smoothing algorithm to a set of points
+   * Uses the Chaikin's corner cutting algorithm for curve smoothing
+   * @param points Original points
+   * @param iterations Number of smoothing iterations
+   * @returns Smoothed points array
+   */
+  private smoothPoints(points: Point2D[], iterations: number = 1): Point2D[] {
+    if (points.length <= 2 || iterations <= 0) {
+      return points;
+    }
+    
+    // Create a copy to avoid modifying the original
+    let result = [...points];
+    
+    for (let iter = 0; iter < iterations; iter++) {
+      const smoothed: Point2D[] = [];
+      
+      // Always keep the first point
+      smoothed.push(result[0]);
+      
+      // Apply corner cutting to generate smoother intermediate points
+      for (let i = 0; i < result.length - 1; i++) {
+        const p0 = result[i];
+        const p1 = result[i + 1];
+        
+        // Q point (25% from p0 to p1)
+        const qx = p0.x * 0.75 + p1.x * 0.25;
+        const qy = p0.y * 0.75 + p1.y * 0.25;
+        
+        // R point (75% from p0 to p1)
+        const rx = p0.x * 0.25 + p1.x * 0.75;
+        const ry = p0.y * 0.25 + p1.y * 0.75;
+        
+        smoothed.push({ x: qx, y: qy });
+        smoothed.push({ x: rx, y: ry });
+      }
+      
+      // Always keep the last point
+      smoothed.push(result[result.length - 1]);
+      
+      // Use the smoothed points for the next iteration
+      result = smoothed;
+    }
+    
+    return result;
+  }
+
+  /**
+   * Calculates a path through a set of points using different curve types
+   * Applies smoothing for all curve types
+   * @param points Array of 2D points
+   * @returns Path2D object for rendering
+   */
   private calculatePath(points: Point2D[]): Path2D {
     const path = new Path2D();
 
@@ -515,28 +569,42 @@ export class CanvasController {
       return path;
     }    
     const curveType = this.params.curveType;
-
+    
+    // Apply smoothing with different intensity based on curve type
+    let smoothedPoints: Point2D[];
     if (curveType === "linear") {
-      // Simplest and fastest option: just draw straight lines
-      path.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        path.lineTo(points[i].x, points[i].y);
+      // For linear, apply minimal smoothing
+      smoothedPoints = this.smoothPoints(points, 1);
+    } else if (curveType === "quadratic") {
+      // For quadratic, apply moderate smoothing
+      smoothedPoints = this.smoothPoints(points, 2);
+    } else {
+      // For cubic, apply more smoothing iterations
+      smoothedPoints = this.smoothPoints(points, 2);
+    }
+    
+    // Draw the curves based on curve type
+    if (curveType === "linear") {
+      // Enhanced linear approach - still uses lineTo but with smoothed points
+      path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
+      for (let i = 1; i < smoothedPoints.length; i++) {
+        path.lineTo(smoothedPoints[i].x, smoothedPoints[i].y);
       }
-      this.closePathIfNeeded(path, points);
+      this.closePathIfNeeded(path, smoothedPoints);
     } 
     else if (curveType === "quadratic") {
-      const controlFactor = 0.1; // Controls curve tightness
+      const controlFactor = 0.12; // Slightly increased for smoother curves
 
-      path.moveTo(points[0].x, points[0].y);
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i+1];
+      path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
+      for (let i = 0; i < smoothedPoints.length - 1; i++) {
+        const p1 = smoothedPoints[i];
+        const p2 = smoothedPoints[i+1];
 
-        // Simple midpoint calculation with offset
+        // Improved midpoint calculation with offset
         const midX = (p1.x + p2.x) / 2;
         const midY = (p1.y + p2.y) / 2;
 
-        // Simple perpendicular offset for the control point
+        // Perpendicular offset for the control point
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         const cpx = midX + dy * controlFactor;
@@ -546,9 +614,9 @@ export class CanvasController {
       }
 
       // Special handling for quadratic curves with path closing
-      if (JOIN_CURVE_ENDS && points.length > 2) {
-        const pLast = points[points.length - 1];
-        const pFirst = points[0];
+      if (JOIN_CURVE_ENDS && smoothedPoints.length > 2) {
+        const pLast = smoothedPoints[smoothedPoints.length - 1];
+        const pFirst = smoothedPoints[0];
 
         const midX = (pLast.x + pFirst.x) / 2;
         const midY = (pLast.y + pFirst.y) / 2;
@@ -562,48 +630,73 @@ export class CanvasController {
         path.closePath();
       } 
       else {
-        this.closePathIfNeeded(path, points);
+        this.closePathIfNeeded(path, smoothedPoints);
       }
     } 
-    else { // "cubic" - use only when needed for quality
-      // Fixed control point factor
-      const controlPointFactor = 0.8;
+    else { // "cubic" - highest quality curves
+      // Improved control point factor
+      const controlPointFactor = 0.3; // Reduced from 0.8 for smoother transition
 
-      path.moveTo(points[0].x, points[0].y);
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i+1];
+      path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
+      
+      // For better cubic Bezier results with 3+ points, use the previous and next points
+      // to determine control points when possible
+      for (let i = 0; i < smoothedPoints.length - 1; i++) {
+        const p1 = smoothedPoints[i];
+        const p2 = smoothedPoints[i+1];
+        
+        let cp1x, cp1y, cp2x, cp2y;
+        
+        if (i > 0 && i < smoothedPoints.length - 2) {
+          // Use points before and after for better tangent approximation
+          const p0 = smoothedPoints[i-1];
+          const p3 = smoothedPoints[i+2];
+          
+          // Calculate tangent directions based on surrounding points
+          const dx1 = p2.x - p0.x;
+          const dy1 = p2.y - p0.y;
+          const dx2 = p3.x - p1.x;
+          const dy2 = p3.y - p1.y;
+          
+          // Scale the tangent vectors
+          cp1x = p1.x + dx1 * controlPointFactor;
+          cp1y = p1.y + dy1 * controlPointFactor;
+          cp2x = p2.x - dx2 * controlPointFactor;
+          cp2y = p2.y - dy2 * controlPointFactor;
+        } else {
+          // Fall back to simpler method for edge points
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
 
-        // Simplified control points using just current and next point
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-
-        const cp1x = p1.x + dx * controlPointFactor;
-        const cp1y = p1.y + dy * controlPointFactor;
-        const cp2x = p2.x - dx * controlPointFactor;
-        const cp2y = p2.y - dy * controlPointFactor;
+          cp1x = p1.x + dx * controlPointFactor;
+          cp1y = p1.y + dy * controlPointFactor;
+          cp2x = p2.x - dx * controlPointFactor;
+          cp2y = p2.y - dy * controlPointFactor;
+        }
 
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
 
       // Special handling for cubic curves with path closing
-      if (JOIN_CURVE_ENDS && points.length > 2) {
-        const pLast = points[points.length - 1];
-        const pFirst = points[0];
-
-        const dx = pFirst.x - pLast.x;
-        const dy = pFirst.y - pLast.y;
-
-        const cp1x = pLast.x + dx * controlPointFactor;
-        const cp1y = pLast.y + dy * controlPointFactor;
-        const cp2x = pFirst.x - dx * controlPointFactor;
-        const cp2y = pFirst.y - dy * controlPointFactor;
+      if (JOIN_CURVE_ENDS && smoothedPoints.length > 2) {
+        const pLast = smoothedPoints[smoothedPoints.length - 1];
+        const pFirst = smoothedPoints[0];
+        const pSecond = smoothedPoints[1];
+        
+        // For closing the path, use the second point to calculate tangent
+        const dx1 = pSecond.x - pLast.x;
+        const dy1 = pSecond.y - pLast.y;
+        
+        const cp1x = pLast.x + dx1 * controlPointFactor;
+        const cp1y = pLast.y + dy1 * controlPointFactor;
+        const cp2x = pFirst.x - dx1 * controlPointFactor;
+        const cp2y = pFirst.y - dy1 * controlPointFactor;
 
         path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pFirst.x, pFirst.y);
         path.closePath();
       } 
       else {
-        this.closePathIfNeeded(path, points);
+        this.closePathIfNeeded(path, smoothedPoints);
       }
     }
 
@@ -714,6 +807,66 @@ export class CanvasController {
     });
   }
 
+  /**
+   * Applies a motion blur effect by drawing multiple semi-transparent
+   * strokes with slight offsets and varying thickness
+   * @param ctx Canvas context
+   * @param path Path to draw
+   * @param color Base color (rgb values)
+   * @param opacity Base opacity
+   * @param baseWidth Base line width
+   * @param trailFactor How far the motion trail extends 
+   * @param direction Direction of motion (normalized vector)
+   */
+  private applyMotionBlur(
+    ctx: CanvasRenderingContext2D,
+    path: Path2D,
+    color: { r: number, g: number, b: number },
+    opacity: number,
+    baseWidth: number,
+    trailFactor: number = 3,
+    direction: { x: number, y: number } = { x: 1, y: 0 }
+  ): void {
+    // Save context state
+    ctx.save();
+    
+    // For performance, limit blur layers
+    const blurLayers = 3;
+    
+    // Main stroke (most visible)
+    ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${opacity})`;
+    ctx.lineWidth = baseWidth;
+    ctx.stroke(path);
+    
+    // Motion blur/trail layers
+    for (let i = 1; i <= blurLayers; i++) {
+      // Decrease opacity as we go back in the trail
+      const layerOpacity = opacity * (1 - (i / blurLayers) * 0.8);
+      
+      // Decrease width as we go back
+      const layerWidth = baseWidth * (1 - (i / blurLayers) * 0.5);
+      
+      // Set the style for this layer
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${layerOpacity})`;
+      ctx.lineWidth = layerWidth;
+      
+      // Calculate offset based on direction and trail factor
+      const offsetX = -direction.x * i * trailFactor; 
+      const offsetY = -direction.y * i * trailFactor;
+      
+      // Apply translation, draw, then reset
+      ctx.translate(offsetX, offsetY);
+      ctx.stroke(path);
+      ctx.translate(-offsetX, -offsetY);
+    }
+    
+    // Restore context
+    ctx.restore();
+  }
+
+  /**
+   * Renders a wavefront path with motion blur effect
+   */
   private renderWaveFrontPath(
     ctx: CanvasRenderingContext2D, 
     path: Path2D, 
@@ -725,20 +878,50 @@ export class CanvasController {
 
     // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
+    
+    // Calculate motion blur direction based on wavefront index
+    // Positive indices are moving right, negative indices are moving left
+    const isMovingRight = waveIndex < 4; // First 4 ranges are positive dot products
+    const direction = { 
+      x: isMovingRight ? 1 : -1, 
+      y: 0 
+    };
 
-    // No shadows for better performance
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    const adjustedOpacity = baseOpacity * 0.8;
-    ctx.strokeStyle = `rgba(20, 210, 255, ${adjustedOpacity})`;
-    ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5; 
-    ctx.stroke(path);
+    // Base width for the line
+    const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.5;
+    
+    // Apply motion blur with primary color
+    const primaryColor = { r: 20, g: 210, b: 255 }; // Bright blue
+    const adjustedOpacity = baseOpacity * 0.7; // Slightly more transparent for better blur effect
+    
+    // Apply blur with stronger effect for high energy waves
+    const trailFactor = energyFactor > 0.5 ? 4 : 2;
+    
+    this.applyMotionBlur(
+      ctx, 
+      path, 
+      primaryColor, 
+      adjustedOpacity, 
+      baseWidth, 
+      trailFactor,
+      direction
+    );
 
-
+    // Add a secondary glow effect for high energy waves
     if (energyFactor > 0.8) {
-      ctx.strokeStyle = `rgba(160, 240, 255, ${adjustedOpacity * 0.8})`;
-      ctx.lineWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.2; // Half as thick (0.4 * 0.5)
-      ctx.stroke(path);
+      const secondaryColor = { r: 160, g: 240, b: 255 }; // Lighter blue
+      const secondaryOpacity = adjustedOpacity * 0.6;
+      const secondaryWidth = baseWidth * 0.4; // Thinner secondary stroke
+      
+      this.applyMotionBlur(
+        ctx, 
+        path, 
+        secondaryColor, 
+        secondaryOpacity, 
+        secondaryWidth,
+        trailFactor * 0.5, // Less trail for secondary effect
+        direction
+      );
     }
   }
 
@@ -827,7 +1010,7 @@ export class CanvasController {
     const ovalBody = Matter.Composite.create();
 
 
-    const segments = 35;
+    const segments = 55;
 
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
