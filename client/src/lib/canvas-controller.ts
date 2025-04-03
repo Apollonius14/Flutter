@@ -1023,11 +1023,11 @@ export class CanvasController {
           });
 
           // If we have enough particles, use wave front rendering
-        //  if (visibleParticles.length > 3) {
+          if (visibleParticles.length > 3) {
             // =====================================
             // Step 4: Calculate wave fronts using our dedicated function
             // =====================================
-            //const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
+            const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
 
             // Prepare rendering parameters
             const renderParams: RenderParams = {
@@ -1037,20 +1037,20 @@ export class CanvasController {
             };
 
             // Process each wave front
-           // for (const waveFront of waveFronts) {
-              // if (waveFront.points.length < 2) continue;
+            for (const waveFront of waveFronts) {
+              if (waveFront.points.length < 2) continue;
 
               // =====================================
               // Step 5: Calculate the path once using our path generation function
               // =====================================
-              //const path = this.calculatePath(waveFront.points);
+              const path = this.calculatePath(waveFront.points);
 
               // =====================================
               // Step 6: Render the path with appropriate styling using our rendering function
               // =====================================
               // Always render the wave paths
-            //this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
-            // }
+              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+            }
 
             // Draw individual particles if needed
             if (this.showParticles) {
@@ -1088,7 +1088,7 @@ export class CanvasController {
             }
           }
         }
-      })
+      }
 
       // Check if the bubble has expired based on its cycle number
       if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
@@ -1100,7 +1100,7 @@ export class CanvasController {
         return false;
       }
       return true;
-    };
+    });
 
     // Draw the oval if it exists and is supposed to be shown
     if (this.params.showOval && this.ovalBody) {
