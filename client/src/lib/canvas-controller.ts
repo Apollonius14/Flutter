@@ -6,6 +6,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
+  curveType?: string; // 'cubic' or 'none'
 }
 
 interface Particle {
@@ -138,7 +139,8 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.7
+      ovalEccentricity: 0.7,
+      curveType: 'cubic'
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -510,49 +512,56 @@ export class CanvasController {
     // Use points directly without smoothing
     const smoothedPoints = points;
     
-    // Only use cubic Bézier curves
-    const controlPointFactor = 0.3;
-
     path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
     
-    // For better cubic Bezier results with 3+ points, use the previous and next points
-    // to determine control points when possible
-    for (let i = 0; i < smoothedPoints.length - 1; i++) {
-      const p1 = smoothedPoints[i];
-      const p2 = smoothedPoints[i+1];
+    // Check curve type from params
+    if (this.params.curveType === 'cubic') {
+      // Use cubic Bézier curves
+      const controlPointFactor = 0.3;
       
-      let cp1x, cp1y, cp2x, cp2y;
-      
-      if (i > 0 && i < smoothedPoints.length - 2) {
-        // Use points before and after for better tangent approximation
-        const p0 = smoothedPoints[i-1];
-        const p3 = smoothedPoints[i+2];
+      // For better cubic Bezier results with 3+ points, use the previous and next points
+      // to determine control points when possible
+      for (let i = 0; i < smoothedPoints.length - 1; i++) {
+        const p1 = smoothedPoints[i];
+        const p2 = smoothedPoints[i+1];
         
-        // Calculate tangent directions based on surrounding points
-        const dx1 = p2.x - p0.x;
-        const dy1 = p2.y - p0.y;
-        const dx2 = p3.x - p1.x;
-        const dy2 = p3.y - p1.y;
+        let cp1x, cp1y, cp2x, cp2y;
         
-        // Scale the tangent vectors
-        cp1x = p1.x + dx1 * controlPointFactor;
-        cp1y = p1.y + dy1 * controlPointFactor;
-        cp2x = p2.x - dx2 * controlPointFactor;
-        cp2y = p2.y - dy2 * controlPointFactor;
-      } else {
-        // Fall back to simpler method for edge points
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
+        if (i > 0 && i < smoothedPoints.length - 2) {
+          // Use points before and after for better tangent approximation
+          const p0 = smoothedPoints[i-1];
+          const p3 = smoothedPoints[i+2];
+          
+          // Calculate tangent directions based on surrounding points
+          const dx1 = p2.x - p0.x;
+          const dy1 = p2.y - p0.y;
+          const dx2 = p3.x - p1.x;
+          const dy2 = p3.y - p1.y;
+          
+          // Scale the tangent vectors
+          cp1x = p1.x + dx1 * controlPointFactor;
+          cp1y = p1.y + dy1 * controlPointFactor;
+          cp2x = p2.x - dx2 * controlPointFactor;
+          cp2y = p2.y - dy2 * controlPointFactor;
+        } else {
+          // Fall back to simpler method for edge points
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
 
-        cp1x = p1.x + dx * controlPointFactor;
-        cp1y = p1.y + dy * controlPointFactor;
-        cp2x = p2.x - dx * controlPointFactor;
-        cp2y = p2.y - dy * controlPointFactor;
+          cp1x = p1.x + dx * controlPointFactor;
+          cp1y = p1.y + dy * controlPointFactor;
+          cp2x = p2.x - dx * controlPointFactor;
+          cp2y = p2.y - dy * controlPointFactor;
+        }
+
+        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }
-
-      path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    } else {
+      // Use simple lines (linear)
+      for (let i = 1; i < smoothedPoints.length; i++) {
+        path.lineTo(smoothedPoints[i].x, smoothedPoints[i].y);
+      }
     }
-
 
     return path;
   }
