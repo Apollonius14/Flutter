@@ -1038,7 +1038,7 @@ export class CanvasController {
 
             // Process each wave front
            // for (const waveFront of waveFronts) {
-              // if // (waveFront.points.length < 2) continue;
+              // if (waveFront.points.length < 2) continue;
 
               // =====================================
               // Step 5: Calculate the path once using our path generation function
@@ -1050,7 +1050,7 @@ export class CanvasController {
               // =====================================
               // Always render the wave paths
             //this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
-            
+            // }
 
             // Draw individual particles if needed
             if (this.showParticles) {
