@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ChevronLeft, ChevronRight, Circle, Languages, Loader } from "lucide-react";
+import { ChevronLeft, ChevronRight, Circle, Languages, Loader, Waves } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
 
 const translations = {
@@ -24,7 +24,8 @@ const translations = {
     cubic: "Cubic",
     quadratic: "Quadratic",
     linear: "Linear",
-    glow: "Glow"
+    glow: "Glow",
+    paths: "Paths"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -42,7 +43,8 @@ const translations = {
     cubic: "مكعب",
     quadratic: "تربيعي",
     linear: "خطي",
-    glow: "توهج"
+    glow: "توهج",
+    paths: "مسارات"
   }
 };
 
@@ -54,6 +56,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRTL, setIsRTL] = useState(false);
   const [showParticles, setShowParticles] = useState(true);
+  const [showPaths, setShowPaths] = useState(true);
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
@@ -169,6 +172,12 @@ export default function Home() {
     controller.setShowParticles(showParticles);
   }, [showParticles, controller]);
   
+  // Effect for show paths state
+  useEffect(() => {
+    if (!controller) return;
+    controller.setShowPaths(showPaths);
+  }, [showPaths, controller]);
+  
   // Dedicated effect for oval settings
   useEffect(() => {
     if (!controller) return;
@@ -186,6 +195,7 @@ export default function Home() {
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
   const toggleShowParticles = () => setShowParticles(prev => !prev);
+  const toggleShowPaths = () => setShowPaths(prev => !prev);
   const toggleShowOval = () => setShowOval(prev => !prev);
 
   return (
@@ -306,6 +316,7 @@ export default function Home() {
                     }
                   }}
                   className={`border-gray-600 ${!isPlaying || !isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
+                  title={t.rtl}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -324,6 +335,7 @@ export default function Home() {
                     }
                   }}
                   className={`border-gray-600 ${!isPlaying || isRTL ? 'text-gray-400' : 'bg-blue-600 text-white'}`}
+                  title={t.ltr}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -333,8 +345,19 @@ export default function Home() {
                   variant={showParticles ? "default" : "outline"}
                   onClick={toggleShowParticles}
                   className={`border-gray-600 rounded-full ${showParticles ? 'bg-pink-500 text-white' : 'text-gray-400'}`}
+                  title={t.particles}
                 >
                   <Circle className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant={showPaths ? "default" : "outline"}
+                  onClick={toggleShowPaths}
+                  className={`border-gray-600 ${showPaths ? 'bg-cyan-500 text-white' : 'text-gray-400'}`}
+                  title={t.paths}
+                >
+                  <Waves className="h-4 w-4" />
                 </Button>
               </div>
             </div>

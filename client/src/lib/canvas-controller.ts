@@ -6,7 +6,8 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
-  curveType?: string; // 'cubic' or 'none'
+  curveType?: string; // 'cubic', 'linear', etc.
+  showPaths?: boolean; // Whether to render wave paths
 }
 
 interface Particle {
@@ -118,6 +119,7 @@ export class CanvasController {
   private positions: number[] = [];
   private isRTL: boolean = false;
   private showParticles: boolean = true;
+  private showPaths: boolean = true;
   private ovalBody: Matter.Composite | null = null;
   private segmentGlows: SegmentGlow[] = [];
 
@@ -767,11 +769,21 @@ export class CanvasController {
     this.showParticles = show;
     this.drawFrame(0); // Force redraw to see changes immediately
   }
+  
+  setShowPaths(show: boolean) {
+    this.showPaths = show;
+    this.drawFrame(0); // Force redraw to see changes immediately
+  }
 
   updateParams(params: AnimationParams) {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
+
+    // Update showPaths if it's defined in the params
+    if (params.showPaths !== undefined) {
+      this.showPaths = params.showPaths;
+    }
 
     this.params = params;
 
@@ -1049,16 +1061,18 @@ export class CanvasController {
             for (const waveFront of waveFronts) {
               if (waveFront.points.length < 2) continue;
 
-              // =====================================
-              // Step 5: Calculate the path once using our path generation function
-              // =====================================
-              const path = this.calculatePath(waveFront.points);
+              // Only calculate and render paths if showPaths is true
+              if (this.showPaths) {
+                // =====================================
+                // Step 5: Calculate the path once using our path generation function
+                // =====================================
+                const path = this.calculatePath(waveFront.points);
 
-              // =====================================
-              // Step 6: Render the path with appropriate styling using our rendering function
-              // =====================================
-              // Always render the wave paths
-              this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+                // =====================================
+                // Step 6: Render the path with appropriate styling using our rendering function
+                // =====================================
+                this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
+              }
             }
 
             // Draw individual particles if needed
@@ -1070,8 +1084,8 @@ export class CanvasController {
               });
             }
           } 
-          // If we have some particles but not enough for a curve, draw simple lines
-          else if (visibleParticles.length > 1) {
+          // If we have some particles but not enough for a curve, draw simple lines (if showPaths is true)
+          else if (visibleParticles.length > 1 && this.showPaths) {
             this.ctx.beginPath();
             const baseOpacity = bubble.energy / bubble.initialEnergy;
             const lineOpacity = baseOpacity * 0.4;
