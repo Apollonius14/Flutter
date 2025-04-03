@@ -781,42 +781,48 @@ export class CanvasController {
       return age < 5;
     });
     
-    // First draw a simplified outline of the oval (just the outer contour)
-    // We'll create a smooth path instead of connecting all segments
+    // Get the center of the canvas (to calculate the oval center)
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    
+    // Find the actual oval center based on the oval position parameter
+    const ovalCenterX = this.canvas.width * this.params.ovalPosition;
+    
+    // Calculate major and minor axis for the oval
+    const majorAxis = this.canvas.width * 0.9; 
+    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8);
+    
+    // Calculate a smooth oval path using many more points than segments
+    // This avoids the zigzag and ensures a perfect elliptical shape
     ctx.beginPath();
     
-    // Draw only every other segment for a cleaner, less segmented look
-    for (let i = 0; i < segments.length; i += 2) {
-      const segment = segments[i];
-      const vertices = segment.vertices;
+    // Use 100 points for a smooth oval outline
+    const numPoints = 100;
+    for (let i = 0; i <= numPoints; i++) {
+      const angle = (i / numPoints) * Math.PI * 2;
+      const x = ovalCenterX + (majorAxis / 2) * Math.cos(angle);
+      const y = centerY + (minorAxis / 2) * Math.sin(angle);
       
-      // For each segment, only draw the outer edge (avoid inner radial lines)
-      // Find the two outer vertices (those farthest from center)
-      const outerVertices = [...vertices].sort((a, b) => {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        const distA = Math.pow(a.x - centerX, 2) + Math.pow(a.y - centerY, 2);
-        const distB = Math.pow(b.x - centerX, 2) + Math.pow(b.y - centerY, 2);
-        return distB - distA; // Sort by distance from center (descending)
-      }).slice(0, 2); // Take the two farthest points
-      
-      // Draw just a line connecting the outer vertices
       if (i === 0) {
-        ctx.moveTo(outerVertices[0].x, outerVertices[0].y);
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
       }
-      ctx.lineTo(outerVertices[0].x, outerVertices[0].y);
-      ctx.lineTo(outerVertices[1].x, outerVertices[1].y);
     }
     
-    // Close the path for a complete oval
+    // Close the path
     ctx.closePath();
     
-    // Simple outline for the oval structure
-    ctx.strokeStyle = 'rgba(220, 50, 255, 0.3)'; // Slightly more transparent
-    ctx.lineWidth = 1.8; // Slightly thicker
-    ctx.stroke();
+    // No stroke for the base outline - just a subtle fill
+    // Use a color that contrasts with pink - a subtle teal/turquoise
+    ctx.fillStyle = 'rgba(30, 140, 160, 0.06)'; // Very subtle teal fill
+    ctx.fill();
     
-    // Then draw only the segments with active glows
+    // Process active segment glows
+    // Group glows by proximity to optimize rendering
+    const activeGlowMap = new Map<number, { intensity: number, vertices: Matter.Vector[] }>();
+    
+    // Process each segment with active glow
     segments.forEach(segment => {
       // Find the glow for this segment
       const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
@@ -826,50 +832,95 @@ export class CanvasController {
       // Calculate how old this glow is in seconds
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
-      // Apply exponential decay to the intensity - using a faster decay rate
-      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge); // Slower decay rate
+      // Apply exponential decay to the intensity
+      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge);
       
-      // Skip rendering if the intensity is too low
+      // Skip segments with very low intensity
       if (currentIntensity < 0.05) return;
       
-      // Render segment with enhanced pink glow
-      const vertices = segment.vertices;
+      // Get segment angle (0-360 degrees, quantized to nearest 10 degrees)
+      const segmentCenterX = (segment.vertices[0].x + segment.vertices[2].x) / 2;
+      const segmentCenterY = (segment.vertices[0].y + segment.vertices[2].y) / 2;
+      const angle = Math.atan2(segmentCenterY - centerY, segmentCenterX - ovalCenterX);
+      const angleDegrees = Math.round((angle * 180 / Math.PI) / 10) * 10;
       
-      ctx.beginPath();
-      ctx.moveTo(vertices[0].x, vertices[0].y);
-      for (let i = 1; i < vertices.length; i++) {
-        ctx.lineTo(vertices[i].x, vertices[i].y);
+      // Use angle as key to group nearby segments
+      if (activeGlowMap.has(angleDegrees)) {
+        // Combine with existing glow for this angle (take max intensity)
+        const existing = activeGlowMap.get(angleDegrees)!;
+        existing.intensity = Math.max(existing.intensity, currentIntensity);
+      } else {
+        // Add new glow for this angle
+        activeGlowMap.set(angleDegrees, {
+          intensity: currentIntensity,
+          vertices: segment.vertices
+        });
       }
-      ctx.closePath();
+    });
+    
+    // Draw each glow region with appropriate intensity
+    activeGlowMap.forEach((glowData, angleDegrees) => {
+      const { intensity, vertices } = glowData;
+      
+      // Calculate angle in radians
+      const angleRadians = angleDegrees * Math.PI / 180;
+      
+      // Create an arc segment around the collision point
+      ctx.beginPath();
+      
+      // Calculate the arc width - wider for stronger collisions
+      const arcWidth = Math.PI / 8 + (intensity / 10) * (Math.PI / 10); // 22.5 to 40.5 degrees
+      
+      // Draw an arc along the ellipse at the collision point
+      // We need to parameterize the ellipse correctly
+      const numArcPoints = 20;
+      
+      for (let i = 0; i <= numArcPoints; i++) {
+        const t = angleRadians - arcWidth/2 + (i / numArcPoints) * arcWidth;
+        const x = ovalCenterX + (majorAxis / 2) * Math.cos(t);
+        const y = centerY + (minorAxis / 2) * Math.sin(t);
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
       
       // Enhanced opacity scaling for more dramatic effects
-      // Use a power function (x^1.5) to emphasize higher intensities
-      const intensityPower = Math.pow(currentIntensity, 1.2); // Apply power scaling
+      // Use a power function to emphasize higher intensities
+      const intensityPower = Math.pow(intensity, 1.2);
       
-      // Scale opacity with enhanced range for more dramatic effects
-      const fillOpacity = Math.min(intensityPower * 2.0, 0.98); // Increase max to 0.98 (from 0.95)
-      const strokeOpacity = Math.min(intensityPower * 2.5, 1.0); // Increase multiplier to 2.5 (from 1.8)
+      // Scale opacity with enhanced range
+      const fillOpacity = Math.min(intensityPower * 2.2, 0.98);
       
-      // Brighter hot pink for high intensities
+      // Dynamic color based on intensity - from soft pink to bright hot pink
       const r = 255;
-      const g = Math.max(20, Math.min(160, 105 + intensityPower * 55)); // Dynamic green value based on intensity
-      const b = Math.max(147, Math.min(230, 180 + intensityPower * 50)); // Dynamic blue value based on intensity
+      const g = Math.max(20, Math.min(160, 105 + intensityPower * 55));
+      const b = Math.max(147, Math.min(230, 180 + intensityPower * 50));
       
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
-      ctx.strokeStyle = `rgba(255, 20, 147, ${strokeOpacity})`;
-      ctx.lineWidth = 2.2; // Slightly thicker for better visibility
+      // Create a gradient for more natural glow appearance
+      const gradientRadius = 40 + intensityPower * 20; // Dynamic radius
+      
+      // Calculate point on oval for gradient center
+      const gradientX = ovalCenterX + (majorAxis / 2) * Math.cos(angleRadians);
+      const gradientY = centerY + (minorAxis / 2) * Math.sin(angleRadians);
+      
+      const gradient = ctx.createRadialGradient(
+        gradientX, gradientY, 0,
+        gradientX, gradientY, gradientRadius
+      );
+      
+      // Inner color (more opaque)
+      gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${fillOpacity})`);
+      // Outer color (transparent)
+      gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      
+      ctx.fillStyle = gradient;
       ctx.fill();
-      ctx.stroke();
       
       // Add a subtle outer glow for high-intensity collisions
       if (intensityPower > 0.7) {
-        ctx.beginPath();
-        ctx.moveTo(vertices[0].x, vertices[0].y);
-        for (let i = 1; i < vertices.length; i++) {
-          ctx.lineTo(vertices[i].x, vertices[i].y);
-        }
-        ctx.closePath();
-        
         // Outer glow with low opacity
         ctx.shadowColor = `rgba(255, 50, 160, ${intensityPower * 0.8})`;
         ctx.shadowBlur = 8 + intensityPower * 7; // Dynamic blur based on intensity
