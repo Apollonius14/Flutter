@@ -191,7 +191,7 @@ export class CanvasController {
           
           // Apply a threshold to filter out tiny collisions and static noise
           // Ignore collisions that don't meet the minimum threshold
-          const COLLISION_THRESHOLD = 0.1;
+          const COLLISION_THRESHOLD = 0.25;
           if (impactMagnitude < COLLISION_THRESHOLD) {
             continue; // Skip this collision as it's too small
           }
@@ -233,7 +233,7 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.2; // Higher value to use more vertical space
+    const compressionFactor = 0.15; // Reduced to create a more zoomed-out view
     const center = canvasHeight / 2;
     const numPositions = 9; 
     const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 6);
@@ -584,7 +584,7 @@ export class CanvasController {
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = 4.0
+    size: number = 5.0
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
     let finalOpacity = opacity;
@@ -634,7 +634,7 @@ export class CanvasController {
       ctx.closePath();
       
       // Enhanced base glow for all segments
-      ctx.fillStyle = 'rgba(255, 200, 230, 0.18)'; // Slightly more visible base color
+      ctx.fillStyle = 'rgba(255, 200, 230, 0.12)'; // Slightly more visible base color
       ctx.fill();
       // No stroke for the default state
     });
@@ -658,9 +658,6 @@ export class CanvasController {
       // Render segment with enhanced pink glow
       const vertices = segment.vertices;
       
-      // Add extra thickness to the segment for more prominent effect
-      // Create an expanded path for the glow effect
-      const expandFactor = 0.7 + currentIntensity * 0.3; // Expand more for stronger glows
       
       ctx.beginPath();
       ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -669,24 +666,18 @@ export class CanvasController {
       }
       ctx.closePath();
       
-      // Enhanced opacity scaling for more dramatic effects
-      // Use a cubic function to emphasize higher intensities more dramatically
-      const intensityPower = Math.pow(currentIntensity, 0.8); // Less aggressive power scaling for smoother appearance
-      
-      // Scale opacity with enhanced range for more dramatic effects
-      const fillOpacity = Math.min(intensityPower * 2.7, 0.99); // Increase max opacity
-      
+      const fillOpacity = currentIntensity;
       // More vibrant colors for high intensities
       const r = 255;
-      const g = Math.max(20, Math.min(180, 90 + intensityPower * 90)); // Enhanced green value range
-      const b = Math.max(150, Math.min(240, 170 + intensityPower * 70)); // Enhanced blue value range
+      const g = Math.max(20, Math.min(180, 90 + currentIntensity * 90)); // Enhanced green value range
+      const b = Math.max(150, Math.min(240, 170 + currentIntensity * 70)); // Enhanced blue value range
       
       // Only use fill, no stroke for a more fluid look
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
       ctx.fill();
       
       // Add a multi-layer outer glow for high-intensity collisions with bloom effect
-      if (intensityPower > 0.4) { // Lower threshold to make glow appear more often
+      if (currentIntensity > 0.4) { // Lower threshold to make glow appear more often
         // First layer of bloom
         ctx.beginPath();
         ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -695,11 +686,11 @@ export class CanvasController {
         }
         ctx.closePath();
         
-        ctx.fillStyle = `rgba(255, 30, 160, ${intensityPower * 0.7})`; // Higher opacity
+        ctx.fillStyle = `rgba(255, 30, 100, ${currentIntensity * 0.7})`; // Higher opacity
         ctx.fill();
         
         // Second layer of bloom for very high intensities
-        if (intensityPower > 0.7) {
+        if (currentIntensity > 0.7) {
           ctx.beginPath();
           ctx.moveTo(vertices[0].x, vertices[0].y);
           for (let i = 1; i < vertices.length; i++) {
@@ -707,7 +698,7 @@ export class CanvasController {
           }
           ctx.closePath();
           
-          ctx.fillStyle = `rgba(255, 100, 220, ${intensityPower * 0.9})`; // More saturated color
+          ctx.fillStyle = `rgba(255, 100, 220, ${currentIntensity})`; // More saturated color
           ctx.fill();
         }
       }
@@ -729,8 +720,8 @@ export class CanvasController {
     // Energy factor determines all visual properties
     const energyFactor = energy / (power || 1);
     
-    // Base width for the line
-    const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.1;
+    // Base width for the line - increased for better visibility in zoomed-out view
+    const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.15;
     
     // Save context state
     ctx.save();
@@ -771,7 +762,7 @@ export class CanvasController {
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-    this.ctx.lineWidth = 2;
+    this.ctx.lineWidth = 3; // Increased for better visibility in zoomed-out view
     this.ctx.stroke();
 
     // Single activation line without glow effect
@@ -779,7 +770,7 @@ export class CanvasController {
     this.ctx.moveTo(this.activationLineX, 0);
     this.ctx.lineTo(this.activationLineX, height);
     this.ctx.strokeStyle = "rgba(0, 220, 255, 0.15)";
-    this.ctx.lineWidth = 1.5;
+    this.ctx.lineWidth = 2; // Increased for better visibility in zoomed-out view
     this.ctx.stroke();
   }
 
@@ -900,7 +891,7 @@ export class CanvasController {
     const height = this.canvas.height;
     const newCenterX = width * this.params.ovalPosition;
     const centerY = height / 2; 
-    const majorAxis = width * 0.9; 
+    const majorAxis = width * 0.7; // Reduced size for zoomed-out view
     const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8);
     
     if (!this.params.showOval) {
@@ -1073,32 +1064,13 @@ export class CanvasController {
             // =====================================
             // Step 4: Calculate wave fronts using our dedicated function
             // =====================================
-            const waveFronts = this.calculateWaveFronts([bubble], screenBounds);
+            
 
             // Prepare rendering parameters
-            const renderParams: RenderParams = {
-              showShadow: this.params.power > 1,
-              power: this.params.power,
-              screenBounds
-            };
+            
 
             // Process each wave front
-            for (const waveFront of waveFronts) {
-              if (waveFront.points.length < 2) continue;
-
-              // Only calculate and render paths if showPaths is true
-              if (this.showPaths) {
-                // =====================================
-                // Step 5: Calculate the path once using our path generation function
-                // =====================================
-                const path = this.calculatePath(waveFront.points);
-
-                // =====================================
-                // Step 6: Render the path with appropriate styling using our rendering function
-                // =====================================
-                this.renderWaveFrontPath(this.ctx, path, waveFront, renderParams);
-              }
-            }
+            
 
             // Draw individual particles if needed
             if (this.showParticles) {
@@ -1115,7 +1087,7 @@ export class CanvasController {
             const baseOpacity = bubble.energy / bubble.initialEnergy;
             const lineOpacity = baseOpacity * 0.4;
             this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 0.8;
+            this.ctx.lineWidth = 1.2; // Increased for better visibility in zoomed-out view
 
             for (let i = 0; i < visibleParticles.length - 1; i++) {
               const pos1 = visibleParticles[i].body.position;

@@ -374,12 +374,12 @@ export default function Home() {
                 </p>
               </div>
             )}
-            {/* Increased canvas height by 50% from 260 to 390 */}
+            {/* Increased canvas dimensions for zoomed-out view */}
             <canvas
               ref={canvasRef}
-              width={800}
-              height={390}
-              className="w-full h-[390px] border border-gray-800 rounded-md"
+              width={1200}
+              height={550}
+              className="w-full h-[550px] border border-gray-800 rounded-md"
             />
           </CardContent>
         </Card>
