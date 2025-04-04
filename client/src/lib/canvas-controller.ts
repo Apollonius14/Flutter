@@ -6,8 +6,6 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
-  curveType?: string; // 'cubic', 'linear', etc.
-  showPaths?: boolean; // Whether to render wave paths
 }
 
 interface Particle {
@@ -37,15 +35,6 @@ interface Point2D {
   y: number;
 }
 
-// New interface for particle wavefronts
-interface WaveFront {
-  points: Point2D[];
-  energy: number;
-  waveIndex: number;
-  thicknessFactor: number;
-  baseOpacity: number;  
-  cycleNumber: number; 
-}
 
 // Interface for segment glow data
 interface SegmentGlow {
@@ -54,24 +43,15 @@ interface SegmentGlow {
   segmentId: number;
 }
 
-// Interface for rendering parameters
-interface RenderParams {
-  showShadow: boolean;     
-  power: number;  
-  screenBounds: {
-    min: Point2D;
-    max: Point2D;
-  };
-}
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.51;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
-  private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
+  private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
   private static readonly BASE_LINE_WIDTH: number = 1.0;
   private static readonly PARTICLES_PER_RING: number = 71;
-  private static readonly PARTICLE_RADIUS: number = 0.4;
+  private static readonly PARTICLE_RADIUS: number = 1;
   private static readonly FIXED_BUBBLE_RADIUS: number = 2; 
 
   private static readonly JOIN_CURVE_ENDS: boolean = false;
@@ -119,7 +99,6 @@ export class CanvasController {
   private positions: number[] = [];
   private isRTL: boolean = false;
   private showParticles: boolean = true;
-  private showPaths: boolean = true;
   private ovalBody: Matter.Composite | null = null;
   private segmentGlows: SegmentGlow[] = [];
 
@@ -132,17 +111,16 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 4,
-      velocityIterations: 4,
-      constraintIterations: 3
+      positionIterations: 6,
+      velocityIterations: 6,
+      constraintIterations: 4
     }); 
     this.params = {
       power: 12,
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.7,
-      curveType: 'cubic'
+      ovalEccentricity: 0.3
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -191,7 +169,7 @@ export class CanvasController {
           
           // Apply a threshold to filter out tiny collisions and static noise
           // Ignore collisions that don't meet the minimum threshold
-          const COLLISION_THRESHOLD = 0.25;
+          const COLLISION_THRESHOLD = 0.35;
           if (impactMagnitude < COLLISION_THRESHOLD) {
             continue; // Skip this collision as it's too small
           }
@@ -200,7 +178,7 @@ export class CanvasController {
           const squaredImpact = impactMagnitude * impactMagnitude;
           
           // Apply a more aggressive scaling factor for more dramatic effects
-          const scaledImpact = squaredImpact * this.params.power * 2.0; 
+          const scaledImpact = squaredImpact * this.params.power * 5.0; 
           
           // Normalize to a higher range (0 to 3.0) for more dramatic max effects
           const normalizedIntensity = Math.min(scaledImpact, 3.0);
@@ -295,10 +273,9 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 6.0; 
+        const baseSpeed = 8.0; 
 
 
-        // Set velocity - still using the original angle, but with adjusted speed
         Matter.Body.setVelocity(body, {
           x: Math.cos(angle) * baseSpeed,
           y: Math.sin(angle) * baseSpeed
@@ -382,7 +359,7 @@ export class CanvasController {
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = 5.0
+    size: number = 2.0
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
     let finalOpacity = opacity;
@@ -392,13 +369,13 @@ export class CanvasController {
       finalOpacity = energyRatio * 0.8; // Slightly brighter than the base opacity
     } else {
       // Use passed opacity as fallback
-      finalOpacity = opacity * 0.6;
+      finalOpacity = opacity * 0.8;
     }
     
     // Draw a filled circle for the particle
     ctx.beginPath();
     ctx.arc(position.x, position.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(254, 58, 0, ${finalOpacity})`;
+    ctx.fillStyle = `rgba(254, 37, 3, ${finalOpacity})`;
     ctx.fill();
   }
   
@@ -432,7 +409,7 @@ export class CanvasController {
       ctx.closePath();
       
       // Enhanced base glow for all segments
-      ctx.fillStyle = 'rgba(255, 200, 230, 0.12)'; // Slightly more visible base color
+      ctx.fillStyle = 'rgba(255, 200, 230, 0.05)'; // Slightly more visible base color
       ctx.fill();
       // No stroke for the default state
     });
@@ -448,10 +425,7 @@ export class CanvasController {
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
       // Apply smoother exponential decay to the intensity with longer persistence
-      const currentIntensity = glow.intensity * Math.exp(-4.5 * glowAge); // Slower decay for more visible effects
-      
-      // Higher threshold to avoid jittery micro-glows
-      if (currentIntensity < 0.15) return; // Increased minimum threshold
+      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge); // Slower decay for more visible effects
       
       // Render segment with enhanced pink glow
       const vertices = segment.vertices;
@@ -475,31 +449,20 @@ export class CanvasController {
       ctx.fill();
       
       // Add a multi-layer outer glow for high-intensity collisions with bloom effect
-      if (currentIntensity > 0.4) { // Lower threshold to make glow appear more often
+       // Lower threshold to make glow appear more often
         // First layer of bloom
         ctx.beginPath();
         ctx.moveTo(vertices[0].x, vertices[0].y);
         for (let i = 1; i < vertices.length; i++) {
           ctx.lineTo(vertices[i].x, vertices[i].y);
-        }
         ctx.closePath();
         
-        ctx.fillStyle = `rgba(255, 30, 100, ${currentIntensity * 0.7})`; // Higher opacity
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${currentIntensity})`; // Higher opacity
         ctx.fill();
         
-        // Second layer of bloom for very high intensities
-        if (currentIntensity > 0.7) {
-          ctx.beginPath();
-          ctx.moveTo(vertices[0].x, vertices[0].y);
-          for (let i = 1; i < vertices.length; i++) {
-            ctx.lineTo(vertices[i].x, vertices[i].y);
-          }
-          ctx.closePath();
-          
-          ctx.fillStyle = `rgba(255, 100, 220, ${currentIntensity})`; // More saturated color
-          ctx.fill();
+        
         }
-      }
+      
     });
   }
   
@@ -539,20 +502,12 @@ export class CanvasController {
     this.drawFrame(0); // Force redraw to see changes immediately
   }
   
-  public setShowPaths(show: boolean) {
-    this.showPaths = show;
-    this.drawFrame(0); // Force redraw to see changes immediately
-  }
+  // Removed setShowPaths method
 
   public updateParams(params: AnimationParams) {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
-
-    // Update showPaths if it's defined in the params
-    if (params.showPaths !== undefined) {
-      this.showPaths = params.showPaths;
-    }
 
     this.params = params;
 
@@ -590,11 +545,11 @@ export class CanvasController {
     majorAxis: number,
     minorAxis: number
   ): Matter.Composite {
-    const wallThickness = 13;
+    const wallThickness = 16;
     const ovalBody = Matter.Composite.create();
 
 
-    const segments = 85;
+    const segments = 75;
 
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
@@ -644,8 +599,8 @@ export class CanvasController {
     const height = this.canvas.height;
     const newCenterX = width * this.params.ovalPosition;
     const centerY = height / 2; 
-    const majorAxis = width * 0.6; // Reduced size for zoomed-out view
-    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.5);
+    const majorAxis = width * 0.5; // Reduced size for zoomed-out view
+    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8);
     
     if (!this.params.showOval) {
       if (this.ovalBody) {
@@ -812,53 +767,13 @@ export class CanvasController {
                    pos.y >= 0 && pos.y <= this.canvas.height;
           });
 
-          // If we have enough particles, use wave front rendering
-          if (visibleParticles.length > 3) {
-            // =====================================
-            // Step 4: Calculate wave fronts using our dedicated function
-            // =====================================
-            
-
-            // Prepare rendering parameters
-            
-
-            // Process each wave front
-            
-
-            // Draw individual particles if needed
-            if (this.showParticles) {
-              visibleParticles.forEach(particle => {
-                const pos = particle.body.position;
-                // Pass the particle object to use its energy for rendering
-                this.renderParticle(this.ctx, pos, opacity, particle);
-              });
-            }
-          } 
-          // If we have some particles but not enough for a curve, draw simple lines (if showPaths is true)
-          else if (visibleParticles.length > 1 && this.showPaths) {
-            this.ctx.beginPath();
-            const baseOpacity = bubble.energy / bubble.initialEnergy;
-            const lineOpacity = baseOpacity * 0.4;
-            this.ctx.strokeStyle = `rgba(0, 200, 255, ${lineOpacity})`;
-            this.ctx.lineWidth = 1.2; // Increased for better visibility in zoomed-out view
-
-            for (let i = 0; i < visibleParticles.length - 1; i++) {
-              const pos1 = visibleParticles[i].body.position;
-              const pos2 = visibleParticles[i + 1].body.position;
-              this.ctx.moveTo(pos1.x, pos1.y);
-              this.ctx.lineTo(pos2.x, pos2.y);
-            }
-
-            this.ctx.stroke();
-
-            // Also draw the particle dots if showParticles is true
-            if (this.showParticles) {
-              visibleParticles.forEach(particle => {
-                const pos = particle.body.position;
-                // Pass the particle object to use its energy for rendering
-                this.renderParticle(this.ctx, pos, opacity, particle);
-              });
-            }
+          // Draw individual particles if enabled
+          if (this.showParticles) {
+            visibleParticles.forEach(particle => {
+              const pos = particle.body.position;
+              // Pass the particle object to use its energy for rendering
+              this.renderParticle(this.ctx, pos, opacity, particle);
+            });
           }
         }
       }
