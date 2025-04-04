@@ -65,14 +65,14 @@ interface RenderParams {
 }
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
   private static readonly BASE_LINE_WIDTH: number = 1.0;
-  private static readonly PARTICLES_PER_RING: number = 91;
-  private static readonly PARTICLE_RADIUS: number = 0.9;
-  private static readonly FIXED_BUBBLE_RADIUS: number = 5; 
+  private static readonly PARTICLES_PER_RING: number = 71;
+  private static readonly PARTICLE_RADIUS: number = 0.4;
+  private static readonly FIXED_BUBBLE_RADIUS: number = 2; 
 
   private static readonly JOIN_CURVE_ENDS: boolean = false;
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -184,36 +184,44 @@ export class CanvasController {
           };
           
           // Calculate dot product of velocity and normal for collision
-          
           const dotProduct = velocity.x * normal.x + velocity.y * normal.y;
           
           // Take absolute value since we care about magnitude of impact, not direction
           const impactMagnitude = Math.abs(dotProduct);
           
+          // Apply a threshold to filter out tiny collisions and static noise
+          // Ignore collisions that don't meet the minimum threshold
+          const COLLISION_THRESHOLD = 0.1;
+          if (impactMagnitude < COLLISION_THRESHOLD) {
+            continue; // Skip this collision as it's too small
+          }
+          
           // Square the dot product to emphasize stronger collisions (quadratic scaling)
           const squaredImpact = impactMagnitude * impactMagnitude;
           
-
-          const scaledImpact = squaredImpact * this.params.power * 1.5; 
+          // Apply a more aggressive scaling factor for more dramatic effects
+          const scaledImpact = squaredImpact * this.params.power * 2.0; 
           
-          // Normalize to a reasonable range (0 to 1.5) - allowing higher maximum for more dramatic effects
-          const normalizedIntensity = Math.min(scaledImpact, 1.5);
+          // Normalize to a higher range (0 to 3.0) for more dramatic max effects
+          const normalizedIntensity = Math.min(scaledImpact, 3.0);
           
           // Check if there's already a glow for this segment
           const existingGlowIndex = this.segmentGlows.findIndex(glow => glow.segmentId === segmentId);
           
           if (existingGlowIndex >= 0) {
-            // Update existing glow intensity (add new intensity, capped at 1.0)
+            // Update existing glow intensity with a higher cap (15.0 instead of 10.0)
             const existingGlow = this.segmentGlows[existingGlowIndex];
-            existingGlow.intensity = Math.min(existingGlow.intensity + normalizedIntensity, 10.0);
+            existingGlow.intensity = Math.min(existingGlow.intensity + normalizedIntensity, 15.0);
             existingGlow.lastUpdateTime = now;
           } else {
-            // Create new glow record
-            this.segmentGlows.push({
-              segmentId,
-              intensity: normalizedIntensity,
-              lastUpdateTime: now
-            });
+            // Only create new glow records for significant collisions
+            if (normalizedIntensity > COLLISION_THRESHOLD * 2) {
+              this.segmentGlows.push({
+                segmentId,
+                intensity: normalizedIntensity,
+                lastUpdateTime: now
+              });
+            }
           }
         }
       }
@@ -228,7 +236,7 @@ export class CanvasController {
     const compressionFactor = 0.2; // Higher value to use more vertical space
     const center = canvasHeight / 2;
     const numPositions = 9; 
-    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 3);
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 6);
     const halfSpacing = baseSpacing / 10;
 
     // Add positions from top to bottom, offset from center
@@ -287,7 +295,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 7.0; 
+        const baseSpeed = 4.0; 
 
 
         // Set velocity - still using the original angle, but with adjusted speed
@@ -608,10 +616,10 @@ export class CanvasController {
     // Filter out old glows based on decay rate
     const now = timestamp;
     
-    // Process each segment glow - remove glows older than 5 seconds
+    // Process each segment glow - remove glows older than 6 seconds (increased from 5)
     this.segmentGlows = this.segmentGlows.filter(glow => {
       const age = (now - glow.lastUpdateTime) / 1000;
-      return age < 5;
+      return age < 6; // Increased max age for longer lasting effects
     });
     
     // First draw all segments with a very faint pink fill (no borders)
@@ -625,8 +633,8 @@ export class CanvasController {
       }
       ctx.closePath();
       
-      // Very faint pink fill for the base oval
-      ctx.fillStyle = 'rgba(255, 200, 230, 0.15)'; // Extremely faint pink
+      // Enhanced base glow for all segments
+      ctx.fillStyle = 'rgba(255, 200, 230, 0.18)'; // Slightly more visible base color
       ctx.fill();
       // No stroke for the default state
     });
@@ -641,14 +649,18 @@ export class CanvasController {
       // Calculate how old this glow is in seconds
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
-      // Apply exponential decay to the intensity - using a slightly slower decay rate
-      const currentIntensity = glow.intensity * Math.exp(-6.5 * glowAge); // Slower decay for more visible effects
+      // Apply smoother exponential decay to the intensity with longer persistence
+      const currentIntensity = glow.intensity * Math.exp(-4.5 * glowAge); // Slower decay for more visible effects
       
-      // Skip rendering if the intensity is too low (already covered by the base faint pink)
-      if (currentIntensity < 0.05) return;
+      // Higher threshold to avoid jittery micro-glows
+      if (currentIntensity < 0.15) return; // Increased minimum threshold
       
       // Render segment with enhanced pink glow
       const vertices = segment.vertices;
+      
+      // Add extra thickness to the segment for more prominent effect
+      // Create an expanded path for the glow effect
+      const expandFactor = 0.7 + currentIntensity * 0.3; // Expand more for stronger glows
       
       ctx.beginPath();
       ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -658,23 +670,24 @@ export class CanvasController {
       ctx.closePath();
       
       // Enhanced opacity scaling for more dramatic effects
-      // Use a power function to emphasize higher intensities
-      const intensityPower = Math.pow(currentIntensity, 1.2); // Apply power scaling
+      // Use a cubic function to emphasize higher intensities more dramatically
+      const intensityPower = Math.pow(currentIntensity, 0.8); // Less aggressive power scaling for smoother appearance
       
       // Scale opacity with enhanced range for more dramatic effects
-      const fillOpacity = Math.min(intensityPower * 2.2, 0.98); // Increase max opacity
+      const fillOpacity = Math.min(intensityPower * 2.7, 0.99); // Increase max opacity
       
-      // Brighter hot pink for high intensities
+      // More vibrant colors for high intensities
       const r = 255;
-      const g = Math.max(20, Math.min(160, 105 + intensityPower * 55)); // Dynamic green value based on intensity
-      const b = Math.max(147, Math.min(230, 180 + intensityPower * 50)); // Dynamic blue value based on intensity
+      const g = Math.max(20, Math.min(180, 90 + intensityPower * 90)); // Enhanced green value range
+      const b = Math.max(150, Math.min(240, 170 + intensityPower * 70)); // Enhanced blue value range
       
       // Only use fill, no stroke for a more fluid look
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
       ctx.fill();
       
-      // Add a subtle outer glow for high-intensity collisions
-      if (intensityPower > 0.6) {
+      // Add a multi-layer outer glow for high-intensity collisions with bloom effect
+      if (intensityPower > 0.4) { // Lower threshold to make glow appear more often
+        // First layer of bloom
         ctx.beginPath();
         ctx.moveTo(vertices[0].x, vertices[0].y);
         for (let i = 1; i < vertices.length; i++) {
@@ -682,9 +695,21 @@ export class CanvasController {
         }
         ctx.closePath();
         
-        ctx.fillStyle = `rgba(255, 50, 160, ${intensityPower * 0.5})`;
+        ctx.fillStyle = `rgba(255, 30, 160, ${intensityPower * 0.7})`; // Higher opacity
         ctx.fill();
         
+        // Second layer of bloom for very high intensities
+        if (intensityPower > 0.7) {
+          ctx.beginPath();
+          ctx.moveTo(vertices[0].x, vertices[0].y);
+          for (let i = 1; i < vertices.length; i++) {
+            ctx.lineTo(vertices[i].x, vertices[i].y);
+          }
+          ctx.closePath();
+          
+          ctx.fillStyle = `rgba(255, 100, 220, ${intensityPower * 0.9})`; // More saturated color
+          ctx.fill();
+        }
       }
     });
   }
@@ -825,7 +850,7 @@ export class CanvasController {
     const ovalBody = Matter.Composite.create();
 
 
-    const segments = 55;
+    const segments = 85;
 
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
