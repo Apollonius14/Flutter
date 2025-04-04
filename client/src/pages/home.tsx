@@ -246,7 +246,7 @@ export default function Home() {
                       <Slider
                         value={[ovalEccentricity]}
                         min={0.1}
-                        max={0.99}
+                        max={0.95} // Reduced maximum to prevent wild transitions
                         step={0.01}
                         onValueChange={([value]) => setOvalEccentricity(value)}
                         className="flex-1"
@@ -259,8 +259,8 @@ export default function Home() {
                       </Label>
                       <Slider
                         value={[semiLatusRectum]}
-                        min={0.05}
-                        max={1.0}
+                        min={0.1}
+                        max={0.5} // Reduced range for more controlled transitions
                         step={0.01}
                         onValueChange={([value]) => setSemiLatusRectum(value)}
                         className="flex-1"
