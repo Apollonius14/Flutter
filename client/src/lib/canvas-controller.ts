@@ -6,6 +6,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
+  semiLatusRectum?: number; // p parameter for conic section
 }
 
 interface Particle {
@@ -120,7 +121,8 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.3
+      ovalEccentricity: 0.3,
+      semiLatusRectum: 0.5 // Default p parameter for conic section
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -508,20 +510,23 @@ export class CanvasController {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
+    const prevSemiLatusRectum = this.params.semiLatusRectum;
 
     this.params = params;
 
     // Check if oval-related parameters have changed
     const ovalChanged = prevShowOval !== params.showOval || 
                         prevPosition !== params.ovalPosition || 
-                        prevEccentricity !== params.ovalEccentricity;
+                        prevEccentricity !== params.ovalEccentricity ||
+                        prevSemiLatusRectum !== params.semiLatusRectum;
 
     if (ovalChanged) {
-      // If position changed, but eccentricity stayed the same, we can optimize
+      // If position changed, but eccentricity and semiLatusRectum stayed the same, we can optimize
       const eccentricityChanged = prevEccentricity !== params.ovalEccentricity;
-
+      const semiLatusRectumChanged = prevSemiLatusRectum !== params.semiLatusRectum;
+      
       // If we need to create a new oval, delete the old one first
-      if (this.ovalBody && (eccentricityChanged || prevShowOval !== params.showOval)) {
+      if (this.ovalBody && (eccentricityChanged || semiLatusRectumChanged || prevShowOval !== params.showOval)) {
         Matter.Composite.remove(this.engine.world, this.ovalBody);
         this.ovalBody = null;
       }
@@ -536,7 +541,49 @@ export class CanvasController {
   }
 
   /**
-   * Creates a new oval composite
+   * Calculates a point on a conic section in polar form
+   * @param eccentricity - Controls the type of curve (0: circle, 0-1: ellipse, 1: parabola, >1: hyperbola)
+   * @param semiLatusRectum - Size parameter (often denoted as 'p')
+   * @param theta - Angle in radians
+   * @returns The point coordinates at the given angle
+   */
+  private conicSectionPoint(
+    centerX: number,
+    centerY: number, 
+    eccentricity: number,
+    semiLatusRectum: number,
+    theta: number,
+    scale: number
+  ): Point2D {
+    // For safety, ensure eccentricity is non-negative
+    eccentricity = Math.max(0, eccentricity);
+    
+    // For hyperbola, we need to ensure theta is in the valid range
+    if (eccentricity > 1) {
+      // For hyperbola, limit angles to valid range to avoid division by zero
+      const limitAngle = Math.acos(1 / eccentricity);
+      if (Math.abs(theta) < limitAngle) {
+        // If angle is in the "gap", move it to the edge
+        theta = (theta >= 0) ? limitAngle : -limitAngle;
+      }
+    }
+    
+    // Calculate radius using polar form of conic section
+    const denominator = 1 - eccentricity * Math.cos(theta);
+    // Avoid division by zero
+    const radius = (Math.abs(denominator) < 0.001) ? 
+      1000000 : // Very large number if we're close to division by zero
+      (semiLatusRectum / denominator) * scale;
+    
+    // Convert to Cartesian coordinates centered at (centerX, centerY)
+    return {
+      x: centerX + radius * Math.cos(theta),
+      y: centerY + radius * Math.sin(theta)
+    };
+  }
+
+  /**
+   * Creates a new oval composite based on a conic section
    * Separated from updateOval for better code organization
    */
   private createOvalBody(
@@ -547,8 +594,12 @@ export class CanvasController {
   ): Matter.Composite {
     const wallThickness = 16;
     const ovalBody = Matter.Composite.create();
-
-
+    
+    // Get p parameter from params, or use a default
+    const semiLatusRectum = this.params.semiLatusRectum || 0.5;
+    // Scale factor to adjust overall size
+    const scale = majorAxis / 4;
+    
     const segments = 75;
 
     for (let i = 0; i < segments; i++) {
@@ -556,13 +607,32 @@ export class CanvasController {
       const angle = (i / segments) * Math.PI * 2;
       const nextAngle = ((i + 1) / segments) * Math.PI * 2;
 
-      // Calculate current position on the ellipse
-      const x1 = centerX + (majorAxis / 2) * Math.cos(angle);
-      const y1 = centerY + (minorAxis / 2) * Math.sin(angle);
+      // Calculate points using conic section formula
+      const point1 = this.conicSectionPoint(
+        centerX, 
+        centerY, 
+        this.params.ovalEccentricity,
+        semiLatusRectum,
+        angle,
+        scale
+      );
+      
+      const point2 = this.conicSectionPoint(
+        centerX, 
+        centerY, 
+        this.params.ovalEccentricity,
+        semiLatusRectum,
+        nextAngle,
+        scale
+      );
+      
+      // Use the points from our conic section calculation
+      const x1 = point1.x;
+      const y1 = point1.y;
 
-      // Calculate next position on the ellipse
-      const x2 = centerX + (majorAxis / 2) * Math.cos(nextAngle);
-      const y2 = centerY + (minorAxis / 2) * Math.sin(nextAngle);
+      // Use the second point from our conic section calculation
+      const x2 = point2.x;
+      const y2 = point2.y;
 
       // Calculate midpoint and length of segment
       const midX = (x1 + x2) / 2;
