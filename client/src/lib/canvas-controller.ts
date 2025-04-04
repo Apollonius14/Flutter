@@ -66,7 +66,7 @@ interface RenderParams {
 
 export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 12; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
   private static readonly BASE_LINE_WIDTH: number = 1.0;
@@ -295,7 +295,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 4.0; 
+        const baseSpeed = 6.0; 
 
 
         // Set velocity - still using the original angle, but with adjusted speed
@@ -356,7 +356,7 @@ export class CanvasController {
       const velocityFactor = 1 + (verticalVelocity * 1); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.002 * velocityFactor;
+      const decay = particle.initialEnergy * 0.001 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -376,209 +376,7 @@ export class CanvasController {
     bubble.energy = totalEnergy;
   }
 
-  /**
-   * Calculates and organizes particle wave fronts based on velocity direction
-   * Groups particles by cycle number and dot product of velocity with X-axis
-   */
-  private calculateWaveFronts(bubbles: Bubble[], screenBounds: {min: Point2D, max: Point2D}): WaveFront[] {
-    const waveFronts: WaveFront[] = [];
 
-    // Step 1: Group all particles by cycle number
-    const particlesByCycle: Map<number, Particle[]> = new Map();
-
-    for (const bubble of bubbles) {
-      // Skip bubbles with no energy
-      if (bubble.energy <= 0 || bubble.particles.length === 0) {
-        continue;
-      }
-
-      // Add particles to their cycle group
-      const cycleNumber = bubble.cycleNumber;
-      if (!particlesByCycle.has(cycleNumber)) {
-        particlesByCycle.set(cycleNumber, []);
-      }
-      particlesByCycle.get(cycleNumber)!.push(...bubble.particles);
-    }
-
-    // Process each cycle group
-    // Convert Map entries to array for TypeScript compatibility
-    Array.from(particlesByCycle.entries()).forEach(([cycleNumber, cycleParticles]) => {
-      // Step 2: Filter visible particles
-      const visibleParticles = cycleParticles.filter((p: Particle) => {
-        const pos = p.body.position;
-        return pos.x >= screenBounds.min.x && 
-               pos.x <= screenBounds.max.x && 
-               pos.y >= screenBounds.min.y && 
-               pos.y <= screenBounds.max.y;
-      });
-
-      if (visibleParticles.length < 3) {
-        return; // Skip if not enough particles for a meaningful wavefront
-      }
-
-      // Step 3: Calculate dot product of velocity with positive X-axis
-      // and filter out particles moving close to vertical
-      interface ParticleWithDirection {
-        particle: Particle;
-        dotProduct: number;
-      }
-
-      const directionBasedParticles = visibleParticles.map((p: Particle): ParticleWithDirection => {
-        const velocity = p.body.velocity;
-        const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
-
-        // Calculate normalized dot product (cosine of angle with x-axis)
-        // If speed is 0, use 0 as the dot product
-        const dotProduct = speed === 0 ? 0 : velocity.x / speed;
-
-        return {
-          particle: p,
-          dotProduct
-        };
-      }).filter((item: ParticleWithDirection) => {
-        // Filter out particles moving nearly vertically (dot product close to 0)
-        return Math.abs(item.dotProduct) >= 0.2;
-      });
-
-      // Step 4: Group particles into buckets based on dot product
-      interface DotProductRange {
-        min: number;
-        max: number;
-      }
-
-      const dotProductRanges: DotProductRange[] = [
-        { min: 0.1, max: 0.4 },
-        { min: 0.4, max: 0.7 },
-        { min: 0.7, max: 0.85 },
-        { min: 0.85, max: 1.0 },
-        { min: -0.4, max: -0.1 },
-        { min: -0.7, max: -0.4 },
-        { min: -0.85, max: -0.7 },
-        { min: -1.0, max: -0.85}
-      ];
-
-      // Group particles by their dot product range
-      const particlesByDirection: Map<number, Particle[]> = new Map();
-
-      for (let i = 0; i < dotProductRanges.length; i++) {
-        const range = dotProductRanges[i];
-        const particlesInRange = directionBasedParticles.filter((item: ParticleWithDirection) => 
-          item.dotProduct >= range.min && item.dotProduct <= range.max
-        ).map((item: ParticleWithDirection) => item.particle);
-
-        // Only add groups with enough particles
-        if (particlesInRange.length >= 2) {
-          particlesByDirection.set(i, particlesInRange);
-        }
-      }
-
-      // Step 5: Create wavefronts from each direction group
-      for (let directionIndex = 0; directionIndex < dotProductRanges.length; directionIndex++) {
-        // Skip if no particles in this direction bucket
-        if (!particlesByDirection.has(directionIndex)) continue;
-
-        const groupParticles = particlesByDirection.get(directionIndex)!;
-        // Sort particles by y-coordinate (greatest to smallest) as requested
-        const orderedParticles = [...groupParticles].sort((a, b) => b.body.position.y - a.body.position.y);
-
-        // Extract just the particle positions for the wave front
-        const points: Point2D[] = orderedParticles.map(p => ({
-          x: p.body.position.x,
-          y: p.body.position.y
-        }));
-
-        // Calculate average energy from the particle's energy values
-        // This uses the energy property we set on each particle
-        const avgEnergy = orderedParticles.reduce((sum, p) => sum + p.energy, 0) / orderedParticles.length;
-
-
-        const thicknessFactor = 2;
-        const baseOpacity = 0.9; 
-        waveFronts.push({
-          points,
-          energy: avgEnergy,  // Direct use of particle energy values without artificial multiplier
-          waveIndex: directionIndex, 
-          thicknessFactor,
-          baseOpacity,
-          cycleNumber
-        });
-      }
-    });
-
-    return waveFronts;
-  }
-
-  /** Generates a path through a set of points using cubic Bézier curves **/
-
-  
-
-  private calculatePath(points: Point2D[]): Path2D {
-    const path = new Path2D();
-
-    if (points.length < 2) {
-      return path;
-    }    
-    
-    // Use points directly without smoothing
-    const smoothedPoints = points;
-    
-    path.moveTo(smoothedPoints[0].x, smoothedPoints[0].y);
-    
-    // Check curve type from params
-    if (this.params.curveType === 'cubic') {
-      // Use cubic Bézier curves
-      const controlPointFactor = 0.3;
-      
-      // For better cubic Bezier results with 3+ points, use the previous and next points
-      // to determine control points when possible
-      for (let i = 0; i < smoothedPoints.length - 1; i++) {
-        const p1 = smoothedPoints[i];
-        const p2 = smoothedPoints[i+1];
-        
-        let cp1x, cp1y, cp2x, cp2y;
-        
-        if (i > 0 && i < smoothedPoints.length - 2) {
-          // Use points before and after for better tangent approximation
-          const p0 = smoothedPoints[i-1];
-          const p3 = smoothedPoints[i+2];
-          
-          // Calculate tangent directions based on surrounding points
-          const dx1 = p2.x - p0.x;
-          const dy1 = p2.y - p0.y;
-          const dx2 = p3.x - p1.x;
-          const dy2 = p3.y - p1.y;
-          
-          // Scale the tangent vectors
-          cp1x = p1.x + dx1 * controlPointFactor;
-          cp1y = p1.y + dy1 * controlPointFactor;
-          cp2x = p2.x - dx2 * controlPointFactor;
-          cp2y = p2.y - dy2 * controlPointFactor;
-        } else {
-          // Fall back to simpler method for edge points
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-
-          cp1x = p1.x + dx * controlPointFactor;
-          cp1y = p1.y + dy * controlPointFactor;
-          cp2x = p2.x - dx * controlPointFactor;
-          cp2y = p2.y - dy * controlPointFactor;
-        }
-
-        path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-      }
-    } else {
-      // Use simple lines (linear)
-      for (let i = 1; i < smoothedPoints.length; i++) {
-        path.lineTo(smoothedPoints[i].x, smoothedPoints[i].y);
-      }
-    }
-
-    return path;
-  }
-
-  /**
-   * Renders a particle with opacity based on its energy level
-   */
   private renderParticle(
     ctx: CanvasRenderingContext2D,
     position: Point2D,
@@ -607,7 +405,7 @@ export class CanvasController {
   /**
    * Renders glowing oval segments based on collision data
    */
-  private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number) {
+  private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number): void {
     if (!this.ovalBody || !this.params.showOval) return;
     
     // Get all segments of the oval
@@ -704,52 +502,7 @@ export class CanvasController {
       }
     });
   }
-
-  /**
-   * Renders a wavefront path with a simple stroke
-   */
-  private renderWaveFrontPath(
-    ctx: CanvasRenderingContext2D, 
-    path: Path2D, 
-    waveFront: WaveFront, 
-    renderParams: RenderParams
-  ): void {
-    const { power } = renderParams;
-    const { baseOpacity, thicknessFactor, energy } = waveFront;
-
-    // Energy factor determines all visual properties
-    const energyFactor = energy / (power || 1);
-    
-    // Base width for the line - increased for better visibility in zoomed-out view
-    const baseWidth = energyFactor * thicknessFactor * CanvasController.BASE_LINE_WIDTH * 0.15;
-    
-    // Save context state
-    ctx.save();
-    
-    // Primary color - bright blue
-    const primaryColor = { r: 20, g: 210, b: 255 };
-    const adjustedOpacity = baseOpacity * 0.8;
-    
-    // Set style and draw main stroke
-    ctx.strokeStyle = `rgba(${primaryColor.r}, ${primaryColor.g}, ${primaryColor.b}, ${adjustedOpacity})`;
-    ctx.lineWidth = baseWidth;
-    ctx.stroke(path);
-    
-    // Add a secondary glow effect for high energy waves
-    if (energyFactor > 0.8) {
-      const secondaryColor = { r: 160, g: 240, b: 255 }; // Lighter blue
-      const secondaryOpacity = adjustedOpacity * 0.6;
-      const secondaryWidth = baseWidth * 0.4; // Thinner secondary stroke
-      
-      ctx.strokeStyle = `rgba(${secondaryColor.r}, ${secondaryColor.g}, ${secondaryColor.b}, ${secondaryOpacity})`;
-      ctx.lineWidth = secondaryWidth;
-      ctx.stroke(path);
-    }
-    
-    // Restore context
-    ctx.restore();
-  }
-
+  
   /**
    * Draws UI elements like sweep lines and activation lines
    * Simplified version with fewer draw calls for better performance
@@ -775,23 +528,23 @@ export class CanvasController {
   }
 
 
-  setRTL(enabled: boolean) {
+  public setRTL(enabled: boolean) {
     this.isRTL = enabled;
     // No need to modify physics - we'll handle this in the render phase
     this.drawFrame(0); // Force redraw to see changes immediately
   }
 
-  setShowParticles(show: boolean) {
+  public setShowParticles(show: boolean) {
     this.showParticles = show;
     this.drawFrame(0); // Force redraw to see changes immediately
   }
   
-  setShowPaths(show: boolean) {
+  public setShowPaths(show: boolean) {
     this.showPaths = show;
     this.drawFrame(0); // Force redraw to see changes immediately
   }
 
-  updateParams(params: AnimationParams) {
+  public updateParams(params: AnimationParams) {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
@@ -891,8 +644,8 @@ export class CanvasController {
     const height = this.canvas.height;
     const newCenterX = width * this.params.ovalPosition;
     const centerY = height / 2; 
-    const majorAxis = width * 0.7; // Reduced size for zoomed-out view
-    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8);
+    const majorAxis = width * 0.6; // Reduced size for zoomed-out view
+    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.5);
     
     if (!this.params.showOval) {
       if (this.ovalBody) {
@@ -937,20 +690,20 @@ export class CanvasController {
     }
   }
 
-  play() {
+  public play() {
     if (this.animationFrame !== null) return;
     this.startTime = performance.now();
     this.animate();
   }
 
-  pause() {
+  public pause() {
     if (this.animationFrame === null) return;
     cancelAnimationFrame(this.animationFrame);
     this.animationFrame = null;
     this.startTime = null;
   }
 
-  cleanup() {
+  public cleanup() {
     this.pause();
     Matter.Engine.clear(this.engine);
     Matter.World.clear(this.engine.world, false);
@@ -959,7 +712,7 @@ export class CanvasController {
   private drawFrame(progress: number) {
     // Define width and height variables that can be used throughout this method
     const width = this.canvas.width;
-    const height = this.canvas.height
+    const height = this.canvas.height;
 
     // Apply RTL transformation if enabled
     this.ctx.save();
