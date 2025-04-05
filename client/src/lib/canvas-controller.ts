@@ -393,10 +393,22 @@ export class CanvasController {
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
     let finalOpacity = opacity * this.params.power;
+    let particleSize = size;
+    
     if (particle) {
       // Use particle's energy level directly
       const energyRatio = particle.energy / particle.initialEnergy;
-      finalOpacity = energyRatio * 2; // Slightly brighter than the base opacity
+      
+      // Check if the particle has collided and choose color/size accordingly
+      if (particle.collided > 0) {
+        // For collided (yellow) particles: reduce opacity by 25%
+        finalOpacity = energyRatio * 1.5; // Reduced brightness for yellow particles
+        particleSize = size; // Keep original size for yellow particles
+      } else {
+        // For non-collided (cyan) particles: increase opacity by 20% and size by 20%
+        finalOpacity = energyRatio * 2.4; // Increased brightness for cyan particles
+        particleSize = size * 1.2; // Slightly larger cyan particles
+      }
     } else {
       // Use passed opacity as fallback
       finalOpacity = opacity * 0.5;
@@ -404,15 +416,14 @@ export class CanvasController {
     
     // Draw a filled circle for the particle
     ctx.beginPath();
-    ctx.arc(position.x, position.y, size, 0, Math.PI * 2);
+    ctx.arc(position.x, position.y, particleSize, 0, Math.PI * 2);
     
-    // Check if the particle has collided and choose color accordingly
     // Use yellow for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
-      // Yellow color for particles that have collided
+      // Yellow color for particles that have collided (with reduced opacity)
       ctx.fillStyle = `rgba(255, 255, 0, ${finalOpacity})`;
     } else {
-      // Cyan color for particles that haven't collided
+      // Brighter cyan color for particles that haven't collided
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
     }
     
