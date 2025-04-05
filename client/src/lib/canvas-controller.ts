@@ -16,6 +16,7 @@ interface Particle {
   index: number; 
   energy: number; 
   initialEnergy: number;
+  collided: number; // 0 = never collided, 1+ = collided at least once
 }
 
 interface Bubble {
@@ -46,16 +47,13 @@ interface SegmentGlow {
 
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.51;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
-  private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
-  private static readonly ACTIVATION_LINE_POSITION: number = 0.25; 
-  private static readonly BASE_LINE_WIDTH: number = 1.0;
-  private static readonly PARTICLES_PER_RING: number = 71;
-  private static readonly PARTICLE_RADIUS: number = 1;
-  private static readonly FIXED_BUBBLE_RADIUS: number = 2; 
-
-  private static readonly JOIN_CURVE_ENDS: boolean = false;
+  private static readonly PHYSICS_TIMESTEP_MS: number = 8; 
+  private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
+  private static readonly PARTICLES_PER_RING: number = 98;
+  private static readonly PARTICLE_RADIUS: number = 0.1;
+  private static readonly FIXED_BUBBLE_RADIUS: number = 3; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
     const baseAngles: number[] = [];
@@ -74,7 +72,7 @@ export class CanvasController {
 
     // Apply compression to focus particles toward the front
     for (const angle of baseAngles) {
-      particleAngles.push(angle * (1 - 0.85 * Math.sin(angle) * Math.sin(angle)));
+      particleAngles.push(angle);
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -112,9 +110,9 @@ export class CanvasController {
     this.ctx = ctx;
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
-      positionIterations: 6,
-      velocityIterations: 6,
-      constraintIterations: 4
+      positionIterations: 5,
+      velocityIterations: 4,
+      constraintIterations: 3
     }); 
     this.params = {
       power: 12,
@@ -139,16 +137,23 @@ export class CanvasController {
         const now = performance.now(); 
         for (const pair of pairs) {
           // We need to identify which body is the oval segment
-          let segment, particle;
+          let segment, particleBody;
           
           if (pair.bodyA.collisionFilter.category === 0x0002) {
             segment = pair.bodyA;
-            particle = pair.bodyB;
+            particleBody = pair.bodyB;
           } else if (pair.bodyB.collisionFilter.category === 0x0002) {
             segment = pair.bodyB;
-            particle = pair.bodyA;
+            particleBody = pair.bodyA;
           } else {
             continue; 
+          }
+
+          // Find the actual particle object associated with this physics body
+          const particleObj = this.findParticleByBody(particleBody);
+          if (particleObj) {
+            // Increment the collided count to mark this particle as collided
+            particleObj.collided += 1;
           }
 
           const segmentId = segment.id;
@@ -159,8 +164,8 @@ export class CanvasController {
           
           // Get particle velocity
           const velocity = {
-            x: this.params.power * particle.velocity.x,
-            y: particle.velocity.y
+            x: this.params.power * particleBody.velocity.x,
+            y: particleBody.velocity.y
           };
           
           // Calculate dot product of velocity and normal for collision
@@ -171,7 +176,7 @@ export class CanvasController {
           
           // Apply a threshold to filter out tiny collisions and static noise
           // Ignore collisions that don't meet the minimum threshold
-          const COLLISION_THRESHOLD = 0.35;
+          const COLLISION_THRESHOLD = 0.4;
           if (impactMagnitude < COLLISION_THRESHOLD) {
             continue; // Skip this collision as it's too small
           }
@@ -213,22 +218,28 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.15; // Reduced to create a more zoomed-out view
+    const compressionFactor = 0.2; // Reduced to create a more zoomed-out view
     const center = canvasHeight / 2;
-    const numPositions = 9; 
-    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 6);
-    const halfSpacing = baseSpacing / 10;
+    const numPositions = 15; 
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
+    const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
-    positions.push(center - halfSpacing - baseSpacing * 4);
     positions.push(center - halfSpacing - baseSpacing * 3);
+    positions.push(center - halfSpacing - baseSpacing * 2.5);
     positions.push(center - halfSpacing - baseSpacing * 2);
+    positions.push(center - halfSpacing - baseSpacing * 1.5);
+    positions.push(center - halfSpacing - baseSpacing * 1);
+    positions.push(center - halfSpacing - baseSpacing * 0.5);
     positions.push(center - halfSpacing - baseSpacing);
     positions.push(center);
     positions.push(center + halfSpacing + baseSpacing);
+    positions.push(center + halfSpacing + baseSpacing * 0.5);
+    positions.push(center + halfSpacing + baseSpacing * 1);
+    positions.push(center + halfSpacing + baseSpacing * 1.5);
     positions.push(center + halfSpacing + baseSpacing * 2);
+    positions.push(center + halfSpacing + baseSpacing * 2.5);
     positions.push(center + halfSpacing + baseSpacing * 3);
-    positions.push(center + halfSpacing + baseSpacing * 4);
 
     return positions;
   }
@@ -248,7 +259,7 @@ export class CanvasController {
     this.positions.forEach(y => {
       // Bubble radius multiplier based on the distance from center
       const normalizedPos = (y - centerY) / (height / 2);
-      const radiusMultiplier = 0.5 + 1 * Math.cos(normalizedPos * Math.PI);
+      const radiusMultiplier = 2.5 + 4 * Math.cos(normalizedPos * Math.PI);
       const bubbleRadius = baseRadius * radiusMultiplier;
       const groupId = this.currentGroupId++;
 
@@ -275,12 +286,12 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 8.0; 
+        const baseSpeed = 10.0; 
 
 
         Matter.Body.setVelocity(body, {
-          x: Math.cos(angle) * baseSpeed,
-          y: Math.sin(angle) * baseSpeed
+          x: Math.cos(angle) * baseSpeed * 1.2,
+          y: Math.sin(angle) * baseSpeed * 0.9
         });
 
         Matter.Composite.add(this.engine.world, body);
@@ -291,7 +302,8 @@ export class CanvasController {
           cycleNumber: this.currentCycleNumber,
           index: idx,
           energy: this.params.power,
-          initialEnergy: this.params.power
+          initialEnergy: this.params.power,
+          collided: 0 // Initialize with no collisions
         };
         particles.push(particle);
       });
@@ -317,6 +329,22 @@ export class CanvasController {
    * and then recalculates the bubble's total energy as the sum of its particles
    * @param bubble The bubble to update energy for
    */
+  /**
+   * Finds a particle object by its Matter.js body
+   * This is needed to map from physics bodies to our particle objects
+   */
+  private findParticleByBody(body: Matter.Body): Particle | undefined {
+    // Search through all bubbles and their particles
+    for (const bubble of this.bubbles) {
+      for (const particle of bubble.particles) {
+        if (particle.body.id === body.id) {
+          return particle;
+        }
+      }
+    }
+    return undefined;
+  }
+  
   private updateBubbleEnergy(bubble: Bubble) {
     // Create a copy of particles for safe iteration while potentially removing some
     const particles = [...bubble.particles];
@@ -364,20 +392,30 @@ export class CanvasController {
     size: number = 2.0
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
-    let finalOpacity = opacity;
+    let finalOpacity = opacity * this.params.power;
     if (particle) {
       // Use particle's energy level directly
       const energyRatio = particle.energy / particle.initialEnergy;
-      finalOpacity = energyRatio * 0.8; // Slightly brighter than the base opacity
+      finalOpacity = energyRatio * 2; // Slightly brighter than the base opacity
     } else {
       // Use passed opacity as fallback
-      finalOpacity = opacity * 0.8;
+      finalOpacity = opacity * 0.5;
     }
     
     // Draw a filled circle for the particle
     ctx.beginPath();
     ctx.arc(position.x, position.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(254, 37, 3, ${finalOpacity})`;
+    
+    // Check if the particle has collided and choose color accordingly
+    // Use yellow for particles that have collided, cyan for those that haven't
+    if (particle && particle.collided > 0) {
+      // Yellow color for particles that have collided
+      ctx.fillStyle = `rgba(255, 255, 0, ${finalOpacity})`;
+    } else {
+      // Cyan color for particles that haven't collided
+      ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
+    }
+    
     ctx.fill();
   }
   
@@ -427,7 +465,7 @@ export class CanvasController {
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
       // Apply smoother exponential decay to the intensity with longer persistence
-      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge); // Slower decay for more visible effects
+      const currentIntensity = glow.intensity * Math.exp(-9 * glowAge); // Slower decay for more visible effects
       
       // Render segment with enhanced pink glow
       const vertices = segment.vertices;
@@ -551,7 +589,7 @@ export class CanvasController {
     majorAxis: number,
     minorAxis: number
   ): Matter.Composite {
-    const wallThickness = 16;
+    const wallThickness = 18;
     const ovalBody = Matter.Composite.create();
     const segments = 75;
 
@@ -626,9 +664,9 @@ export class CanvasController {
         isStatic: true,
         angle: segmentAngle,
         restitution: 1.0,
-        friction: 0,
+        friction: 0.0,
         frictionAir: 0,
-        frictionStatic: 0,
+        frictionStatic: 0.0,
         slop: 0.005,  
         collisionFilter: {
           category: 0x0002,
