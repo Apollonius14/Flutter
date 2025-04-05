@@ -6,6 +6,7 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
+  mouthOpening: number;  // 0 = closed oval, 1 = half oval (maximum opening)
 }
 
 interface Particle {
@@ -120,7 +121,8 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.3
+      ovalEccentricity: 0.3,
+      mouthOpening: 0 // default: closed oval (no opening)
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -508,20 +510,24 @@ export class CanvasController {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
+    const prevMouthOpening = this.params.mouthOpening;
 
     this.params = params;
 
     // Check if oval-related parameters have changed
     const ovalChanged = prevShowOval !== params.showOval || 
                         prevPosition !== params.ovalPosition || 
-                        prevEccentricity !== params.ovalEccentricity;
+                        prevEccentricity !== params.ovalEccentricity ||
+                        prevMouthOpening !== params.mouthOpening;
 
     if (ovalChanged) {
-      // If position changed, but eccentricity stayed the same, we can optimize
+      // Check which specific parameters changed
       const eccentricityChanged = prevEccentricity !== params.ovalEccentricity;
+      const mouthOpeningChanged = prevMouthOpening !== params.mouthOpening;
 
       // If we need to create a new oval, delete the old one first
-      if (this.ovalBody && (eccentricityChanged || prevShowOval !== params.showOval)) {
+      // We recreate the oval if eccentricity or mouth opening changed or if the oval visibility changed
+      if (this.ovalBody && (eccentricityChanged || mouthOpeningChanged || prevShowOval !== params.showOval)) {
         Matter.Composite.remove(this.engine.world, this.ovalBody);
         this.ovalBody = null;
       }
@@ -547,14 +553,42 @@ export class CanvasController {
   ): Matter.Composite {
     const wallThickness = 16;
     const ovalBody = Matter.Composite.create();
-
-
     const segments = 75;
+
+    // Calculate the mouth opening angle based on mouthOpening parameter
+    // When mouthOpening is 0, there's no opening
+    // When mouthOpening is 1, half of the oval is open (PI radians)
+    const mouthAngle = Math.PI * this.params.mouthOpening;
+    
+    // Calculate the range of angles to skip for the mouth opening
+    // Assuming the mouth is on the right side of the oval (positive x-direction)
+    // We use a small offset to start from slightly above/below horizontal axis
+    const skipStartAngle = -mouthAngle / 2;
+    const skipEndAngle = mouthAngle / 2;
 
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
       const angle = (i / segments) * Math.PI * 2;
       const nextAngle = ((i + 1) / segments) * Math.PI * 2;
+
+      // Check if this segment should be skipped (part of the mouth opening)
+      // For RTL mode, we need to adjust the angles (mouth on the left side)
+      let inMouthRegion;
+      if (this.isRTL) {
+        // For RTL, the mouth opening is on the left side (around PI radians)
+        const rtlAngle = angle - Math.PI; // Shift by PI to get to the left side
+        const normalizedAngle = ((rtlAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // Normalize to [0, 2π)
+        inMouthRegion = (normalizedAngle >= Math.PI - mouthAngle/2) && 
+                        (normalizedAngle <= Math.PI + mouthAngle/2);
+      } else {
+        // For LTR, the mouth opening is on the right side (around 0 radians)
+        const normalizedAngle = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // Normalize to [0, 2π)
+        inMouthRegion = (normalizedAngle >= -mouthAngle/2) && 
+                        (normalizedAngle <= mouthAngle/2);
+      }
+
+      // Skip this segment if it's part of the mouth opening
+      if (inMouthRegion) continue;
 
       // Calculate current position on the ellipse
       const x1 = centerX + (majorAxis / 2) * Math.cos(angle);
