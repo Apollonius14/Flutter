@@ -245,9 +245,9 @@ export default function Home() {
                       </Label>
                       <Slider
                         value={[ovalEccentricity]}
-                        min={0.1}
-                        max={0.95} // Reduced maximum to prevent wild transitions
-                        step={0.01}
+                        min={0.69}
+                        max={0.99} // Reduced maximum to prevent wild transitions
+                        step={0.05}
                         onValueChange={([value]) => setOvalEccentricity(value)}
                         className="flex-1"
                         disabled={!showOval}
@@ -259,9 +259,9 @@ export default function Home() {
                       </Label>
                       <Slider
                         value={[semiLatusRectum]}
-                        min={0.1}
-                        max={0.5} // Reduced range for more controlled transitions
-                        step={0.01}
+                        min={0.69}
+                        max={0.99} // Reduced range for more controlled transitions
+                        step={0.03}
                         onValueChange={([value]) => setSemiLatusRectum(value)}
                         className="flex-1"
                         disabled={!showOval}
