@@ -18,8 +18,7 @@ const translations = {
     particles: "Particles",
     oval: "Oval",
     position: "Position",
-    eccentricity: "Eccentricity",
-    semiLatusRectum: "Size (p)"
+    eccentricity: "Eccentricity"
   },
   ar: {
     title: "محاكاة تدفق الهواء",
@@ -32,8 +31,7 @@ const translations = {
     particles: "الجسيمات",
     oval: "بيضاوي",
     position: "الموضع",
-    eccentricity: "التمركز",
-    semiLatusRectum: "الحجم (p)"
+    eccentricity: "التمركز"
   }
 };
 
@@ -48,7 +46,6 @@ export default function Home() {
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
-  const [semiLatusRectum, setSemiLatusRectum] = useState(0.5); // default p parameter for conic section
   const t = translations[language];
   const [powerValue, setPowerValue] = useState(3); // default value of 3 (middle of 1-7 range)
   // Using a fixed frequency value of 0.15 since we're removing the frequency slider
@@ -98,8 +95,7 @@ export default function Home() {
         frequency: 0.15, // Fixed frequency value
         showOval,
         ovalPosition,
-        ovalEccentricity,
-        semiLatusRectum
+        ovalEccentricity
       });
       lastPowerValue.current = powerValue;
       setCycleStarted(true);
@@ -107,7 +103,7 @@ export default function Home() {
       // Reset cycle tracking when paused
       setCycleStarted(false);
     }
-  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, semiLatusRectum]);
+  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity]);
   
   // Add a listener to know when a cycle starts
   useEffect(() => {
@@ -121,8 +117,7 @@ export default function Home() {
           frequency: 0.15, // Fixed frequency value
           showOval,
           ovalPosition,
-          ovalEccentricity,
-          semiLatusRectum
+          ovalEccentricity
         });
         lastPowerValue.current = powerValue;
       }
@@ -137,7 +132,7 @@ export default function Home() {
         controller.onCycleStart = null;
       }
     };
-  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, semiLatusRectum]);
+  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity]);
 
   useEffect(() => {
     if (!controller) return;
@@ -166,10 +161,9 @@ export default function Home() {
       frequency: 0.15,
       showOval,
       ovalPosition,
-      ovalEccentricity,
-      semiLatusRectum
+      ovalEccentricity
     });
-  }, [controller, showOval, ovalPosition, ovalEccentricity, semiLatusRectum, powerValue]);
+  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
@@ -245,24 +239,10 @@ export default function Home() {
                       </Label>
                       <Slider
                         value={[ovalEccentricity]}
-                        min={0.69}
-                        max={0.99} // Reduced maximum to prevent wild transitions
-                        step={0.05}
+                        min={0.1}
+                        max={0.99}
+                        step={0.01}
                         onValueChange={([value]) => setOvalEccentricity(value)}
-                        className="flex-1"
-                        disabled={!showOval}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className={`text-gray-200 w-1/5 text-sm ${language === 'ar' ? 'arabic text-right' : ''}`}>
-                        {t.semiLatusRectum}
-                      </Label>
-                      <Slider
-                        value={[semiLatusRectum]}
-                        min={0.69}
-                        max={0.99} // Reduced range for more controlled transitions
-                        step={0.03}
-                        onValueChange={([value]) => setSemiLatusRectum(value)}
                         className="flex-1"
                         disabled={!showOval}
                       />

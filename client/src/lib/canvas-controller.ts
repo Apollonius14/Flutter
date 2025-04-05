@@ -6,7 +6,6 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
-  semiLatusRectum?: number; // p parameter for conic section
 }
 
 interface Particle {
@@ -121,8 +120,7 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.3,
-      semiLatusRectum: 0.5 // Default p parameter for conic section
+      ovalEccentricity: 0.3
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -383,7 +381,6 @@ export class CanvasController {
   
   /**
    * Renders glowing oval segments based on collision data
-   * Enhanced for better handling of varying segment counts and open curves
    */
   private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number): void {
     if (!this.ovalBody || !this.params.showOval) return;
@@ -391,31 +388,16 @@ export class CanvasController {
     // Get all segments of the oval
     const segments = Matter.Composite.allBodies(this.ovalBody);
     
-    // If we have no segments (completely invalid curve), exit early
-    if (segments.length === 0) return;
-    
     // Filter out old glows based on decay rate
     const now = timestamp;
     
-    // Process each segment glow - remove glows older than 6 seconds
+    // Process each segment glow - remove glows older than 6 seconds (increased from 5)
     this.segmentGlows = this.segmentGlows.filter(glow => {
       const age = (now - glow.lastUpdateTime) / 1000;
-      return age < 6; // Keep longer lasting effects
+      return age < 6; // Increased max age for longer lasting effects
     });
     
-    // Determine if we need to adjust glow intensity based on segment count
-    // More segments = smaller individual glows, so we need to compensate
-    // Square root scaling gives a good balance for segment count differences
-    const segmentCountFactor = Math.max(1, Math.sqrt(75 / segments.length));
-    
-    // Adjust base glow intensity based on eccentricity
-    // Parabolas and hyperbolas need more pronounced glows to be visible
-    const eccentricityBoost = this.params.ovalEccentricity > 0.9 ? 
-      1.5 + (this.params.ovalEccentricity - 0.9) * 5 : 1.0;
-    
-    const baseAlpha = 0.05 * eccentricityBoost;
-    
-    // First draw all segments with a very faint base fill
+    // First draw all segments with a very faint pink fill (no borders)
     segments.forEach(segment => {
       const vertices = segment.vertices;
       
@@ -426,88 +408,61 @@ export class CanvasController {
       }
       ctx.closePath();
       
-      // Enhanced base glow with eccentricity boost
-      ctx.fillStyle = `rgba(255, 200, 230, ${baseAlpha})`; 
+      // Enhanced base glow for all segments
+      ctx.fillStyle = 'rgba(255, 200, 230, 0.05)'; // Slightly more visible base color
       ctx.fill();
+      // No stroke for the default state
     });
     
     // Then draw only the segments with active glows with more vibrant colors
     segments.forEach(segment => {
-      // Get segment position for unique ID generation
-      const pos = segment.position;
-      // Create a unique ID based on position (more robust than using index)
-      const segmentId = Math.floor(pos.x * 100) + Math.floor(pos.y * 100) * 1000;
-      
       // Find the glow for this segment
-      let glow = this.segmentGlows.find(g => g.segmentId === segmentId);
+      const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
       
-      // Initialize new glows with a small ambient value
-      if (!glow) {
-        glow = {
-          segmentId: segmentId,
-          intensity: 0.02 * eccentricityBoost, // Higher ambient glow for extreme shapes
-          lastUpdateTime: now
-        };
-        this.segmentGlows.push(glow);
-      }
+      if (!glow) return; // Skip segments with no collision glow
       
       // Calculate how old this glow is in seconds
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
-      // Apply smoother exponential decay with longer persistence for extreme shapes
-      const decayRate = 7 / eccentricityBoost; // Slower decay for extreme shapes
-      const currentIntensity = glow.intensity * Math.exp(-decayRate * glowAge);
+      // Apply smoother exponential decay to the intensity with longer persistence
+      const currentIntensity = glow.intensity * Math.exp(-7 * glowAge); // Slower decay for more visible effects
       
-      // Skip rendering if intensity is too low
-      if (currentIntensity < 0.01) return;
-      
-      // Render segment with enhanced glow
+      // Render segment with enhanced pink glow
       const vertices = segment.vertices;
       
-      // Calculate adjusted intensity based on segment count
-      const adjustedIntensity = currentIntensity * segmentCountFactor;
       
-      // Get segment dimensions for glow sizing
-      const bounds = (segment as any).bounds;
-      const segmentLength = bounds.max.x - bounds.min.x;
-      const segmentWidth = bounds.max.y - bounds.min.y;
-      const segmentSize = Math.max(segmentLength, segmentWidth);
+      ctx.beginPath();
+      ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      ctx.closePath();
       
-      // Apply a radial gradient glow effect
-      ctx.save();
-      ctx.translate(pos.x, pos.y);
-      ctx.rotate(segment.angle);
-      
-      // Calculate glow size based on multiple factors
-      const baseGlowSize = Math.max(segmentWidth * 3, 30);
-      const intensityScaledSize = baseGlowSize * (1 + adjustedIntensity);
-      const finalGlowSize = intensityScaledSize * eccentricityBoost;
-      
-      // Create radial gradient for glow effect
-      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, finalGlowSize / 2);
-      
-      // Calculate colors based on intensity
+      const fillOpacity = currentIntensity;
+      // More vibrant colors for high intensities
       const r = 255;
-      const g = Math.max(20, Math.min(180, 90 + adjustedIntensity * 90));
-      const b = Math.max(150, Math.min(240, 170 + adjustedIntensity * 70));
+      const g = Math.max(20, Math.min(180, 90 + currentIntensity * 90)); // Enhanced green value range
+      const b = Math.max(150, Math.min(240, 170 + currentIntensity * 70)); // Enhanced blue value range
       
-      // Inner color (bright)
-      gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${Math.min(0.7, adjustedIntensity * 0.4)})`);
-      // Mid color
-      gradient.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${adjustedIntensity * 0.2})`);
-      // Outer color (transparent)
-      gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      // Only use fill, no stroke for a more fluid look
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
+      ctx.fill();
       
-      // Apply gradient fill
-      ctx.fillStyle = gradient;
-      ctx.fillRect(
-        -segmentLength/2 - finalGlowSize/2, 
-        -segmentWidth/2 - finalGlowSize/2, 
-        segmentLength + finalGlowSize, 
-        segmentWidth + finalGlowSize
-      );
+      // Add a multi-layer outer glow for high-intensity collisions with bloom effect
+       // Lower threshold to make glow appear more often
+        // First layer of bloom
+        ctx.beginPath();
+        ctx.moveTo(vertices[0].x, vertices[0].y);
+        for (let i = 1; i < vertices.length; i++) {
+          ctx.lineTo(vertices[i].x, vertices[i].y);
+        ctx.closePath();
+        
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${currentIntensity})`; // Higher opacity
+        ctx.fill();
+        
+        
+        }
       
-      ctx.restore();
     });
   }
   
@@ -553,23 +508,20 @@ export class CanvasController {
     const prevShowOval = this.params.showOval;
     const prevPosition = this.params.ovalPosition;
     const prevEccentricity = this.params.ovalEccentricity;
-    const prevSemiLatusRectum = this.params.semiLatusRectum;
 
     this.params = params;
 
     // Check if oval-related parameters have changed
     const ovalChanged = prevShowOval !== params.showOval || 
                         prevPosition !== params.ovalPosition || 
-                        prevEccentricity !== params.ovalEccentricity ||
-                        prevSemiLatusRectum !== params.semiLatusRectum;
+                        prevEccentricity !== params.ovalEccentricity;
 
     if (ovalChanged) {
-      // If position changed, but eccentricity and semiLatusRectum stayed the same, we can optimize
+      // If position changed, but eccentricity stayed the same, we can optimize
       const eccentricityChanged = prevEccentricity !== params.ovalEccentricity;
-      const semiLatusRectumChanged = prevSemiLatusRectum !== params.semiLatusRectum;
-      
+
       // If we need to create a new oval, delete the old one first
-      if (this.ovalBody && (eccentricityChanged || semiLatusRectumChanged || prevShowOval !== params.showOval)) {
+      if (this.ovalBody && (eccentricityChanged || prevShowOval !== params.showOval)) {
         Matter.Composite.remove(this.engine.world, this.ovalBody);
         this.ovalBody = null;
       }
@@ -584,86 +536,7 @@ export class CanvasController {
   }
 
   /**
-   * Calculates a point on a conic section in polar form
-   * @param eccentricity - Controls the type of curve (0: circle, 0-1: ellipse, 1: parabola, >1: hyperbola)
-   * @param semiLatusRectum - Size parameter (often denoted as 'p')
-   * @param theta - Angle in radians
-   * @returns The point coordinates at the given angle or null if the angle is in an invalid range
-   */
-  private conicSectionPoint(
-    centerX: number,
-    centerY: number, 
-    eccentricity: number,
-    semiLatusRectum: number,
-    theta: number,
-    scale: number
-  ): Point2D | null {
-    // Apply nonlinear scaling to make the parameters less sensitive
-    // Apply cubic scaling to eccentricity when approaching 1 (makes transition smoother)
-    let effectiveEccentricity = eccentricity;
-    if (eccentricity > 0.8 && eccentricity < 1) {
-      // Slow down the approach to 1 (parabola) with cubic scaling
-      const normalizedE = (eccentricity - 0.8) / 0.2; // 0 to 1 scale
-      effectiveEccentricity = 0.8 + 0.2 * Math.pow(normalizedE, 3);
-    }
-    
-    // Scale the semiLatusRectum param to be less sensitive too
-    let effectiveP = semiLatusRectum;
-    // Apply quadratic scaling to make small changes have less dramatic effects
-    effectiveP = Math.pow(semiLatusRectum, 2);
-    
-    // For parabolas (e=1) and hyperbolas (e>1), we need to limit the angle range
-    // to create open curves instead of closed ones
-    if (effectiveEccentricity >= 0.98) { // Near parabola or hyperbola 
-      // For parabola and hyperbola, only show a limited arc (not a full 360)
-      // As we get closer to or exceed e=1, we narrow the valid angle range
-      const arcSizeRadians = Math.PI * (1.0 - Math.min(0.8, Math.abs(effectiveEccentricity - 0.95))); 
-      
-      // Map angular range to being centered around 0 for easier calculations
-      const normalizedTheta = ((theta + Math.PI) % (2 * Math.PI)) - Math.PI; // -PI to PI
-      
-      // Check if we're outside the valid arc - return null to indicate no valid point
-      if (Math.abs(normalizedTheta) > arcSizeRadians / 2) {
-        return null; // No point to draw in this region - creates open curves
-      }
-    }
-    
-    // For hyperbola specifically
-    if (effectiveEccentricity > 1) {
-      // For hyperbola, limit angles to valid range to avoid division by zero
-      const limitAngle = Math.acos(1 / effectiveEccentricity);
-      // If within the "forbidden zone", return null
-      if (Math.abs(theta) < limitAngle) {
-        return null; // Creates the gap in hyperbola
-      }
-    }
-    
-    // Calculate radius using polar form of conic section
-    const denominator = 1 - effectiveEccentricity * Math.cos(theta);
-    
-    // Safety check - avoid division by zero or extremely small denominators
-    if (Math.abs(denominator) < 0.001) {
-      return null; // Skip this point rather than creating extreme values
-    }
-    
-    // Calculate the radius with all our scaled parameters
-    const radius = (effectiveP / denominator) * scale;
-    
-    // Set a reasonable limit on radius to prevent extremely large points
-    const MAX_RADIUS = 2000;
-    if (Math.abs(radius) > MAX_RADIUS) {
-      return null; // Skip extremely large points
-    }
-    
-    // Convert to Cartesian coordinates centered at (centerX, centerY)
-    return {
-      x: centerX + radius * Math.cos(theta),
-      y: centerY + radius * Math.sin(theta)
-    };
-  }
-
-  /**
-   * Creates a new oval composite based on a conic section
+   * Creates a new oval composite
    * Separated from updateOval for better code organization
    */
   private createOvalBody(
@@ -674,65 +547,31 @@ export class CanvasController {
   ): Matter.Composite {
     const wallThickness = 16;
     const ovalBody = Matter.Composite.create();
-    
-    // Get p parameter from params, or use a default
-    const semiLatusRectum = this.params.semiLatusRectum || 0.5;
-    // Scale factor to adjust overall size
-    const scale = majorAxis / 4;
-    
-    // Increase segments for smoother curves, especially important for extreme conic sections
-    const segments = this.params.ovalEccentricity > 0.9 ? 150 : 75;
-    
-    // Store points to create continuous segments
-    const validPoints: Point2D[] = [];
-    
-    // First, collect all valid points around the curve
-    for (let i = 0; i <= segments; i++) {
-      // Calculate angle for this point
+
+
+    const segments = 75;
+
+    for (let i = 0; i < segments; i++) {
+      // Calculate current angle and next angle
       const angle = (i / segments) * Math.PI * 2;
-      
-      // Get point if it exists in the valid domain
-      const point = this.conicSectionPoint(
-        centerX, 
-        centerY, 
-        this.params.ovalEccentricity,
-        semiLatusRectum,
-        angle,
-        scale
-      );
-      
-      // If we got a valid point, add it to our collection
-      if (point !== null) {
-        validPoints.push(point);
-      }
-    }
-    
-    // Now create segments between consecutive valid points
-    for (let i = 0; i < validPoints.length - 1; i++) {
-      // Since we filtered for non-null points above, these are guaranteed to exist
-      const p1 = validPoints[i];
-      const p2 = validPoints[i + 1];
-      
-      // Skip if points are too far apart (discontinuity in the curve)
-      const distance = Math.sqrt(
-        Math.pow(p2.x - p1.x, 2) + 
-        Math.pow(p2.y - p1.y, 2)
-      );
-      
-      // Skip creating segments that bridge across a gap in the curve
-      // This prevents connecting the two sides of a hyperbola or parabola
-      const MAX_SEGMENT_LENGTH = 100; // Adjust based on testing
-      if (distance > MAX_SEGMENT_LENGTH) {
-        continue;
-      }
-      
-      // Calculate midpoint and segment properties
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-      const segmentLength = distance;
-      const segmentAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-      
-      // Create physics body for this segment
+      const nextAngle = ((i + 1) / segments) * Math.PI * 2;
+
+      // Calculate current position on the ellipse
+      const x1 = centerX + (majorAxis / 2) * Math.cos(angle);
+      const y1 = centerY + (minorAxis / 2) * Math.sin(angle);
+
+      // Calculate next position on the ellipse
+      const x2 = centerX + (majorAxis / 2) * Math.cos(nextAngle);
+      const y2 = centerY + (minorAxis / 2) * Math.sin(nextAngle);
+
+      // Calculate midpoint and length of segment
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const segmentLength = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+      // Calculate angle of the segment
+      const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
+
       const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
         isStatic: true,
         angle: segmentAngle,
@@ -747,7 +586,7 @@ export class CanvasController {
           group: 0
         }
       });
-      
+
       // Add the segment to our composite
       Matter.Composite.add(ovalBody, segment);
     }
