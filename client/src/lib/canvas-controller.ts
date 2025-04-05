@@ -558,33 +558,49 @@ export class CanvasController {
     // Calculate the mouth opening angle based on mouthOpening parameter
     // When mouthOpening is 0, there's no opening
     // When mouthOpening is 1, half of the oval is open (PI radians)
+    // The opening should be symmetrical around the horizontal axis
     const mouthAngle = Math.PI * this.params.mouthOpening;
     
-    // Calculate the range of angles to skip for the mouth opening
-    // Assuming the mouth is on the right side of the oval (positive x-direction)
-    // We use a small offset to start from slightly above/below horizontal axis
-    const skipStartAngle = -mouthAngle / 2;
-    const skipEndAngle = mouthAngle / 2;
-
     for (let i = 0; i < segments; i++) {
       // Calculate current angle and next angle
       const angle = (i / segments) * Math.PI * 2;
       const nextAngle = ((i + 1) / segments) * Math.PI * 2;
 
+      // Normalize angle to [0, 2π)
+      const normalizedAngle = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      
       // Check if this segment should be skipped (part of the mouth opening)
-      // For RTL mode, we need to adjust the angles (mouth on the left side)
       let inMouthRegion;
+      
+      // The mouth opening should be symmetrical across the horizontal axis
       if (this.isRTL) {
-        // For RTL, the mouth opening is on the left side (around PI radians)
-        const rtlAngle = angle - Math.PI; // Shift by PI to get to the left side
-        const normalizedAngle = ((rtlAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // Normalize to [0, 2π)
-        inMouthRegion = (normalizedAngle >= Math.PI - mouthAngle/2) && 
-                        (normalizedAngle <= Math.PI + mouthAngle/2);
+        // For RTL, the opening is on the left side (π radians)
+        
+        // Calculate how far we are from the left horizontal line (π radians)
+        // We need to consider the angle either above or below the horizontal line
+        // For angles in the left half of the circle, we need the smaller angle to the horizontal
+        const angleFromLeftHorizontal = Math.abs(normalizedAngle - Math.PI);
+        
+        // The mouth should be centered on the left side (π radians) 
+        // and symmetrical up and down (from 3π/2 to π/2, going clockwise)
+        inMouthRegion = (angleFromLeftHorizontal <= mouthAngle/2) && 
+                        // This ensures we're on the left side of the oval
+                        (normalizedAngle > Math.PI/2 && normalizedAngle < Math.PI * 3/2);
       } else {
-        // For LTR, the mouth opening is on the right side (around 0 radians)
-        const normalizedAngle = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // Normalize to [0, 2π)
-        inMouthRegion = (normalizedAngle >= -mouthAngle/2) && 
-                        (normalizedAngle <= mouthAngle/2);
+        // For LTR, the opening is on the right side (0 or 2π radians)
+        
+        // For angles near 0 or 2π (right horizontal), get the smaller angle to the axis
+        // For angles close to 0, it's just the angle itself
+        // For angles close to 2π, it's 2π - angle
+        const angleFromRightHorizontal = normalizedAngle <= Math.PI 
+                                       ? normalizedAngle 
+                                       : 2 * Math.PI - normalizedAngle;
+        
+        // The mouth should be centered on the right side (0 radians)
+        // and symmetrical up and down (from π/2 to 3π/2, going counterclockwise) 
+        inMouthRegion = (angleFromRightHorizontal <= mouthAngle/2) && 
+                        // This ensures we're on the right side of the oval
+                        (normalizedAngle < Math.PI/2 || normalizedAngle > Math.PI * 3/2);
       }
 
       // Skip this segment if it's part of the mouth opening
