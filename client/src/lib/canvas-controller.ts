@@ -290,7 +290,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 8; 
+        const baseSpeed = 9; 
 
 
         Matter.Body.setVelocity(body, {
@@ -364,10 +364,10 @@ export class CanvasController {
       
       // Calculate decay factor - higher vertical velocity means faster decay
       // This will penalize vertical motion, emphasizing horizontal waves
-      const velocityFactor = 1 + (verticalVelocity * 1); // 20% penalty per unit of vertical velocity
+      const velocityFactor = 0.5 + (verticalVelocity * 0.5); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.001 * velocityFactor;
+      const decay = particle.initialEnergy * 0.001 * 0.5 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -470,15 +470,15 @@ export class CanvasController {
       const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
       
       if (glow && glow.intensity > 0.1) {
-        // Use more intense yellow-green glow for higher impacts
+        // Use more intense neon pink glow for higher impacts
         const intensity = glow.intensity;
-        // Yellow-green gradient for glow
+        // Neon pink gradient for glow
         // Scale up intensity for more vibrant effect
         const scaledIntensity = Math.min(intensity * 3, 1);
         
-        // Draw the segment with glow
-        ctx.strokeStyle = `rgba(50, 255, 25, ${scaledIntensity})`;
-        ctx.lineWidth = 3 + intensity ^ 2; // Glow size depends on intensity
+        // Draw the segment with neon pink glow
+        ctx.strokeStyle = `rgba(255, 0, 255, ${scaledIntensity})`;
+        ctx.lineWidth = 3 + intensity * 2; // Glow size depends on intensity - fixed XOR to multiplication
         
         // Use the segment vertices to draw the outline
         const vertices = segment.vertices;
@@ -648,7 +648,7 @@ export class CanvasController {
     // Helper function to group particles by direction angle
     const groupParticlesByDirection = (particles: Particle[]) => {
       const buckets = new Map<number, Particle[]>();
-      const bucketSize = 10; // Increased from 5 to 10 degrees for smoother curves
+      const bucketSize = 15; // Increased from 5 to 10 degrees for smoother curves
       
       for (const particle of particles) {
         // Calculate direction of particle's motion
@@ -1068,26 +1068,50 @@ export class CanvasController {
     if (this.params.showOval && this.ovalBody) {
       this.renderOvalGlow(ctx, performance.now());
       
-      // Draw oval body outline for visibility
-      ctx.strokeStyle = "rgba(100, 100, 0, 0.2)";
-      ctx.lineWidth = 0.5;
+      // Draw oval body outline for visibility with neon pink color
+      ctx.strokeStyle = "rgba(255, 20, 147, 0.6)"; // Neon pink with some transparency
+      ctx.lineWidth = 1.2;
       
-      // Using oval segments for more precise drawing
+      // Draw the outer and inner edges separately to create a fluid ring appearance
       const segments = Matter.Composite.allBodies(this.ovalBody);
+      
+      // Render outer edge
+      ctx.beginPath();
       for (const segment of segments) {
-        ctx.beginPath();
-        
-        // Connect all vertices for this segment
+        const verts = segment.vertices;
+        // Only draw the outer edge (first two vertices)
+        ctx.moveTo(verts[0].x, verts[0].y);
+        ctx.lineTo(verts[1].x, verts[1].y);
+      }
+      ctx.stroke();
+      
+      // Render inner edge with a slightly different shade for depth
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255, 105, 180, 0.4)"; // Lighter pink for inner edge
+      for (const segment of segments) {
+        const verts = segment.vertices;
+        // Only draw the inner edge (last two vertices)
+        ctx.moveTo(verts[2].x, verts[2].y);
+        ctx.lineTo(verts[3].x, verts[3].y);
+      }
+      ctx.stroke();
+      
+      // Add a subtle glow effect
+      ctx.shadowColor = "rgba(255, 0, 255, 0.5)";
+      ctx.shadowBlur = 5;
+      ctx.strokeStyle = "rgba(255, 20, 147, 0.2)";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      for (const segment of segments) {
         const verts = segment.vertices;
         ctx.moveTo(verts[0].x, verts[0].y);
-        
-        for (let i = 1; i < verts.length; i++) {
-          ctx.lineTo(verts[i].x, verts[i].y);
-        }
-        
-        ctx.closePath();
-        ctx.stroke();
+        ctx.lineTo(verts[1].x, verts[1].y);
       }
+      ctx.stroke();
+      
+      // Reset shadow effect
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
     }
     
     // Draw wave visualization if enabled
