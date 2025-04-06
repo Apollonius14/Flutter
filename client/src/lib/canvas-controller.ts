@@ -8,6 +8,7 @@ interface AnimationParams {
   ovalEccentricity: number;
   mouthOpening: number;  // 0 = closed oval, 1 = half oval (maximum opening)
   showWaves: boolean;    // Whether to show the wave visualization
+  showSmooth: boolean;   // Whether to use smooth bezier curves for wave visualization
 }
 
 interface Particle {
@@ -52,7 +53,7 @@ export class CanvasController {
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 8; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 98;
+  private static readonly PARTICLES_PER_RING: number = 88;
   private static readonly PARTICLE_RADIUS: number = 0.1;
   private static readonly FIXED_BUBBLE_RADIUS: number = 3; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -122,7 +123,8 @@ export class CanvasController {
       ovalPosition: 0.5,
       ovalEccentricity: 0.3,
       mouthOpening: 0, // default: closed oval (no opening)
-      showWaves: false // default: don't show waves
+      showWaves: false, // default: don't show waves
+      showSmooth: false // default: don't use smooth bezier curves
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -422,8 +424,8 @@ export class CanvasController {
     
     // Use yellow for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
-      // Yellow color for particles that have collided (with reduced opacity)
-      ctx.fillStyle = `rgba(255, 255, 0, ${finalOpacity})`;
+      // Dimmer color for particles that have collided (with reduced opacity)
+      ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity}*0.7)`;
     } else {
       // Brighter cyan color for particles that haven't collided
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
@@ -530,7 +532,7 @@ export class CanvasController {
     this.ctx.beginPath();
     this.ctx.moveTo(timeX, 0);
     this.ctx.lineTo(timeX, height);
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
     this.ctx.lineWidth = 3; // Increased for better visibility in zoomed-out view
     this.ctx.stroke();
 
@@ -557,6 +559,11 @@ export class CanvasController {
   
   public setShowWaves(show: boolean) {
     this.params.showWaves = show;
+    this.drawFrame(0); // Force redraw to see changes immediately
+  }
+  
+  public setShowSmooth(show: boolean) {
+    this.params.showSmooth = show;
     this.drawFrame(0); // Force redraw to see changes immediately
   }
   
@@ -593,57 +600,211 @@ export class CanvasController {
       // Define the maximum x-difference threshold for drawing lines
       // Since PARTICLE_RADIUS is very small (0.1), we'll use a more practical value
       // Using 5 * particle radius would be too small, so we'll set a fixed pixel value
-      const maxXDiff = 15; // 15 pixels threshold for better visibility
+      const maxXDiff = 12; // 12 pixels threshold for better visibility
       
-      // Draw connecting lines for non-collided particles (blue)
-      if (nonCollidedParticles.length > 1) {
-        // Each segment will be drawn individually with a check for x-difference
-        for (let i = 1; i < nonCollidedParticles.length; i++) {
-          const prevParticle = nonCollidedParticles[i-1];
-          const particle = nonCollidedParticles[i];
-          
-          // Calculate the absolute x-difference between particles
-          const dx = Math.abs(particle.body.position.x - prevParticle.body.position.x);
-          
-          // Only draw the line if x-difference is less than the threshold
-          if (dx <= maxXDiff) {
-            ctx.beginPath();
-            ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
-            ctx.lineTo(particle.body.position.x, particle.body.position.y);
+      if (this.params.showSmooth) {
+        // SMOOTH MODE: Group particles by direction and draw Bezier curves
+        this.renderSmoothWaves(ctx, nonCollidedParticles, collidedParticles);
+      } else {
+        // NORMAL MODE: Draw individual connecting lines
+        
+        // Draw connecting lines for non-collided particles (blue)
+        if (nonCollidedParticles.length > 1) {
+          // Each segment will be drawn individually with a check for x-difference
+          for (let i = 1; i < nonCollidedParticles.length; i++) {
+            const prevParticle = nonCollidedParticles[i-1];
+            const particle = nonCollidedParticles[i];
             
-            // Fixed opacity for non-collided (blue) lines - doubled from base (requirement A)
-            ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)'; // Blue line with fixed opacity (doubled but capped at 0.9)
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+            // Calculate the absolute x-difference between particles
+            const dx = Math.abs(particle.body.position.x - prevParticle.body.position.x);
+            
+            // Only draw the line if x-difference is less than the threshold
+            if (dx <= maxXDiff) {
+              ctx.beginPath();
+              ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
+              ctx.lineTo(particle.body.position.x, particle.body.position.y);
+              
+              // Fixed opacity for non-collided (blue) lines - doubled from base (requirement A)
+              ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)'; // Blue line with fixed opacity (doubled but capped at 0.9)
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+            }
           }
         }
-      }
-      
-      // Draw connecting lines for collided particles (yellow)
-      if (collidedParticles.length > 1) {
-        // Each segment will be drawn individually with a check for x-difference
-        for (let i = 1; i < collidedParticles.length; i++) {
-          const prevParticle = collidedParticles[i-1];
-          const particle = collidedParticles[i];
-          
-          // Calculate the absolute x-difference between particles
-          const dx = Math.abs(particle.body.position.x - prevParticle.body.position.x);
-          
-          // Only draw the line if x-difference is less than the threshold
-          if (dx <= maxXDiff) {
-            ctx.beginPath();
-            ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
-            ctx.lineTo(particle.body.position.x, particle.body.position.y);
+        
+        // Draw connecting lines for collided particles (yellow)
+        if (collidedParticles.length > 1) {
+          // Each segment will be drawn individually with a check for x-difference
+          for (let i = 1; i < collidedParticles.length; i++) {
+            const prevParticle = collidedParticles[i-1];
+            const particle = collidedParticles[i];
             
-            // Fixed opacity for collided (yellow) lines - 30% reduced from base (requirement B)
-            ctx.strokeStyle = 'rgba(255, 200, 0, 0.42)'; // Yellow line with fixed opacity (0.6 * 0.7)
-            // Reduced line thickness by 30% for collided lines (requirement B)
-            ctx.lineWidth = 1.5 * 0.7;
-            ctx.stroke();
+            // Calculate the absolute x-difference between particles
+            const dx = Math.abs(particle.body.position.x - prevParticle.body.position.x);
+            
+            // Only draw the line if x-difference is less than the threshold
+            if (dx <= maxXDiff) {
+              ctx.beginPath();
+              ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
+              ctx.lineTo(particle.body.position.x, particle.body.position.y);
+              
+              // Fixed opacity for collided (yellow) lines - 30% reduced from base (requirement B)
+              ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellow line with fixed opacity (0.6 * 0.7)
+              // Reduced line thickness by 30% for collided lines (requirement B)
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }
           }
         }
       }
     });
+  }
+  
+  // Method to render smooth bezier curves through particle centroids
+  private renderSmoothWaves(
+    ctx: CanvasRenderingContext2D,
+    nonCollidedParticles: Particle[],
+    collidedParticles: Particle[]
+  ): void {
+    // Function to calculate angle in degrees from velocity
+    const getDirectionAngle = (particle: Particle): number => {
+      const vx = particle.body.velocity.x;
+      const vy = particle.body.velocity.y;
+      // Calculate angle in degrees (0-360)
+      const angleRad = Math.atan2(vy, vx);
+      return ((angleRad * 180 / Math.PI) + 360) % 360;
+    };
+    
+    // Function to group particles by direction in 5-degree buckets
+    const groupParticlesByDirection = (particles: Particle[]): Map<number, Particle[]> => {
+      const bucketSize = 5; // 5-degree bucket size
+      const buckets = new Map<number, Particle[]>();
+      
+      for (const particle of particles) {
+        const angle = getDirectionAngle(particle);
+        const bucketKey = Math.floor(angle / bucketSize) * bucketSize;
+        
+        if (!buckets.has(bucketKey)) {
+          buckets.set(bucketKey, []);
+        }
+        
+        buckets.get(bucketKey)?.push(particle);
+      }
+      
+      return buckets;
+    };
+    
+    // Function to calculate centroid of a group of particles
+    const calculateCentroid = (particles: Particle[]): Point2D => {
+      if (particles.length === 0) return { x: 0, y: 0 };
+      
+      let sumX = 0;
+      let sumY = 0;
+      
+      for (const particle of particles) {
+        sumX += particle.body.position.x;
+        sumY += particle.body.position.y;
+      }
+      
+      return {
+        x: sumX / particles.length,
+        y: sumY / particles.length
+      };
+    };
+    
+    // Draw smooth curves for non-collided particles (blue)
+    if (nonCollidedParticles.length > 5) { // Need enough particles for meaningful curve
+      const buckets = groupParticlesByDirection(nonCollidedParticles);
+      const centroids: Point2D[] = [];
+      
+      // Extract centroids in order of x-coordinate
+      Array.from(buckets.entries())
+        .map(([_, particles]) => {
+          return {
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          };
+        })
+        .filter(item => item.count >= 2) // Only use buckets with multiple particles
+        .sort((a, b) => a.centroid.x - b.centroid.x) // Sort by x-coordinate
+        .forEach(item => centroids.push(item.centroid));
+      
+      // Draw bezier curve through centroids if we have enough points
+      if (centroids.length >= 4) {
+        ctx.beginPath();
+        
+        // Start from the first centroid
+        ctx.moveTo(centroids[0].x, centroids[0].y);
+        
+        // Draw cubic bezier curves through the centroids
+        for (let i = 1; i < centroids.length - 2; i++) {
+          const c1 = centroids[i];
+          const c2 = centroids[i + 1];
+          const end = centroids[i + 2];
+          
+          // Calculate control points for smoother curves
+          const cp1x = c1.x + (c2.x - centroids[i - 1].x) / 6;
+          const cp1y = c1.y + (c2.y - centroids[i - 1].y) / 6;
+          const cp2x = c2.x - (end.x - c1.x) / 6;
+          const cp2y = c2.y - (end.y - c1.y) / 6;
+          
+          // Draw cubic bezier segment
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, end.x, end.y);
+        }
+        
+        // Set style properties for non-collided curve (blue)
+        ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+    }
+    
+    // Draw smooth curves for collided particles (yellow)
+    if (collidedParticles.length > 5) { // Need enough particles for meaningful curve
+      const buckets = groupParticlesByDirection(collidedParticles);
+      const centroids: Point2D[] = [];
+      
+      // Extract centroids in order of x-coordinate
+      Array.from(buckets.entries())
+        .map(([_, particles]) => {
+          return {
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          };
+        })
+        .filter(item => item.count >= 2) // Only use buckets with multiple particles
+        .sort((a, b) => a.centroid.x - b.centroid.x) // Sort by x-coordinate
+        .forEach(item => centroids.push(item.centroid));
+      
+      // Draw bezier curve through centroids if we have enough points
+      if (centroids.length >= 4) {
+        ctx.beginPath();
+        
+        // Start from the first centroid
+        ctx.moveTo(centroids[0].x, centroids[0].y);
+        
+        // Draw cubic bezier curves through the centroids
+        for (let i = 1; i < centroids.length - 2; i++) {
+          const c1 = centroids[i];
+          const c2 = centroids[i + 1];
+          const end = centroids[i + 2];
+          
+          // Calculate control points for smoother curves
+          const cp1x = c1.x + (c2.x - centroids[i - 1].x) / 6;
+          const cp1y = c1.y + (c2.y - centroids[i - 1].y) / 6;
+          const cp2x = c2.x - (end.x - c1.x) / 6;
+          const cp2y = c2.y - (end.y - c1.y) / 6;
+          
+          // Draw cubic bezier segment
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, end.x, end.y);
+        }
+        
+        // Set style properties for collided curve (yellow)
+        ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)';
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+      }
+    }
   }
 
   public updateParams(params: AnimationParams) {
@@ -691,9 +852,9 @@ export class CanvasController {
     majorAxis: number,
     minorAxis: number
   ): Matter.Composite {
-    const wallThickness = 18;
+    const wallThickness = 24;
     const ovalBody = Matter.Composite.create();
-    const segments = 68;
+    const segments = 58;
 
     // Calculate the mouth opening angle based on mouthOpening parameter
     // When mouthOpening is 0, there's no opening
@@ -868,7 +1029,7 @@ export class CanvasController {
     }
 
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.1)'; 
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.05)'; 
     this.ctx.fillRect(0, 0, width, height);
 
     // =====================================

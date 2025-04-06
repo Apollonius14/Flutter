@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Circle, Languages, Loader, Waves } from "lucide-react";
+import { ChevronLeft, ChevronRight, Circle, Languages, Loader, Waves, GitBranchPlus } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
 
 const translations = {
@@ -17,6 +17,7 @@ const translations = {
     rtl: "Right to Left",
     particles: "Particles",
     waves: "Wave Lines",
+    smooth: "Smooth Waves",
     oval: "Oval",
     position: "Position",
     eccentricity: "Eccentricity",
@@ -32,6 +33,7 @@ const translations = {
     rtl: "من اليمين إلى اليسار",
     particles: "الجسيمات",
     waves: "خطوط الموجة",
+    smooth: "موجات سلسة",
     oval: "بيضاوي",
     position: "الموضع",
     eccentricity: "التمركز",
@@ -48,6 +50,7 @@ export default function Home() {
   const [isRTL, setIsRTL] = useState(false);
   const [showParticles, setShowParticles] = useState(true);
   const [showWaves, setShowWaves] = useState(false);
+  const [showSmooth, setShowSmooth] = useState(false);
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
@@ -103,7 +106,8 @@ export default function Home() {
         ovalPosition,
         ovalEccentricity,
         mouthOpening,
-        showWaves
+        showWaves,
+        showSmooth
       });
       lastPowerValue.current = powerValue;
       setCycleStarted(true);
@@ -111,7 +115,7 @@ export default function Home() {
       // Reset cycle tracking when paused
       setCycleStarted(false);
     }
-  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves]);
+  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves, showSmooth]);
   
   // Add a listener to know when a cycle starts
   useEffect(() => {
@@ -127,7 +131,8 @@ export default function Home() {
           ovalPosition,
           ovalEccentricity,
           mouthOpening,
-          showWaves
+          showWaves,
+          showSmooth
         });
         lastPowerValue.current = powerValue;
       }
@@ -142,7 +147,7 @@ export default function Home() {
         controller.onCycleStart = null;
       }
     };
-  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves]);
+  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves, showSmooth]);
 
   useEffect(() => {
     if (!controller) return;
@@ -168,6 +173,11 @@ export default function Home() {
     controller.setShowWaves(showWaves);
   }, [showWaves, controller]);
   
+  useEffect(() => {
+    if (!controller) return;
+    controller.setShowSmooth(showSmooth);
+  }, [showSmooth, controller]);
+  
   // Dedicated effect for oval settings
   useEffect(() => {
     if (!controller) return;
@@ -178,15 +188,17 @@ export default function Home() {
       ovalPosition,
       ovalEccentricity,
       mouthOpening,
-      showWaves
+      showWaves,
+      showSmooth
     });
-  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, mouthOpening, showWaves]);
+  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, mouthOpening, showWaves, showSmooth]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
   const toggleShowParticles = () => setShowParticles(prev => !prev);
   const toggleShowWaves = () => setShowWaves(prev => !prev);
+  const toggleShowSmooth = () => setShowSmooth(prev => !prev);
   const toggleShowOval = () => setShowOval(prev => !prev);
 
   return (
@@ -341,6 +353,18 @@ export default function Home() {
                   title={t.waves}
                 >
                   <Waves className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant={showSmooth ? "default" : "outline"}
+                  onClick={toggleShowSmooth}
+                  className={`border-gray-600 rounded-full ${showSmooth ? 'bg-purple-500 text-white' : 'text-gray-400'}`}
+                  title={t.smooth}
+                  // Smooth mode should only be available when waves are enabled
+                  disabled={!showWaves}
+                >
+                  <GitBranchPlus className="h-4 w-4" />
                 </Button>
               </div>
             </div>
