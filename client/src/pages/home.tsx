@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Circle, Languages, Loader } from "lucide-react";
+import { ChevronLeft, ChevronRight, Circle, Languages, Loader, Waves } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
 
 const translations = {
@@ -16,6 +16,7 @@ const translations = {
     ltr: "Left to Right",
     rtl: "Right to Left",
     particles: "Particles",
+    waves: "Wave Lines",
     oval: "Oval",
     position: "Position",
     eccentricity: "Eccentricity",
@@ -30,6 +31,7 @@ const translations = {
     ltr: "من اليسار إلى اليمين",
     rtl: "من اليمين إلى اليسار",
     particles: "الجسيمات",
+    waves: "خطوط الموجة",
     oval: "بيضاوي",
     position: "الموضع",
     eccentricity: "التمركز",
@@ -45,6 +47,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRTL, setIsRTL] = useState(false);
   const [showParticles, setShowParticles] = useState(true);
+  const [showWaves, setShowWaves] = useState(false);
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
@@ -99,7 +102,8 @@ export default function Home() {
         showOval,
         ovalPosition,
         ovalEccentricity,
-        mouthOpening
+        mouthOpening,
+        showWaves
       });
       lastPowerValue.current = powerValue;
       setCycleStarted(true);
@@ -107,7 +111,7 @@ export default function Home() {
       // Reset cycle tracking when paused
       setCycleStarted(false);
     }
-  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, mouthOpening]);
+  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves]);
   
   // Add a listener to know when a cycle starts
   useEffect(() => {
@@ -122,7 +126,8 @@ export default function Home() {
           showOval,
           ovalPosition,
           ovalEccentricity,
-          mouthOpening
+          mouthOpening,
+          showWaves
         });
         lastPowerValue.current = powerValue;
       }
@@ -137,7 +142,7 @@ export default function Home() {
         controller.onCycleStart = null;
       }
     };
-  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, mouthOpening]);
+  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves]);
 
   useEffect(() => {
     if (!controller) return;
@@ -158,6 +163,11 @@ export default function Home() {
     controller.setShowParticles(showParticles);
   }, [showParticles, controller]);
   
+  useEffect(() => {
+    if (!controller) return;
+    controller.setShowWaves(showWaves);
+  }, [showWaves, controller]);
+  
   // Dedicated effect for oval settings
   useEffect(() => {
     if (!controller) return;
@@ -167,14 +177,16 @@ export default function Home() {
       showOval,
       ovalPosition,
       ovalEccentricity,
-      mouthOpening
+      mouthOpening,
+      showWaves
     });
-  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, mouthOpening]);
+  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, mouthOpening, showWaves]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
   const toggleShowParticles = () => setShowParticles(prev => !prev);
+  const toggleShowWaves = () => setShowWaves(prev => !prev);
   const toggleShowOval = () => setShowOval(prev => !prev);
 
   return (
@@ -319,6 +331,16 @@ export default function Home() {
                   title={t.particles}
                 >
                   <Circle className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant={showWaves ? "default" : "outline"}
+                  onClick={toggleShowWaves}
+                  className={`border-gray-600 rounded-full ${showWaves ? 'bg-blue-500 text-white' : 'text-gray-400'}`}
+                  title={t.waves}
+                >
+                  <Waves className="h-4 w-4" />
                 </Button>
               </div>
             </div>

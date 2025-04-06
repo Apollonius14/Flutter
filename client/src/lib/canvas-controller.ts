@@ -7,6 +7,7 @@ interface AnimationParams {
   ovalPosition: number; 
   ovalEccentricity: number;
   mouthOpening: number;  // 0 = closed oval, 1 = half oval (maximum opening)
+  showWaves: boolean;    // Whether to show the wave visualization
 }
 
 interface Particle {
@@ -47,7 +48,7 @@ interface SegmentGlow {
 
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 8; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
@@ -120,7 +121,8 @@ export class CanvasController {
       showOval: false,
       ovalPosition: 0.5,
       ovalEccentricity: 0.3,
-      mouthOpening: 0 // default: closed oval (no opening)
+      mouthOpening: 0, // default: closed oval (no opening)
+      showWaves: false // default: don't show waves
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -286,7 +288,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 10.0; 
+        const baseSpeed = 7.5; 
 
 
         Matter.Body.setVelocity(body, {
@@ -553,7 +555,74 @@ export class CanvasController {
     this.drawFrame(0); // Force redraw to see changes immediately
   }
   
-  // Removed setShowPaths method
+  public setShowWaves(show: boolean) {
+    this.params.showWaves = show;
+    this.drawFrame(0); // Force redraw to see changes immediately
+  }
+  
+  // Render wave lines connecting particles by cycle
+  private renderWaves(ctx: CanvasRenderingContext2D): void {
+    if (!this.params.showWaves) return;
+    
+    // Group particles by cycle number
+    const particlesByCycle = new Map<number, Particle[]>();
+    
+    // Collect all visible particles from all bubbles
+    for (const bubble of this.bubbles) {
+      for (const particle of bubble.particles) {
+        const cycleNumber = particle.cycleNumber;
+        
+        if (!particlesByCycle.has(cycleNumber)) {
+          particlesByCycle.set(cycleNumber, []);
+        }
+        
+        particlesByCycle.get(cycleNumber)?.push(particle);
+      }
+    }
+    
+    // Process each cycle's particles
+    particlesByCycle.forEach((particles, cycleNumber) => {
+      // Further group by collided status (0 or 1+)
+      const nonCollidedParticles = particles.filter(p => p.collided === 0);
+      const collidedParticles = particles.filter(p => p.collided > 0);
+      
+      // Sort particles by their original index to maintain the creation order
+      nonCollidedParticles.sort((a, b) => a.index - b.index);
+      collidedParticles.sort((a, b) => a.index - b.index);
+      
+      // Draw connecting lines for non-collided particles (blue)
+      if (nonCollidedParticles.length > 1) {
+        ctx.beginPath();
+        const startParticle = nonCollidedParticles[0];
+        ctx.moveTo(startParticle.body.position.x, startParticle.body.position.y);
+        
+        for (let i = 1; i < nonCollidedParticles.length; i++) {
+          const particle = nonCollidedParticles[i];
+          ctx.lineTo(particle.body.position.x, particle.body.position.y);
+        }
+        
+        ctx.strokeStyle = 'rgba(0, 170, 255, 0.6)'; // Blue line for non-collided
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      
+      // Draw connecting lines for collided particles (yellow)
+      if (collidedParticles.length > 1) {
+        ctx.beginPath();
+        const startParticle = collidedParticles[0];
+        ctx.moveTo(startParticle.body.position.x, startParticle.body.position.y);
+        
+        for (let i = 1; i < collidedParticles.length; i++) {
+          const particle = collidedParticles[i];
+          ctx.lineTo(particle.body.position.x, particle.body.position.y);
+        }
+        
+        ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)'; // Yellow line for collided
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    });
+  }
 
   public updateParams(params: AnimationParams) {
     const prevShowOval = this.params.showOval;
@@ -602,7 +671,7 @@ export class CanvasController {
   ): Matter.Composite {
     const wallThickness = 18;
     const ovalBody = Matter.Composite.create();
-    const segments = 75;
+    const segments = 68;
 
     // Calculate the mouth opening angle based on mouthOpening parameter
     // When mouthOpening is 0, there's no opening
@@ -777,7 +846,7 @@ export class CanvasController {
     }
 
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.15)'; 
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.1)'; 
     this.ctx.fillRect(0, 0, width, height);
 
     // =====================================
@@ -894,6 +963,11 @@ export class CanvasController {
       // Always render the glow effect on oval segments
       this.renderOvalGlow(this.ctx, performance.now());
     }
+    
+    // Render wave visualization if enabled
+    if (this.params.showWaves) {
+      this.renderWaves(this.ctx);
+    }
 
     // Restore canvas state (important for RTL transformation)
     this.ctx.restore();
@@ -951,7 +1025,7 @@ export class CanvasController {
     const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
 
     // Use a variable number of substeps based on whether oval is shown
-    const numSubSteps = this.params.showOval ? 6 : 3; // Doubled substeps: 8 when oval present, 4 when not
+    const numSubSteps = this.params.showOval ? 5 : 3; // Doubled substeps: 8 when oval present, 4 when not
     const subStepTime = fixedDeltaTime / numSubSteps;
 
     // Perform physics updates in substeps for better stability
