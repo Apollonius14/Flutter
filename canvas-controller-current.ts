@@ -849,60 +849,36 @@ export class CanvasController {
       const endAngle = startAngle + angleStep;
       
       // Calculate whether this segment should be part of the "mouth" opening
-      // The mouth should be symmetrical about the horizontal axis
-      
-      // Calculate the mouth opening angle based on mouthOpening parameter
-      // When mouthOpening is 0, there's no opening
-      // When mouthOpening is 1, half of the oval is open (PI radians)
-      const mouthWidth = mouthOpening * Math.PI; // up to 180 degrees
-      
-      // Normalize angle to [0, 2π)
-      const midAngle = ((startAngle + endAngle) / 2 + Math.PI * 2) % (Math.PI * 2);
-      
-      // Determine if this segment is in the mouth region
-      let inMouthRegion = false;
-      
-      if (this.isRTL) {
-        // For RTL, the opening is on the left side (π radians)
-        // For angles in the left half of the circle, we need the smaller angle to the horizontal
-        const angleFromLeftHorizontal = Math.abs(midAngle - Math.PI);
-        
-        // The mouth should be centered on the left side (π radians) 
-        // and symmetrical up and down (from 3π/2 to π/2, going clockwise)
-        inMouthRegion = (angleFromLeftHorizontal <= mouthWidth/2) && 
-                        // This ensures we're on the left side of the oval
-                        (midAngle > Math.PI/2 && midAngle < Math.PI * 3/2);
-      } else {
-        // For LTR, the opening is on the right side (0 or 2π radians)
-        // We need the smaller angle to the horizontal axis
-        const angleFromRightHorizontal = (midAngle <= Math.PI) 
-                                       ? midAngle 
-                                       : 2 * Math.PI - midAngle;
-        
-        // The mouth should be centered on the right side (0 radians)
-        // and symmetrical up and down (from π/2 to 3π/2, going counterclockwise) 
-        inMouthRegion = (angleFromRightHorizontal <= mouthWidth/2) && 
-                        // This ensures we're on the right side of the oval
-                        (midAngle < Math.PI/2 || midAngle > Math.PI * 3/2);
-      }
+      // The mouth should be centered around the 0° mark (right side) or 180° (left side)
+      // depending on RTL setting
+      const mouthAngle = this.isRTL ? Math.PI : 0; // 180° for RTL, 0° for LTR
+      const angleDiff = Math.abs(
+        ((startAngle + endAngle) / 2 + Math.PI * 2) % (2 * Math.PI) - mouthAngle
+      );
       
       // Skip creating this segment if it's part of the mouth opening
-      if (inMouthRegion) {
+      // mouthOpening of 0 means no opening (closed oval)
+      // mouthOpening of 1 means maximum opening (half the oval is open)
+      const mouthWidth = mouthOpening * Math.PI; // up to 180 degrees
+      if (angleDiff < mouthWidth / 2) {
         continue;
       }
       
       // Calculate vertices of the segment
-      const startX = ovalCenterX + Math.cos(startAngle) * ovalWidth;
-      const startY = ovalCenterY + Math.sin(startAngle) * ovalHeight;
-      const endX = ovalCenterX + Math.cos(endAngle) * ovalWidth;
-      const endY = ovalCenterY + Math.sin(endAngle) * ovalHeight;
+      const startAngleOffset = startAngle + angleDiff;
+      const endAngleOffset = endAngle - angleDiff;
+      const startX = ovalCenterX + Math.cos(startAngleOffset) * ovalWidth;
+      const startY = ovalCenterY + Math.sin(startAngleOffset) * ovalHeight;
+      const endX = ovalCenterX + Math.cos(endAngleOffset) * ovalWidth;
+      const endY = ovalCenterY + Math.sin(endAngleOffset) * ovalHeight;
+      
       
       // Create thickness for the oval wall - offset inward
-      const innerScale = 0.9; // 10% smaller for thickness
-      const innerStartX = ovalCenterX + Math.cos(startAngle) * ovalWidth * innerScale;
-      const innerStartY = ovalCenterY + Math.sin(startAngle) * ovalHeight * innerScale;
-      const innerEndX = ovalCenterX + Math.cos(endAngle) * ovalWidth * innerScale;
-      const innerEndY = ovalCenterY + Math.sin(endAngle) * ovalHeight * innerScale;
+      const innerScale = 0.9; // 5% smaller for thickness
+      const innerStartX = ovalCenterX + Math.cos(startAngleOffset) * ovalWidth * innerScale;
+      const innerStartY = ovalCenterY + Math.sin(startAngleOffset) * ovalHeight * innerScale;
+      const innerEndX = ovalCenterX + Math.cos(endAngleOffset) * ovalWidth * innerScale;
+      const innerEndY = ovalCenterY + Math.sin(endAngleOffset) * ovalHeight * innerScale;
       
       // Create a quad segment using 4 vertices
       const segment = Matter.Bodies.fromVertices(
