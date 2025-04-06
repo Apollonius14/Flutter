@@ -33,23 +33,20 @@ interface Bubble {
   initialEnergy: number;
 }
 
+// New interface for representing a point in 2D space
 interface Point2D {
   x: number;
   y: number;
 }
 
+
+// Interface for segment glow data
 interface SegmentGlow {
   intensity: number;
   lastUpdateTime: number;
   segmentId: number;
 }
 
-// For centroid data with angle bucket information
-interface CentroidData {
-  angleBucket: number;
-  centroid: Point2D;
-  count: number;
-}
 
 export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
@@ -124,7 +121,7 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.3,
+      ovalEccentricity: 0.6,
       mouthOpening: 0, // default: closed oval (no opening)
       showWaves: false, // default: don't show waves
       showSmooth: false // default: don't use smooth bezier curves
@@ -293,7 +290,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 4; 
+        const baseSpeed = 9; 
 
 
         Matter.Body.setVelocity(body, {
@@ -332,6 +329,11 @@ export class CanvasController {
   }
 
   /**
+   * Updates the energy of individual particles based on their vertical velocity
+   * and then recalculates the bubble's total energy as the sum of its particles
+   * @param bubble The bubble to update energy for
+   */
+  /**
    * Finds a particle object by its Matter.js body
    * This is needed to map from physics bodies to our particle objects
    */
@@ -362,10 +364,10 @@ export class CanvasController {
       
       // Calculate decay factor - higher vertical velocity means faster decay
       // This will penalize vertical motion, emphasizing horizontal waves
-      const velocityFactor = 1 + (verticalVelocity * 1); // 20% penalty per unit of vertical velocity
+      const velocityFactor = 0.5 + (verticalVelocity * 0.5); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.001 * velocityFactor;
+      const decay = particle.initialEnergy * 0.001 * 0.5 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -391,7 +393,7 @@ export class CanvasController {
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = 2.0
+    size: number = CanvasController.PARTICLE_RADIUS
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
     let finalOpacity = opacity * this.params.power;
@@ -433,16 +435,33 @@ export class CanvasController {
   }
   
   /**
-   * Renders glowing oval segments based on collision data
+   * Updates glow data for oval segments
    */
   private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number): void {
     if (!this.ovalBody || !this.params.showOval) return;
     
-    // Process each segment glow - remove glows older than 6 seconds (increased from 5)
+    // Filter out old glows based on decay rate
+    const now = timestamp;
+    
+    // Process each segment glow - remove glows older than 3 seconds
     this.segmentGlows = this.segmentGlows.filter(glow => {
-      const age = (timestamp - glow.lastUpdateTime);
-      return age < 6000;
+      const age = (now - glow.lastUpdateTime) / 1000;
+      return age < 3; // Keep glows less than 3 seconds old
     });
+  
+    // Apply decay to all glows
+    for (const glow of this.segmentGlows) {
+      const age = (now - glow.lastUpdateTime) / 1000;
+      
+      // Apply exponential decay
+      const decayFactor = Math.pow(0.75, age * 2);
+      
+      // Update the intensity with our decay
+      glow.intensity *= decayFactor;
+    }
+    
+    // Remove glows that have faded below threshold
+    this.segmentGlows = this.segmentGlows.filter(glow => glow.intensity > 0.05);
   }
   
   /**
@@ -452,179 +471,149 @@ export class CanvasController {
   private drawUIElements(width: number, height: number, progress: number): void {
     const ctx = this.ctx;
     
-    // Calculate sweep line position based on progress (0 to 1) across canvas width
-    let sweepLineX = width * progress;
-    
-    // Handle RTL (right-to-left) layout
-    if (this.isRTL) {
-      sweepLineX = width - sweepLineX;
-    }
-    
-    // Store for later reference
-    this.previousSweepLineX = sweepLineX;
+    // Calculate new sweep line position
+    const sweepPosition = width * (0.05 + progress * 0.9);
+    this.previousSweepLineX = sweepPosition;
     
     // Draw activation line
+    ctx.strokeStyle = "#353583";
+    ctx.lineWidth = 1;
+    
     ctx.beginPath();
-    ctx.strokeStyle = "rgba(255, 0, 0, 0.4)";
-    ctx.lineWidth = 1.0;
     ctx.moveTo(this.activationLineX, 0);
-    ctx.lineTo(this.activationLineX, height);
+    ctx.lineTo(this.activationLineX, height); 
     ctx.stroke();
     
-    // Draw sweep line
-    ctx.beginPath();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-    ctx.lineWidth = 1.0;
-    ctx.moveTo(sweepLineX, 0);
-    ctx.lineTo(sweepLineX, height);
+    // Draw sweep line with a subtle gradient
+    const gradient = ctx.createLinearGradient(sweepPosition - 10, 0, sweepPosition + 10, 0);
+    gradient.addColorStop(0, "rgba(51, 153, 255, 0)");  
+    gradient.addColorStop(0.5, "rgba(51, 153, 255, 0.6)"); 
+    
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 2;
+    
+    ctx.beginPath();  
+    ctx.moveTo(sweepPosition, 0);
+    ctx.lineTo(sweepPosition, height);
     ctx.stroke();
   }
 
+  
   public setRTL(enabled: boolean) {
     this.isRTL = enabled;
-    // Update activation line based on RTL setting
-    this.activationLineX = this.isRTL 
-      ? this.canvas.width * (1 - CanvasController.ACTIVATION_LINE_POSITION) 
-      : this.canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
+    // Rebuild the oval with the new RTL status
+    if (this.params.showOval) {
+      this.updateOval();
+    }
   }
-
+  
   public setShowParticles(show: boolean) {
     this.showParticles = show;
   }
-
+  
   public setShowWaves(show: boolean) {
     this.params.showWaves = show;
   }
-
+  
   public setShowSmooth(show: boolean) {
     this.params.showSmooth = show;
   }
-
+  
   private renderWaves(ctx: CanvasRenderingContext2D): void {
-    ctx.strokeStyle = "rgba(0, 255, 255, 0.3)";
-    ctx.lineWidth = 0.5;
+    // Group particles by cycleNumber
+    const cycleGroups = new Map<number, Particle[]>();
     
-    // Group particles by bubble/group for drawing connections
-    // This will help emphasize wave patterns
-    const groups = new Map<number, Particle[]>();
-    
-    // Collect all particles into their respective groups
-    this.bubbles.forEach(bubble => {
-      if (!groups.has(bubble.groupId)) {
-        groups.set(bubble.groupId, []);
+    for (const bubble of this.bubbles) {
+      const cycle = bubble.cycleNumber;
+      
+      if (!cycleGroups.has(cycle)) {
+        cycleGroups.set(cycle, []);
       }
       
-      // Add all particles from this bubble to their group
-      bubble.particles.forEach(particle => {
-        groups.get(bubble.groupId)?.push(particle);
-      });
-    });
+      for (const particle of bubble.particles) {
+        cycleGroups.get(cycle)?.push(particle);
+      }
+    }
     
-    // Connect particles within the same group with lines
-    groups.forEach(particles => {
-      if (particles.length < 2) return; // Need at least 2 particles
+    // Render each cycle's particles
+    cycleGroups.forEach(particles => {
+      // Group by groupId (bubble)
+      const bubbleGroups = new Map<number, Particle[]>();
       
-      // Sort by index to connect in creation order
-      particles.sort((a, b) => a.index - b.index);
-      
-      // Draw lines between consecutive particles
-      ctx.beginPath();
-      
-      const first = particles[0];
-      const firstPos = first.body.position;
-      ctx.moveTo(firstPos.x, firstPos.y);
-      
-      for (let i = 1; i < particles.length; i++) {
-        const prev = particles[i-1];
-        const curr = particles[i];
-        const prevPos = prev.body.position;
-        const currPos = curr.body.position;
+      for (const particle of particles) {
+        const group = particle.groupId;
         
-        // Only draw connections between particles if they're close enough
-        // This prevents long stretching lines across the canvas
-        const dx = currPos.x - prevPos.x;
-        const dy = currPos.y - prevPos.y;
-        const distance = Math.sqrt(dx*dx + dy*dy);
+        if (!bubbleGroups.has(group)) {
+          bubbleGroups.set(group, []);
+        }
         
-        if (distance < 80) {
-          // Draw the line with color based on whether the particles have collided
-          if (prev.collided > 0 || curr.collided > 0) {
-            ctx.strokeStyle = "rgba(255, 255, 0, 0.3)"; // Yellow for collided
-          } else {
-            ctx.strokeStyle = "rgba(0, 255, 255, 0.3)"; // Cyan for non-collided
+        bubbleGroups.get(group)?.push(particle);
+      }
+      
+      // Render each bubble's particles as a wave
+      bubbleGroups.forEach(bubbleParticles => {
+        // Sort by index to maintain the same order
+        bubbleParticles.sort((a, b) => a.index - b.index);
+        
+        // Split particles into collided and uncollided 
+        const collidedParticles = bubbleParticles.filter(p => p.collided > 0);
+        const nonCollidedParticles = bubbleParticles.filter(p => p.collided === 0);
+        
+        // Draw non-collided (cyan) wave lines first
+        if (nonCollidedParticles.length >= 2) {
+          ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          
+          let prev: Particle | null = null;
+          
+          for (const particle of nonCollidedParticles) {
+            if (prev) {
+              // Only connect if x-distance is not too far
+              const dx = Math.abs(particle.body.position.x - prev.body.position.x);
+              if (dx < 10) { // Threshold to avoid connecting distant particles
+                ctx.moveTo(prev.body.position.x, prev.body.position.y);
+                ctx.lineTo(particle.body.position.x, particle.body.position.y);
+              }
+            }
+            prev = particle;
           }
           
-          ctx.lineTo(currPos.x, currPos.y);
           ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(currPos.x, currPos.y);
-        } else {
-          // Start a new line segment
-          ctx.beginPath();
-          ctx.moveTo(currPos.x, currPos.y);
         }
-      }
-      
-      ctx.stroke();
+        
+        // Draw collided (yellow) wave lines
+        if (collidedParticles.length >= 2) {
+          ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; // Yellow
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          
+          let prev: Particle | null = null;
+          
+          for (const particle of collidedParticles) {
+            if (prev) {
+              // Only connect if x-distance is not too far
+              const dx = Math.abs(particle.body.position.x - prev.body.position.x);
+              if (dx < 10) { // Threshold to avoid connecting distant particles
+                ctx.moveTo(prev.body.position.x, prev.body.position.y);
+                ctx.lineTo(particle.body.position.x, particle.body.position.y);
+              }
+            }
+            prev = particle;
+          }
+          
+          ctx.stroke();
+        }
+      });
     });
   }
-
+  
   private renderSmoothWaves(
     ctx: CanvasRenderingContext2D,
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    // Helper function to group particles by cycle first, then by direction angle
-    const groupParticlesByCycleAndDirection = (particles: Particle[]) => {
-      // First, group particles by their cycle number
-      const cycleGroups = new Map<number, Particle[]>();
-      
-      for (const particle of particles) {
-        if (!cycleGroups.has(particle.cycleNumber)) {
-          cycleGroups.set(particle.cycleNumber, []);
-        }
-        
-        const group = cycleGroups.get(particle.cycleNumber);
-        if (group) {
-          group.push(particle);
-        }
-      }
-      
-      // Then for each cycle, group particles by direction angle
-      const cycleDirectionGroups = new Map<number, Map<number, Particle[]>>();
-      const bucketSize = 10; // Degrees per angle bucket
-      
-      // Using Array.from to avoid iterator issues
-      Array.from(cycleGroups.entries()).forEach(entry => {
-        const cycleNumber = entry[0];
-        const cycleParticles = entry[1];
-        const directionBuckets = new Map<number, Particle[]>();
-        
-        for (const particle of cycleParticles) {
-          // Calculate direction of particle's motion
-          const velocity = particle.body.velocity;
-          const angle = Math.atan2(velocity.y, velocity.x) * 180 / Math.PI;
-          
-          // Round to nearest bucketSize degrees
-          const bucketAngle = Math.round(angle / bucketSize) * bucketSize;
-          
-          if (!directionBuckets.has(bucketAngle)) {
-            directionBuckets.set(bucketAngle, []);
-          }
-          
-          const bucket = directionBuckets.get(bucketAngle);
-          if (bucket) {
-            bucket.push(particle);
-          }
-        }
-        
-        cycleDirectionGroups.set(cycleNumber, directionBuckets);
-      });
-      
-      return cycleDirectionGroups;
-    };
-    
-    // Helper function for backward compatibility with old code - groups only by direction
+    // Helper function to group particles by direction angle
     const groupParticlesByDirection = (particles: Particle[]) => {
       const buckets = new Map<number, Particle[]>();
       const bucketSize = 10; // Increased from 5 to 10 degrees for smoother curves
@@ -641,10 +630,7 @@ export class CanvasController {
           buckets.set(bucketAngle, []);
         }
         
-        const bucket = buckets.get(bucketAngle);
-        if (bucket) {
-          bucket.push(particle);
-        }
+        buckets.get(bucketAngle)?.push(particle);
       }
       
       return buckets;
@@ -676,195 +662,169 @@ export class CanvasController {
     
     // Draw smooth curves for non-collided particles (more prominent)
     if (nonCollidedParticles.length > 5) { // Need enough particles for meaningful curve
-      // Group particles by cycle first, then by direction
-      const cycleDirectionGroups = groupParticlesByCycleAndDirection(nonCollidedParticles);
+      const buckets = groupParticlesByDirection(nonCollidedParticles);
+      const centroids: Point2D[] = [];
       
-      // Process each cycle separately
-      Array.from(cycleDirectionGroups.entries()).forEach(entry => {
-        const cycleNumber = entry[0];
-        const directionBuckets = entry[1];
-        const centroidDataList: CentroidData[] = [];
+      // Extract and sort centroids by angle bucket
+      Array.from(buckets.entries())
+        .map(([angleBucket, particles]) => {
+          return {
+            angleBucket: Number(angleBucket), // Convert string key to number
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          };
+        })
+        .filter(item => item.count >= 2) // Only use buckets with multiple particles
+        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
+        .forEach(item => centroids.push(item.centroid));
+      
+      // Draw bezier curve through centroids if we have enough points
+      if (centroids.length >= 4) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(5, 255, 245, 0.95)"; // Brighter cyan
+        ctx.lineWidth = 6;
         
-        // Extract and sort centroids by angle bucket within this cycle
-        Array.from(directionBuckets.entries()).forEach(bucketEntry => {
-          const angleBucket = Number(bucketEntry[0]);
-          const particles = bucketEntry[1];
-          if (particles.length >= 2) {
-            centroidDataList.push({
-              angleBucket,
-              centroid: calculateCentroid(particles),
-              count: particles.length
-            });
-          }
-        });
+        const startPoint = centroids[0];
+        ctx.moveTo(startPoint.x, startPoint.y);
         
-        // Sort centroids by angle bucket
-        centroidDataList.sort((a, b) => a.angleBucket - b.angleBucket);
+        // Linear blending constraint factor - controls how much the curve can deviate
+        const influenceFactor = 0.3; // Lower values = less curve deviation
         
-        // Extract just the centroid positions
-        const centroidPoints: Point2D[] = centroidDataList.map(item => item.centroid);
-        
-        // Draw bezier curve through centroids if we have enough points
-        if (centroidPoints.length >= 4) {
-          ctx.beginPath();
-          ctx.strokeStyle = "rgba(5, 255, 245, 0.95)"; // Brighter cyan
-          ctx.lineWidth = 6;
+        // Use constrained quadratic curves through centroids
+        for (let i = 1; i < centroids.length - 2; i++) {
+          const c1 = centroids[i];
+          const c2 = centroids[i + 1];
           
-          const startPoint = centroidPoints[0];
-          ctx.moveTo(startPoint.x, startPoint.y);
+          // Use the midpoint between current and next as the bezier end
+          const endX = (c1.x + c2.x) / 2;
+          const endY = (c1.y + c2.y) / 2;
           
-          // Linear blending constraint factor - controls how much the curve can deviate
-          const influenceFactor = 0.3; // Lower values = less curve deviation
+          // Apply linear blending constraint to control point
+          // This pulls the control point closer to the line between adjacent midpoints
+          // reducing the "pull" effect that causes wild deviations
+          const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
+          const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
           
-          // Use constrained quadratic curves through centroids
-          for (let i = 1; i < centroidPoints.length - 2; i++) {
-            const c1 = centroidPoints[i];
-            const c2 = centroidPoints[i + 1];
-            
-            // Use the midpoint between current and next as the bezier end
-            const endX = (c1.x + c2.x) / 2;
-            const endY = (c1.y + c2.y) / 2;
-            
-            // Apply linear blending constraint to control point
-            // This pulls the control point closer to the line between adjacent midpoints
-            // reducing the "pull" effect that causes wild deviations
-            const prevX = i === 1 ? startPoint.x : (centroidPoints[i-1].x + c1.x) / 2;
-            const prevY = i === 1 ? startPoint.y : (centroidPoints[i-1].y + c1.y) / 2;
-            
-            // Calculate the midpoint of the line segment (this is our reference line)
-            const midX = (prevX + endX) / 2;
-            const midY = (prevY + endY) / 2;
-            
-            // Apply linear blending constraint - limit control point deviation
-            const controlX = midX + influenceFactor * (c1.x - midX);
-            const controlY = midY + influenceFactor * (c1.y - midY);
-            
-            // Use the constrained control point
-            ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-          }
+          // Calculate the midpoint of the line segment (this is our reference line)
+          const midX = (prevX + endX) / 2;
+          const midY = (prevY + endY) / 2;
           
-          // Add the final segment if we have enough points
-          if (centroidPoints.length >= 3) {
-            const last = centroidPoints.length - 1;
-            const secondLast = centroidPoints.length - 2;
-            
-            // Apply same constraint to final segment
-            const prevEndX = (centroidPoints[secondLast-1].x + centroidPoints[secondLast].x) / 2;
-            const prevEndY = (centroidPoints[secondLast-1].y + centroidPoints[secondLast].y) / 2;
-            const lastX = centroidPoints[last].x;
-            const lastY = centroidPoints[last].y;
-            
-            // Reference midpoint
-            const midX = (prevEndX + lastX) / 2;
-            const midY = (prevEndY + lastY) / 2;
-            
-            // Constrained control point
-            const controlX = midX + influenceFactor * (centroidPoints[secondLast].x - midX);
-            const controlY = midY + influenceFactor * (centroidPoints[secondLast].y - midY);
-            
-            ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
-          }
+          // Apply linear blending constraint - limit control point deviation
+          const controlX = midX + influenceFactor * (c1.x - midX);
+          const controlY = midY + influenceFactor * (c1.y - midY);
           
-          ctx.stroke();
+          // Use the constrained control point
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
         }
-      });
+        
+        // Add the final segment if we have enough points
+        if (centroids.length >= 3) {
+          const last = centroids.length - 1;
+          const secondLast = centroids.length - 2;
+          
+          // Apply same constraint to final segment
+          const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
+          const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
+          const lastX = centroids[last].x;
+          const lastY = centroids[last].y;
+          
+          // Reference midpoint
+          const midX = (prevEndX + lastX) / 2;
+          const midY = (prevEndY + lastY) / 2;
+          
+          // Constrained control point
+          const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
+          const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
+          
+          ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
+        }
+        
+        ctx.stroke();
+      }
     }
     
     // Draw smooth curves for collided particles (less prominent)
     if (collidedParticles.length > 5) {
-      // Also group collided particles by cycle
-      const cycleDirectionGroups = groupParticlesByCycleAndDirection(collidedParticles);
+      const buckets = groupParticlesByDirection(collidedParticles);
+      const centroids: Point2D[] = [];
       
-      // Process each cycle separately
-      Array.from(cycleDirectionGroups.entries()).forEach(entry => {
-        const cycleNumber = entry[0];
-        const directionBuckets = entry[1];
-        const centroidDataList: CentroidData[] = [];
+      // Extract and sort centroids by angle bucket
+      Array.from(buckets.entries())
+        .map(([angleBucket, particles]) => {
+          return {
+            angleBucket: Number(angleBucket), // Convert string key to number
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          };
+        })
+        .filter(item => item.count >= 2) // Only use buckets with multiple particles
+        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
+        .forEach(item => centroids.push(item.centroid));
+      
+      // Draw bezier curve through centroids if we have enough points
+      if (centroids.length >= 4) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(255, 255, 120, 0.55)"; // Yellow but less bright
+        ctx.lineWidth = 3.5;
         
-        // Extract and sort centroids by angle bucket within this cycle
-        Array.from(directionBuckets.entries()).forEach(bucketEntry => {
-          const angleBucket = Number(bucketEntry[0]);
-          const particles = bucketEntry[1];
-          if (particles.length >= 2) {
-            centroidDataList.push({
-              angleBucket,
-              centroid: calculateCentroid(particles),
-              count: particles.length
-            });
-          }
-        });
+        const startPoint = centroids[0];
+        ctx.moveTo(startPoint.x, startPoint.y);
         
-        // Sort centroids by angle bucket
-        centroidDataList.sort((a, b) => a.angleBucket - b.angleBucket);
+        // Linear blending constraint factor - controls how much the curve can deviate
+        // Slightly higher for collided particles to allow more deviation
+        const influenceFactor = 0.35; // Lower values = less curve deviation
         
-        // Extract just the centroid positions
-        const centroidPoints: Point2D[] = centroidDataList.map(item => item.centroid);
-        
-        // Draw bezier curve through centroids if we have enough points
-        if (centroidPoints.length >= 4) {
-          ctx.beginPath();
-          ctx.strokeStyle = "rgba(255, 255, 120, 0.55)"; // Yellow but less bright
-          ctx.lineWidth = 3.5;
+        // Use constrained quadratic curves through centroids
+        for (let i = 1; i < centroids.length - 2; i++) {
+          const c1 = centroids[i];
+          const c2 = centroids[i + 1];
           
-          const startPoint = centroidPoints[0];
-          ctx.moveTo(startPoint.x, startPoint.y);
+          // Use the midpoint between current and next as the bezier end
+          const endX = (c1.x + c2.x) / 2;
+          const endY = (c1.y + c2.y) / 2;
           
-          // Linear blending constraint factor - controls how much the curve can deviate
-          // Slightly higher for collided particles to allow more deviation
-          const influenceFactor = 0.35; // Lower values = less curve deviation
+          // Apply linear blending constraint to control point
+          // This pulls the control point closer to the line between adjacent midpoints
+          // reducing the "pull" effect that causes wild deviations
+          const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
+          const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
           
-          // Use constrained quadratic curves through centroids
-          for (let i = 1; i < centroidPoints.length - 2; i++) {
-            const c1 = centroidPoints[i];
-            const c2 = centroidPoints[i + 1];
-            
-            // Use the midpoint between current and next as the bezier end
-            const endX = (c1.x + c2.x) / 2;
-            const endY = (c1.y + c2.y) / 2;
-            
-            // Apply linear blending constraint to control point
-            // This pulls the control point closer to the line between adjacent midpoints
-            // reducing the "pull" effect that causes wild deviations
-            const prevX = i === 1 ? startPoint.x : (centroidPoints[i-1].x + c1.x) / 2;
-            const prevY = i === 1 ? startPoint.y : (centroidPoints[i-1].y + c1.y) / 2;
-            
-            // Calculate the midpoint of the line segment (this is our reference line)
-            const midX = (prevX + endX) / 2;
-            const midY = (prevY + endY) / 2;
-            
-            // Apply linear blending constraint - limit control point deviation
-            const controlX = midX + influenceFactor * (c1.x - midX);
-            const controlY = midY + influenceFactor * (c1.y - midY);
-            
-            // Use the constrained control point
-            ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-          }
+          // Calculate the midpoint of the line segment (this is our reference line)
+          const midX = (prevX + endX) / 2;
+          const midY = (prevY + endY) / 2;
           
-          // Add the final segment if we have enough points
-          if (centroidPoints.length >= 3) {
-            const last = centroidPoints.length - 1;
-            const secondLast = centroidPoints.length - 2;
-            
-            // Apply same constraint to final segment
-            const prevEndX = (centroidPoints[secondLast-1].x + centroidPoints[secondLast].x) / 2;
-            const prevEndY = (centroidPoints[secondLast-1].y + centroidPoints[secondLast].y) / 2;
-            const lastX = centroidPoints[last].x;
-            const lastY = centroidPoints[last].y;
-            
-            // Reference midpoint
-            const midX = (prevEndX + lastX) / 2;
-            const midY = (prevEndY + lastY) / 2;
-            
-            // Constrained control point
-            const controlX = midX + influenceFactor * (centroidPoints[secondLast].x - midX);
-            const controlY = midY + influenceFactor * (centroidPoints[secondLast].y - midY);
-            
-            ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
-          }
+          // Apply linear blending constraint - limit control point deviation
+          const controlX = midX + influenceFactor * (c1.x - midX);
+          const controlY = midY + influenceFactor * (c1.y - midY);
           
-          ctx.stroke();
+          // Use the constrained control point
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
         }
-      });
+        
+        // Add the final segment if we have enough points
+        if (centroids.length >= 3) {
+          const last = centroids.length - 1;
+          const secondLast = centroids.length - 2;
+          
+          // Apply same constraint to final segment
+          const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
+          const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
+          const lastX = centroids[last].x;
+          const lastY = centroids[last].y;
+          
+          // Reference midpoint
+          const midX = (prevEndX + lastX) / 2;
+          const midY = (prevEndY + lastY) / 2;
+          
+          // Constrained control point
+          const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
+          const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
+          
+          ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
+        }
+        
+        ctx.stroke();
+      }
     }
   }
   
@@ -1190,37 +1150,47 @@ export class CanvasController {
     // Draw individual particles if enabled
     if (this.showParticles) {
       for (const particle of allParticles) {
-        const position = particle.body.position;
-        const opacity = 0.3; // Base opacity - will be adjusted based on energy
-        
-        // Draw the particle itself
-        this.renderParticle(ctx, position, opacity, particle);
+        this.renderParticle(
+          ctx, 
+          particle.body.position, 
+          0.5, // Base opacity
+          particle, // Passing particle for energy/color data
+CanvasController.PARTICLE_RADIUS// Base size
+        );
       }
     }
-  
+
+    // Track render stats
     this.frameCounter++;
   }
   
   private animate() {
-    // Calculate the frame progress within the cycle period
     const currentTime = performance.now();
-    const elapsed = currentTime - (this.startTime || 0);
+    if (!this.startTime) this.startTime = currentTime;
     
-    // Calculate progress through the current cycle (0.0 to 1.0)
-    const cycleProgress = (elapsed % CanvasController.CYCLE_PERIOD_MS) / CanvasController.CYCLE_PERIOD_MS;
+    const progress = ((currentTime - this.startTime) % CanvasController.CYCLE_PERIOD_MS) / CanvasController.CYCLE_PERIOD_MS;
     
-    // Draw current frame
-    this.drawFrame(cycleProgress);
+    // Draw the current frame
+    this.drawFrame(progress);
     
-    // Schedule next frame
+    // Update physics engine at a fixed timestep
+    this.updatePhysics(currentTime);
+    
+    // Request the next animation frame
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
   
   private updatePhysics(timestamp: number) {
-    // Update physics at a fixed time step
-    const timeStep = CanvasController.PHYSICS_TIMESTEP_MS / 1000; // Convert to seconds
+    // Update using multiple smaller steps for more accurate collision detection
+    // Use more substeps when the oval is present (8 vs 4)
+    const numSteps = this.params.showOval ? 6 : 3;
     
-    // Run the engine for a single step with our fixed time step
-    Matter.Engine.update(this.engine, timeStep * 1000);
+    // Calculate the timestep size (in seconds)
+    const timeStep = CanvasController.PHYSICS_TIMESTEP_MS / 1000 / numSteps;
+    
+    // Apply multiple smaller steps
+    for (let i = 0; i < numSteps; i++) {
+      Matter.Engine.update(this.engine, timeStep * 1000, 1.0); // Use second param in ms
+    }
   }
 }
