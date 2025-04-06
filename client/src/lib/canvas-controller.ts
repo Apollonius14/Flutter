@@ -435,64 +435,33 @@ export class CanvasController {
   }
   
   /**
-   * Renders glowing oval segments based on collision data
+   * Updates glow data for oval segments
    */
   private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number): void {
     if (!this.ovalBody || !this.params.showOval) return;
     
-    // Get all segments of the oval
-    const segments = Matter.Composite.allBodies(this.ovalBody);
-    
     // Filter out old glows based on decay rate
     const now = timestamp;
     
-    // Process each segment glow - remove glows older than 6 seconds (increased from 5)
+    // Process each segment glow - remove glows older than 3 seconds
     this.segmentGlows = this.segmentGlows.filter(glow => {
-      const age = (now - glow.lastUpdateTime) / 1000; // Age in seconds
-      return age < 6; // Keep glows less than 6 seconds old
+      const age = (now - glow.lastUpdateTime) / 1000;
+      return age < 3; // Keep glows less than 3 seconds old
     });
   
-    // First pass to apply decays
+    // Apply decay to all glows
     for (const glow of this.segmentGlows) {
-      const age = (now - glow.lastUpdateTime) / 1000; // Age in seconds
+      const age = (now - glow.lastUpdateTime) / 1000;
       
-      // Apply a more aggressive exponential decay that starts faster
-      // and accelerates over time
-      const decayFactor = Math.pow(0.75, age * 2); // 0.75^(age*1.5) decay
+      // Apply exponential decay
+      const decayFactor = Math.pow(0.75, age * 2);
       
       // Update the intensity with our decay
       glow.intensity *= decayFactor;
     }
     
-    // Now draw the glows 
-    segments.forEach((segment, index) => {
-      // Find the matching glow for this segment
-      const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
-      
-      if (glow && glow.intensity > 0.1) {
-        // Use more intense neon pink glow for higher impacts
-        const intensity = glow.intensity;
-        // Neon pink gradient for glow
-        // Scale up intensity for more vibrant effect
-        const scaledIntensity = Math.min(intensity * 3, 1);
-        
-        // Draw the segment with neon pink glow
-        ctx.strokeStyle = `rgba(255, 0, 255, ${scaledIntensity})`;
-        ctx.lineWidth = 3 + intensity * 2; // Glow size depends on intensity - fixed XOR to multiplication
-        
-        // Use the segment vertices to draw the outline
-        const vertices = segment.vertices;
-        if (vertices.length > 1) {
-          ctx.beginPath();
-          ctx.moveTo(vertices[0].x, vertices[0].y);
-          for (let i = 1; i < vertices.length; i++) {
-            ctx.lineTo(vertices[i].x, vertices[i].y);
-          }
-          ctx.closePath();
-          ctx.stroke();
-        }
-      }
-    });
+    // Remove glows that have faded below threshold
+    this.segmentGlows = this.segmentGlows.filter(glow => glow.intensity > 0.05);
   }
   
   /**
@@ -1009,6 +978,9 @@ export class CanvasController {
     // Clear canvas 
     ctx.fillStyle = "#1a1a1a";
     ctx.fillRect(0, 0, width, height);
+    
+    // Update glow data for oval segments (data management only)
+    this.renderOvalGlow(ctx, performance.now());
   
     // Check if we need to generate bubbles
     // Use progress to ensure bubbles are generated exactly once per cycle
@@ -1073,98 +1045,45 @@ export class CanvasController {
     
     // Draw oval glow (if needed)
     if (this.params.showOval && this.ovalBody) {
-      this.renderOvalGlow(ctx, performance.now());
-      
-      // Draw the oval as a continuous fluid ring with neon pink highlight
+      // Draw each oval segment with a very faint gray fill
       const segments = Matter.Composite.allBodies(this.ovalBody);
       
-      // First, apply glow effect
-      ctx.shadowColor = "rgba(255, 0, 255, 0.5)";
-      ctx.shadowBlur = 8;
-      
-      // Draw the outer edge as a continuous path
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(255, 20, 147, 0.7)"; // Bright neon pink for outer edge
-      ctx.lineWidth = 1.5;
-      
-      // Sort segments by angle to ensure we draw them in order around the oval
-      const sortedSegments = [...segments].sort((a, b) => {
-        // Get the midpoint of each segment's outer edge
-        const midA = {
-          x: (a.vertices[0].x + a.vertices[1].x) / 2,
-          y: (a.vertices[0].y + a.vertices[1].y) / 2
-        };
-        const midB = {
-          x: (b.vertices[0].x + b.vertices[1].x) / 2,
-          y: (b.vertices[0].y + b.vertices[1].y) / 2
-        };
+      // Simple approach: draw each segment with a fill
+      for (const segment of segments) {
+        // Find if this segment has a glow from collision
+        const segmentGlow = this.segmentGlows.find(glow => glow.segmentId === segment.id);
         
-        // Calculate angle from center to midpoint
-        const centerX = this.canvas.width * (0.2 + this.params.ovalPosition * 0.6);
-        const centerY = this.canvas.height / 2;
-        
-        const angleA = Math.atan2(midA.y - centerY, midA.x - centerX);
-        const angleB = Math.atan2(midB.y - centerY, midB.x - centerX);
-        
-        return angleA - angleB;
-      });
-      
-      // Find a good starting point (leftmost or rightmost point depending on direction)
-      let startSegmentIndex = 0;
-      for (let i = 0; i < sortedSegments.length; i++) {
-        const verts = sortedSegments[i].vertices;
-        if (this.isRTL) {
-          // For RTL, start from rightmost point
-          const midX = (verts[0].x + verts[1].x) / 2;
-          if (midX > this.canvas.width / 2) {
-            startSegmentIndex = i;
-            break;
-          }
-        } else {
-          // For LTR, start from leftmost point
-          const midX = (verts[0].x + verts[1].x) / 2;
-          if (midX < this.canvas.width / 2) {
-            startSegmentIndex = i;
-            break;
-          }
-        }
-      }
-      
-      // Reorder the array to start from the found index
-      const reorderedSegments = [
-        ...sortedSegments.slice(startSegmentIndex),
-        ...sortedSegments.slice(0, startSegmentIndex)
-      ];
-      
-      // Start the path at the first segment's first vertex
-      const firstVerts = reorderedSegments[0].vertices;
-      ctx.moveTo(firstVerts[0].x, firstVerts[0].y);
-      
-      // Draw the outer edge
-      for (const segment of reorderedSegments) {
+        // Get the vertices of the segment
         const verts = segment.vertices;
+        
+        // Draw the segment with a fill
+        ctx.beginPath();
+        ctx.moveTo(verts[0].x, verts[0].y);
         ctx.lineTo(verts[1].x, verts[1].y);
-      }
-      ctx.stroke();
-      
-      // Draw the inner edge with a slightly different shade
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(255, 105, 180, 0.5)"; // Lighter pink for inner edge
-      
-      // Start the path at the first segment's inner vertex
-      const firstInnerVert = reorderedSegments[0].vertices;
-      ctx.moveTo(firstInnerVert[3].x, firstInnerVert[3].y);
-      
-      // Draw the inner edge in the same order
-      for (const segment of reorderedSegments) {
-        const verts = segment.vertices;
         ctx.lineTo(verts[2].x, verts[2].y);
+        ctx.lineTo(verts[3].x, verts[3].y);
+        ctx.closePath();
+        
+        // Use a very faint gray fill by default
+        let fillOpacity = 0.1; // Very faint default
+        
+        // If this segment has been hit, increase opacity based on impact intensity
+        if (segmentGlow && segmentGlow.intensity > 0) {
+          // Decay the glow intensity over time
+          const timeElapsed = performance.now() - segmentGlow.lastUpdateTime;
+          const decayFactor = Math.max(0, 1 - timeElapsed / 1000); // Decay over 1 second
+          
+          // Apply decay to the intensity
+          const adjustedIntensity = segmentGlow.intensity * decayFactor;
+          
+          // Map intensity to opacity (0.1 to 0.6)
+          fillOpacity = 0.1 + Math.min(0.5, adjustedIntensity * 0.2);
+        }
+        
+        // Fill with white or very light gray
+        ctx.fillStyle = `rgba(255, 255, 255, ${fillOpacity})`;
+        ctx.fill();
       }
-      ctx.stroke();
-      
-      // Reset shadow effect
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
     }
     
     // Draw wave visualization if enabled
