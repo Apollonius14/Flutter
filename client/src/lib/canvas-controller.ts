@@ -54,8 +54,8 @@ export class CanvasController {
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
   private static readonly PARTICLES_PER_RING: number = 78;
-  private static readonly PARTICLE_RADIUS: number = 0.1;
-  private static readonly FIXED_BUBBLE_RADIUS: number = 3; 
+  private static readonly PARTICLE_RADIUS: number = 2.0;
+  private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
     const baseAngles: number[] = [];
@@ -393,7 +393,7 @@ export class CanvasController {
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = 2.0
+    size: number = CanvasController.PARTICLE_RADIUS
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
     let finalOpacity = opacity * this.params.power;
@@ -488,7 +488,6 @@ export class CanvasController {
     const gradient = ctx.createLinearGradient(sweepPosition - 10, 0, sweepPosition + 10, 0);
     gradient.addColorStop(0, "rgba(51, 153, 255, 0)");  
     gradient.addColorStop(0.5, "rgba(51, 153, 255, 0.6)"); 
-    gradient.addColorStop(1, "rgba(51, 153, 255, 0)");  
     
     ctx.strokeStyle = gradient;
     ctx.lineWidth = 2;
@@ -572,7 +571,7 @@ export class CanvasController {
             if (prev) {
               // Only connect if x-distance is not too far
               const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 15) { // Threshold to avoid connecting distant particles
+              if (dx < 10) { // Threshold to avoid connecting distant particles
                 ctx.moveTo(prev.body.position.x, prev.body.position.y);
                 ctx.lineTo(particle.body.position.x, particle.body.position.y);
               }
@@ -595,7 +594,7 @@ export class CanvasController {
             if (prev) {
               // Only connect if x-distance is not too far
               const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 15) { // Threshold to avoid connecting distant particles
+              if (dx < 10) { // Threshold to avoid connecting distant particles
                 ctx.moveTo(prev.body.position.x, prev.body.position.y);
                 ctx.lineTo(particle.body.position.x, particle.body.position.y);
               }
@@ -617,7 +616,7 @@ export class CanvasController {
     // Helper function to group particles by direction angle
     const groupParticlesByDirection = (particles: Particle[]) => {
       const buckets = new Map<number, Particle[]>();
-      const bucketSize = 15; // Increased from 5 to 10 degrees for smoother curves
+      const bucketSize = 10; // Increased from 5 to 10 degrees for smoother curves
       
       for (const particle of particles) {
         // Calculate direction of particle's motion
@@ -688,18 +687,34 @@ export class CanvasController {
         const startPoint = centroids[0];
         ctx.moveTo(startPoint.x, startPoint.y);
         
-        // Use cardinal spline through centroids
+        // Linear blending constraint factor - controls how much the curve can deviate
+        const influenceFactor = 0.3; // Lower values = less curve deviation
+        
+        // Use constrained quadratic curves through centroids
         for (let i = 1; i < centroids.length - 2; i++) {
           const c1 = centroids[i];
           const c2 = centroids[i + 1];
-          const c3 = centroids[i + 2];
           
           // Use the midpoint between current and next as the bezier end
           const endX = (c1.x + c2.x) / 2;
           const endY = (c1.y + c2.y) / 2;
           
-          // Control point is the current centroid
-          ctx.quadraticCurveTo(c1.x, c1.y, endX, endY);
+          // Apply linear blending constraint to control point
+          // This pulls the control point closer to the line between adjacent midpoints
+          // reducing the "pull" effect that causes wild deviations
+          const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
+          const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
+          
+          // Calculate the midpoint of the line segment (this is our reference line)
+          const midX = (prevX + endX) / 2;
+          const midY = (prevY + endY) / 2;
+          
+          // Apply linear blending constraint - limit control point deviation
+          const controlX = midX + influenceFactor * (c1.x - midX);
+          const controlY = midY + influenceFactor * (c1.y - midY);
+          
+          // Use the constrained control point
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
         }
         
         // Add the final segment if we have enough points
@@ -707,12 +722,21 @@ export class CanvasController {
           const last = centroids.length - 1;
           const secondLast = centroids.length - 2;
           
-          ctx.quadraticCurveTo(
-            centroids[secondLast].x, 
-            centroids[secondLast].y,
-            centroids[last].x,
-            centroids[last].y
-          );
+          // Apply same constraint to final segment
+          const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
+          const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
+          const lastX = centroids[last].x;
+          const lastY = centroids[last].y;
+          
+          // Reference midpoint
+          const midX = (prevEndX + lastX) / 2;
+          const midY = (prevEndY + lastY) / 2;
+          
+          // Constrained control point
+          const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
+          const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
+          
+          ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
         }
         
         ctx.stroke();
@@ -746,18 +770,35 @@ export class CanvasController {
         const startPoint = centroids[0];
         ctx.moveTo(startPoint.x, startPoint.y);
         
-        // Use cardinal spline through centroids
+        // Linear blending constraint factor - controls how much the curve can deviate
+        // Slightly higher for collided particles to allow more deviation
+        const influenceFactor = 0.35; // Lower values = less curve deviation
+        
+        // Use constrained quadratic curves through centroids
         for (let i = 1; i < centroids.length - 2; i++) {
           const c1 = centroids[i];
           const c2 = centroids[i + 1];
-          const c3 = centroids[i + 2];
           
           // Use the midpoint between current and next as the bezier end
           const endX = (c1.x + c2.x) / 2;
           const endY = (c1.y + c2.y) / 2;
           
-          // Control point is the current centroid
-          ctx.quadraticCurveTo(c1.x, c1.y, endX, endY);
+          // Apply linear blending constraint to control point
+          // This pulls the control point closer to the line between adjacent midpoints
+          // reducing the "pull" effect that causes wild deviations
+          const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
+          const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
+          
+          // Calculate the midpoint of the line segment (this is our reference line)
+          const midX = (prevX + endX) / 2;
+          const midY = (prevY + endY) / 2;
+          
+          // Apply linear blending constraint - limit control point deviation
+          const controlX = midX + influenceFactor * (c1.x - midX);
+          const controlY = midY + influenceFactor * (c1.y - midY);
+          
+          // Use the constrained control point
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
         }
         
         // Add the final segment if we have enough points
@@ -765,12 +806,21 @@ export class CanvasController {
           const last = centroids.length - 1;
           const secondLast = centroids.length - 2;
           
-          ctx.quadraticCurveTo(
-            centroids[secondLast].x, 
-            centroids[secondLast].y,
-            centroids[last].x,
-            centroids[last].y
-          );
+          // Apply same constraint to final segment
+          const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
+          const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
+          const lastX = centroids[last].x;
+          const lastY = centroids[last].y;
+          
+          // Reference midpoint
+          const midX = (prevEndX + lastX) / 2;
+          const midY = (prevEndY + lastY) / 2;
+          
+          // Constrained control point
+          const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
+          const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
+          
+          ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
         }
         
         ctx.stroke();
@@ -1105,7 +1155,7 @@ export class CanvasController {
           particle.body.position, 
           0.5, // Base opacity
           particle, // Passing particle for energy/color data
-          1.5 // Base size
+CanvasController.PARTICLE_RADIUS// Base size
         );
       }
     }
