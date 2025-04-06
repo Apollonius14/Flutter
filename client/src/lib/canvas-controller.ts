@@ -48,7 +48,7 @@ interface SegmentGlow {
 
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 8; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
@@ -288,7 +288,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 7.5; 
+        const baseSpeed = 4; 
 
 
         Matter.Body.setVelocity(body, {
@@ -403,13 +403,13 @@ export class CanvasController {
       
       // Check if the particle has collided and choose color/size accordingly
       if (particle.collided > 0) {
-        // For collided (yellow) particles: reduce opacity by 25%
-        finalOpacity = energyRatio * 1.5; // Reduced brightness for yellow particles
-        particleSize = size; // Keep original size for yellow particles
+        // For collided (yellow) particles: reduce opacity by 30% (requirement B)
+        finalOpacity = energyRatio * 1.05; // 30% reduced brightness for yellow particles
+        particleSize = size * 0.7; // 30% smaller yellow particles (requirement B)
       } else {
-        // For non-collided (cyan) particles: increase opacity by 20% and size by 20%
-        finalOpacity = energyRatio * 2.4; // Increased brightness for cyan particles
-        particleSize = size * 1.2; // Slightly larger cyan particles
+        // For non-collided (cyan) particles: double particle size (requirement A)
+        finalOpacity = energyRatio * 2.4; // Keep similar brightness level
+        particleSize = size * 2.0; // Double size for cyan particles (requirement A)
       }
     } else {
       // Use passed opacity as fallback
@@ -592,34 +592,67 @@ export class CanvasController {
       
       // Draw connecting lines for non-collided particles (blue)
       if (nonCollidedParticles.length > 1) {
-        ctx.beginPath();
-        const startParticle = nonCollidedParticles[0];
-        ctx.moveTo(startParticle.body.position.x, startParticle.body.position.y);
-        
+        // Each segment will be drawn individually to calculate its length for opacity scaling
         for (let i = 1; i < nonCollidedParticles.length; i++) {
+          const prevParticle = nonCollidedParticles[i-1];
           const particle = nonCollidedParticles[i];
+          
+          // Calculate segment length for opacity scaling
+          const dx = particle.body.position.x - prevParticle.body.position.x;
+          const dy = particle.body.position.y - prevParticle.body.position.y;
+          const segmentLength = Math.sqrt(dx * dx + dy * dy);
+          
+          // Calculate opacity based on segment length (inversely proportional)
+          // We'll use a max length of 100 pixels for reference (shorter = more opaque)
+          const maxReferenceLength = 100;
+          // Scale factor inversely proportional to length (bounded between 0.2 and 1.0)
+          const scaleFactor = Math.max(0.2, Math.min(1.0, maxReferenceLength / (segmentLength + 20)));
+          
+          // Double opacity for non-collided lines (requirement A)
+          const baseOpacity = 0.6 * 2.0;
+          const lineOpacity = baseOpacity * scaleFactor;
+          
+          ctx.beginPath();
+          ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
           ctx.lineTo(particle.body.position.x, particle.body.position.y);
+          
+          ctx.strokeStyle = `rgba(0, 170, 255, ${lineOpacity})`; // Blue line with scaled opacity
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         }
-        
-        ctx.strokeStyle = 'rgba(0, 170, 255, 0.6)'; // Blue line for non-collided
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
       }
       
       // Draw connecting lines for collided particles (yellow)
       if (collidedParticles.length > 1) {
-        ctx.beginPath();
-        const startParticle = collidedParticles[0];
-        ctx.moveTo(startParticle.body.position.x, startParticle.body.position.y);
-        
+        // Each segment will be drawn individually to calculate its length for opacity scaling
         for (let i = 1; i < collidedParticles.length; i++) {
+          const prevParticle = collidedParticles[i-1];
           const particle = collidedParticles[i];
+          
+          // Calculate segment length for opacity scaling
+          const dx = particle.body.position.x - prevParticle.body.position.x;
+          const dy = particle.body.position.y - prevParticle.body.position.y;
+          const segmentLength = Math.sqrt(dx * dx + dy * dy);
+          
+          // Calculate opacity based on segment length (inversely proportional)
+          // We'll use a max length of 100 pixels for reference (shorter = more opaque)
+          const maxReferenceLength = 100;
+          // Scale factor inversely proportional to length (bounded between 0.2 and 1.0)
+          const scaleFactor = Math.max(0.2, Math.min(1.0, maxReferenceLength / (segmentLength + 20)));
+          
+          // Reduce base opacity by 30% for collided (yellow) lines (requirement B)
+          const baseOpacity = 0.6 * 0.7;
+          const lineOpacity = baseOpacity * scaleFactor;
+          
+          ctx.beginPath();
+          ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
           ctx.lineTo(particle.body.position.x, particle.body.position.y);
+          
+          ctx.strokeStyle = `rgba(255, 200, 0, ${lineOpacity})`; // Yellow line with scaled opacity
+          // Reduce line thickness by 30% for collided lines (requirement B)
+          ctx.lineWidth = 1.5 * 0.7;
+          ctx.stroke();
         }
-        
-        ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)'; // Yellow line for collided
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
       }
     });
   }
