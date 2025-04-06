@@ -1011,8 +1011,15 @@ export class CanvasController {
     ctx.fillRect(0, 0, width, height);
   
     // Check if we need to generate bubbles
-    if (Math.abs(this.previousSweepLineX - this.activationLineX) < 5 &&
-        performance.now() - this.lastCycleTime > CanvasController.CYCLE_PERIOD_MS) {
+    // Use progress to ensure bubbles are generated exactly once per cycle
+    const cyclePct = progress * 100;
+    // Generate bubbles when we're at the activation line (around 30% into the cycle)
+    const activationPoint = CanvasController.ACTIVATION_LINE_POSITION * 100;
+    const prevCyclePct = ((performance.now() - 16.67) - (this.startTime || 0)) % CanvasController.CYCLE_PERIOD_MS / CanvasController.CYCLE_PERIOD_MS * 100;
+    
+    // Generate bubbles when crossing the activation point (previous frame was before, current frame is after)
+    if (prevCyclePct < activationPoint && cyclePct >= activationPoint) {
+      console.log('Generating bubbles at cycle', this.currentCycleNumber + 1);
       // Generate new bubbles at the activation line
       const newBubbles = this.generateBubbles(this.activationLineX);
       // Add to the list of bubbles
@@ -1068,44 +1075,90 @@ export class CanvasController {
     if (this.params.showOval && this.ovalBody) {
       this.renderOvalGlow(ctx, performance.now());
       
-      // Draw oval body outline for visibility with neon pink color
-      ctx.strokeStyle = "rgba(255, 20, 147, 0.6)"; // Neon pink with some transparency
-      ctx.lineWidth = 1.2;
-      
-      // Draw the outer and inner edges separately to create a fluid ring appearance
+      // Draw the oval as a continuous fluid ring with neon pink highlight
       const segments = Matter.Composite.allBodies(this.ovalBody);
       
-      // Render outer edge
-      ctx.beginPath();
-      for (const segment of segments) {
-        const verts = segment.vertices;
-        // Only draw the outer edge (first two vertices)
-        ctx.moveTo(verts[0].x, verts[0].y);
-        ctx.lineTo(verts[1].x, verts[1].y);
-      }
-      ctx.stroke();
-      
-      // Render inner edge with a slightly different shade for depth
-      ctx.beginPath();
-      ctx.strokeStyle = "rgba(255, 105, 180, 0.4)"; // Lighter pink for inner edge
-      for (const segment of segments) {
-        const verts = segment.vertices;
-        // Only draw the inner edge (last two vertices)
-        ctx.moveTo(verts[2].x, verts[2].y);
-        ctx.lineTo(verts[3].x, verts[3].y);
-      }
-      ctx.stroke();
-      
-      // Add a subtle glow effect
+      // First, apply glow effect
       ctx.shadowColor = "rgba(255, 0, 255, 0.5)";
-      ctx.shadowBlur = 5;
-      ctx.strokeStyle = "rgba(255, 20, 147, 0.2)";
-      ctx.lineWidth = 0.5;
+      ctx.shadowBlur = 8;
+      
+      // Draw the outer edge as a continuous path
       ctx.beginPath();
-      for (const segment of segments) {
+      ctx.strokeStyle = "rgba(255, 20, 147, 0.7)"; // Bright neon pink for outer edge
+      ctx.lineWidth = 1.5;
+      
+      // Sort segments by angle to ensure we draw them in order around the oval
+      const sortedSegments = [...segments].sort((a, b) => {
+        // Get the midpoint of each segment's outer edge
+        const midA = {
+          x: (a.vertices[0].x + a.vertices[1].x) / 2,
+          y: (a.vertices[0].y + a.vertices[1].y) / 2
+        };
+        const midB = {
+          x: (b.vertices[0].x + b.vertices[1].x) / 2,
+          y: (b.vertices[0].y + b.vertices[1].y) / 2
+        };
+        
+        // Calculate angle from center to midpoint
+        const centerX = this.canvas.width * (0.2 + this.params.ovalPosition * 0.6);
+        const centerY = this.canvas.height / 2;
+        
+        const angleA = Math.atan2(midA.y - centerY, midA.x - centerX);
+        const angleB = Math.atan2(midB.y - centerY, midB.x - centerX);
+        
+        return angleA - angleB;
+      });
+      
+      // Find a good starting point (leftmost or rightmost point depending on direction)
+      let startSegmentIndex = 0;
+      for (let i = 0; i < sortedSegments.length; i++) {
+        const verts = sortedSegments[i].vertices;
+        if (this.isRTL) {
+          // For RTL, start from rightmost point
+          const midX = (verts[0].x + verts[1].x) / 2;
+          if (midX > this.canvas.width / 2) {
+            startSegmentIndex = i;
+            break;
+          }
+        } else {
+          // For LTR, start from leftmost point
+          const midX = (verts[0].x + verts[1].x) / 2;
+          if (midX < this.canvas.width / 2) {
+            startSegmentIndex = i;
+            break;
+          }
+        }
+      }
+      
+      // Reorder the array to start from the found index
+      const reorderedSegments = [
+        ...sortedSegments.slice(startSegmentIndex),
+        ...sortedSegments.slice(0, startSegmentIndex)
+      ];
+      
+      // Start the path at the first segment's first vertex
+      const firstVerts = reorderedSegments[0].vertices;
+      ctx.moveTo(firstVerts[0].x, firstVerts[0].y);
+      
+      // Draw the outer edge
+      for (const segment of reorderedSegments) {
         const verts = segment.vertices;
-        ctx.moveTo(verts[0].x, verts[0].y);
         ctx.lineTo(verts[1].x, verts[1].y);
+      }
+      ctx.stroke();
+      
+      // Draw the inner edge with a slightly different shade
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255, 105, 180, 0.5)"; // Lighter pink for inner edge
+      
+      // Start the path at the first segment's inner vertex
+      const firstInnerVert = reorderedSegments[0].vertices;
+      ctx.moveTo(firstInnerVert[3].x, firstInnerVert[3].y);
+      
+      // Draw the inner edge in the same order
+      for (const segment of reorderedSegments) {
+        const verts = segment.vertices;
+        ctx.lineTo(verts[2].x, verts[2].y);
       }
       ctx.stroke();
       
