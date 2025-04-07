@@ -936,7 +936,7 @@ export class CanvasController {
           const scaledThickness = Math.min(maxThickness, baseThickness * Math.pow(particleCount / 30, 2));
           
           ctx.beginPath();
-          ctx.strokeStyle = "rgba(0, 255, 230, 1.0)"; // More vibrant cyan
+          ctx.strokeStyle = "rgba(0, 255, 255, 1.0)"; // Brilliant cyan
           ctx.lineWidth = scaledThickness;
           
           const startPoint = centroids[0];
@@ -1029,7 +1029,7 @@ export class CanvasController {
           const scaledThickness = Math.min(maxThickness, baseThickness * Math.pow(particleCount / 25, 2));
           
           ctx.beginPath();
-          ctx.strokeStyle = "rgba(255, 235, 60, 0.85)"; // More vibrant yellow
+          ctx.strokeStyle = "rgba(255, 215, 0, 1.0)"; // Golden yellow
           ctx.lineWidth = scaledThickness;
           
           const startPoint = centroids[0];
@@ -1291,10 +1291,10 @@ export class CanvasController {
     const { width, height } = this.canvas;
     const ctx = this.ctx;
   
-    // Apply motion blur effect instead of completely clearing the canvas
+    // Apply stronger motion blur effect instead of completely clearing the canvas
     // Set a semi-transparent black rectangle over the previous frame
     // Lower alpha = more motion blur (longer trails)
-    ctx.fillStyle = "rgba(26, 26, 26, 0.85)"; // Dark background with alpha for motion blur
+    ctx.fillStyle = "rgba(26, 26, 26, 0.65)"; // Dark background with alpha for more pronounced motion blur
     ctx.fillRect(0, 0, width, height);
     
     // Update glow data for oval segments (data management only)
@@ -1382,24 +1382,28 @@ export class CanvasController {
         ctx.lineTo(verts[3].x, verts[3].y);
         ctx.closePath();
         
-        // Use a very faint gray fill by default
-        let fillOpacity = 0.1; // Very faint default
+        // More noticeable gray fill by default
+        let fillOpacity = 0.2; // Slightly more visible default
+        let glowColor = "255, 255, 255"; // White glow by default
         
         // If this segment has been hit, increase opacity based on impact intensity
         if (segmentGlow && segmentGlow.intensity > 0) {
           // Decay the glow intensity over time
           const timeElapsed = performance.now() - segmentGlow.lastUpdateTime;
-          const decayFactor = Math.max(0, 1 - timeElapsed / 1000); // Decay over 1 second
+          const decayFactor = Math.max(0, 1 - timeElapsed / 800); // Faster decay for more dynamic effect
           
           // Apply decay to the intensity
           const adjustedIntensity = segmentGlow.intensity * decayFactor;
           
-          // Map intensity to opacity (0.1 to 0.6)
-          fillOpacity = 0.3 + Math.min(0.5, adjustedIntensity * 0.2);
+          // Map intensity to opacity (0.2 to 0.8)
+          fillOpacity = 0.4 + Math.min(0.4, adjustedIntensity * 0.3);
+          
+          // Use a bright cyan color for impacted segments
+          glowColor = "100, 255, 255";
         }
         
-        // Fill with white or very light gray
-        ctx.fillStyle = `rgba(255, 255, 255, ${fillOpacity})`;
+        // Fill with appropriate color and opacity
+        ctx.fillStyle = `rgba(${glowColor}, ${fillOpacity})`;
         ctx.fill();
       }
     }
