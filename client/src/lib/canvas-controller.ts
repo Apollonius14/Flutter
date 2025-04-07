@@ -4,7 +4,6 @@ import {
   Point2D,
   groupParticles,
   calculateCentroid,
-  getParticleDirectionAngle,
   drawQuadraticBezierCurve,
   calculateLineThickness
 } from './canvas-utility';
@@ -32,13 +31,11 @@ interface Bubble {
   initialEnergy: number;
 }
 
-// Interface for segment glow data
 interface SegmentGlow {
   intensity: number;
   lastUpdateTime: number;
   segmentId: number;
 }
-
 
 export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
@@ -62,11 +59,6 @@ export class CanvasController {
       const angle = (i / halfCount) * Math.PI;
       baseAngles.push(angle);
       baseAngles.push(-angle);
-    }
-
-    // Apply compression to focus particles toward the front
-    for (const angle of baseAngles) {
-      particleAngles.push(angle);
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -214,10 +206,9 @@ export class CanvasController {
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
-    const compressionFactor = 0.2; // Reduced to create a more zoomed-out view
     const center = canvasHeight / 2;
     const numPositions = 15; 
-    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
+    const baseSpacing = (canvasHeight * 0.2) / (numPositions + 1);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
@@ -320,17 +311,12 @@ export class CanvasController {
     return bubbles;
   }
 
-  /**
-   * Updates the energy of individual particles based on their vertical velocity
-   * and then recalculates the bubble's total energy as the sum of its particles
-   * @param bubble The bubble to update energy for
+  /*  
+Updates the energy of individual particles based on their vertical velocity
    */
-  /**
-   * Finds a particle object by its Matter.js body
-   * This is needed to map from physics bodies to our particle objects
-   */
+  
   private findParticleByBody(body: Matter.Body): Particle | undefined {
-    // Search through all bubbles and their particles
+  
     for (const bubble of this.bubbles) {
       for (const particle of bubble.particles) {
         if (particle.body.id === body.id) {
@@ -355,8 +341,7 @@ export class CanvasController {
       const verticalVelocity = Math.abs(body.velocity.y);
       
       // Calculate decay factor - higher vertical velocity means faster decay
-      // This will penalize vertical motion, emphasizing horizontal waves
-      const velocityFactor = 0.5 + (verticalVelocity * 2); // 20% penalty per unit of vertical velocity
+      const velocityFactor = 0.5 + (verticalVelocity * 2);
       
       // Apply time-based decay multiplied by the velocity factor
       const decay = particle.initialEnergy * 0.001 * 0.5 * velocityFactor;
@@ -392,34 +377,25 @@ export class CanvasController {
     let particleSize = size;
     
     if (particle) {
-      // Use particle's energy level directly
       const energyRatio = particle.energy / particle.initialEnergy;
       
-      // Check if the particle has collided and choose color/size accordingly
       if (particle.collided > 0) {
-        // For collided (yellow) particles: reduce opacity by 30% (requirement B)
-        finalOpacity = energyRatio * 1.05; // 30% reduced brightness for yellow particles
-        particleSize = size * 0.7; // 30% smaller yellow particles (requirement B)
+        finalOpacity = energyRatio; 
       } else {
-        // For non-collided (cyan) particles: double particle size (requirement A)
-        finalOpacity = energyRatio * 2.4; // Keep similar brightness level
-        particleSize = size * 2.0; // Double size for cyan particles (requirement A)
+        finalOpacity = energyRatio * 2.4;
+        particleSize = size * 2.0; 
       }
     } else {
-      // Use passed opacity as fallback
       finalOpacity = opacity * 0.5;
     }
-    
-    // Draw a filled circle for the particle
+  
     ctx.beginPath();
     ctx.arc(position.x, position.y, particleSize, 0, Math.PI * 2);
     
     // Use yellow for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
-      // Dimmer color for particles that have collided (with reduced opacity)
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity}*0.7)`;
     } else {
-      // Brighter cyan color for particles that haven't collided
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
     }
     
@@ -431,34 +407,27 @@ export class CanvasController {
    */
   private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number): void {
     if (!this.ovalBody || !this.params.showOval) return;
-    
-    // Filter out old glows based on decay rate
+
     const now = timestamp;
     
-    // Process each segment glow - remove glows older than 3 seconds
     this.segmentGlows = this.segmentGlows.filter(glow => {
       const age = (now - glow.lastUpdateTime) / 1000;
-      return age < 3; // Keep glows less than 3 seconds old
+      return age < 3; 
     });
   
     // Apply decay to all glows
     for (const glow of this.segmentGlows) {
       const age = (now - glow.lastUpdateTime) / 1000;
-      
-      // Apply exponential decay
       const decayFactor = Math.pow(0.75, age * 2);
-      
-      // Update the intensity with our decay
       glow.intensity *= decayFactor;
     }
     
-    // Remove glows that have faded below threshold
+    // Remove glows  below threshold
     this.segmentGlows = this.segmentGlows.filter(glow => glow.intensity > 0.05);
   }
   
   /**
    * Draws UI elements like sweep lines and activation lines
-   * Simplified version with fewer draw calls for better performance
    */
   private drawUIElements(width: number, height: number, progress: number): void {
     const ctx = this.ctx;
@@ -547,7 +516,7 @@ export class CanvasController {
             if (prev) {
               // Only connect if x-distance is not too far
               const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 10) { // Threshold to avoid connecting distant particles
+              if (dx < 10) {
                 ctx.moveTo(prev.body.position.x, prev.body.position.y);
                 ctx.lineTo(particle.body.position.x, particle.body.position.y);
               }
@@ -560,7 +529,7 @@ export class CanvasController {
         
         // Draw collided (yellow) wave lines
         if (collidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; // Yellow
+          ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; 
           ctx.lineWidth = 5
           ctx.beginPath();
           
@@ -568,9 +537,8 @@ export class CanvasController {
           
           for (const particle of collidedParticles) {
             if (prev) {
-              // Only connect if x-distance is not too far
               const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 10) { // Threshold to avoid connecting distant particles
+              if (dx < 5) { // Threshold to avoid connecting distant particles
                 ctx.moveTo(prev.body.position.x, prev.body.position.y);
                 ctx.lineTo(particle.body.position.x, particle.body.position.y);
               }
@@ -584,85 +552,6 @@ export class CanvasController {
     }
   }
   
-  private renderSmoothWaves(
-    ctx: CanvasRenderingContext2D,
-    nonCollidedParticles: Particle[],
-    collidedParticles: Particle[]
-  ): void {
-    const bucketSize = 5; // Angle bucket size in degrees
-    
-    // Process non-collided particles (cyan)
-    if (nonCollidedParticles.length > 5) {
-      // Group particles by direction angle
-      const buckets = groupParticles(nonCollidedParticles, p => getParticleDirectionAngle(p, bucketSize));
-      const centroids: Point2D[] = [];
-      
-      // Extract and sort centroids by angle bucket
-      Array.from(buckets.entries())
-        .map(([angleBucket, particles]) => ({
-          angleBucket: Number(angleBucket),
-          centroid: calculateCentroid(particles),
-          count: particles.length
-        }))
-        .filter(item => item.count >= 2) // Only use buckets with multiple particles
-        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket
-        .forEach(item => centroids.push(item.centroid));
-      
-      // Draw bezier curve through centroids if we have enough points
-      if (centroids.length >= 4) {
-        // Calculate line width based on particle count
-        const lineWidth = calculateLineThickness(
-          nonCollidedParticles.length, 
-          3.5,  // Base thickness
-          14    // Max thickness
-        );
-        
-        // Draw the curve
-        drawQuadraticBezierCurve(
-          ctx,
-          centroids,
-          { strokeStyle: "rgba(5, 255, 245, 0.95)", lineWidth }, // Brilliant cyan
-          0.3 // Influence factor (curve smoothness)
-        );
-      }
-    }
-    
-    // Process collided particles (yellow)
-    if (collidedParticles.length > 5) {
-      // Group particles by direction angle
-      const buckets = groupParticles(collidedParticles, p => getParticleDirectionAngle(p, bucketSize));
-      const centroids: Point2D[] = [];
-      
-      // Extract and sort centroids by angle bucket
-      Array.from(buckets.entries())
-        .map(([angleBucket, particles]) => ({
-          angleBucket: Number(angleBucket),
-          centroid: calculateCentroid(particles),
-          count: particles.length
-        }))
-        .filter(item => item.count >= 2) // Only use buckets with multiple particles
-        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket
-        .forEach(item => centroids.push(item.centroid));
-      
-      // Draw bezier curve through centroids if we have enough points
-      if (centroids.length >= 4) {
-        // Calculate line width based on particle count
-        const lineWidth = calculateLineThickness(
-          collidedParticles.length, 
-          3.0,  // Base thickness
-          12    // Max thickness
-        );
-        
-        // Draw the curve with slightly higher influence factor for more variation
-        drawQuadraticBezierCurve(
-          ctx,
-          centroids,
-          { strokeStyle: "rgba(255, 255, 120, 0.55)", lineWidth }, // Yellow
-          0.35 // Slightly higher influence factor
-        );
-      }
-    }
-  }
   
   /**
    * Enhanced renderSmoothWaves that groups particles by cycle number first
