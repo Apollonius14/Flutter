@@ -88,8 +88,20 @@ export class CanvasController {
   private segmentGlows: SegmentGlow[] = [];
   
   // Cached positions and templates
-  // Store static position data for reference, only initialized on first cycle
-  private positionsCalculated: boolean = false;
+  // Templates for particle positions, velocities, and other properties
+  private bubbleTemplates: {
+    position: { x: number; y: number };
+    radius: number;
+    particles: {
+      offsetX: number;
+      offsetY: number;
+      velocityX: number;
+      velocityY: number;
+    }[];
+  }[] = [];
+  
+  // Flag to track if templates have been initialized
+  private templatesInitialized: boolean = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -120,6 +132,9 @@ export class CanvasController {
 
     // Initialize positions for wave patterns
     this.initializePositions();
+    
+    // Initialize particle templates for all bubbles (one-time expensive calculation)
+    this.initializeParticleTemplates();
 
     // Initialize the oval if needed
     this.updateOval();
@@ -215,10 +230,73 @@ export class CanvasController {
     const height = this.canvas.height;
     this.positions = this.calculateWavePositions(height);
     
-    // Mark positions as calculated
-    this.positionsCalculated = true;
-    
     console.log("Wave positions initialized with", this.positions.length, "positions");
+  }
+  
+  /**
+   * Initializes templates for all bubble and particle positions
+   * This pre-calculates all the expensive math operations (trig functions)
+   * Only needs to be run once during initialization
+   */
+  private initializeParticleTemplates(): void {
+    if (this.templatesInitialized) return;
+    
+    const x = this.canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
+    const height = this.canvas.height;
+    const centerY = height / 2;
+    const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
+    
+    // Clear any existing templates
+    this.bubbleTemplates = [];
+    
+    // For each wave position, calculate bubble and particle templates
+    this.positions.forEach(y => {
+      // Calculate bubble radius based on distance from center
+      const normalizedPos = (y - centerY) / (height / 2);
+      const radiusMultiplier = 2.5 + 4 * Math.cos(normalizedPos * Math.PI);
+      const bubbleRadius = baseRadius * radiusMultiplier;
+      
+      // Create a template for particles in this bubble
+      const particleTemplates: {
+        offsetX: number;
+        offsetY: number;
+        velocityX: number;
+        velocityY: number;
+      }[] = [];
+      
+      // Calculate positions and velocities for each particle
+      const particleAngles = CanvasController.PARTICLE_ANGLES;
+      particleAngles.forEach(angle => {
+        // Calculate offset from bubble center
+        const offsetX = Math.cos(angle) * bubbleRadius;
+        const offsetY = Math.sin(angle) * bubbleRadius;
+        
+        // Calculate initial velocity
+        const baseSpeed = 5;
+        const velocityX = Math.cos(angle) * baseSpeed * 1.2;
+        const velocityY = Math.sin(angle) * baseSpeed * 0.9;
+        
+        // Store this particle's template
+        particleTemplates.push({
+          offsetX,
+          offsetY,
+          velocityX,
+          velocityY
+        });
+      });
+      
+      // Add this bubble's complete template
+      this.bubbleTemplates.push({
+        position: { x, y },
+        radius: bubbleRadius,
+        particles: particleTemplates
+      });
+    });
+    
+    this.templatesInitialized = true;
+    console.log("Particle templates initialized with", 
+      this.bubbleTemplates.length, "bubbles and", 
+      this.bubbleTemplates.reduce((total, b) => total + b.particles.length, 0), "particles");
   }
 
   /**
@@ -251,41 +329,37 @@ export class CanvasController {
     return positions;
   }
 
-  private generateBubbles(x: number): Bubble[] {
-    // Initialize positions if needed
-    if (!this.positionsCalculated) {
-      this.initializePositions();
+  /**
+   * Spawns new bubbles at the given x-coordinate using pre-calculated templates
+   * @param x The x-coordinate where bubbles should be spawned (usually the activation line)
+   * @returns Array of newly created Bubble objects
+   */
+  private spawnBubbles(x: number): Bubble[] {
+    // Make sure templates are initialized
+    if (!this.templatesInitialized) {
+      console.log("Templates not initialized, initializing now...");
+      this.initializeParticleTemplates();
     }
 
-    console.log("Generating bubbles at cycle", this.currentCycleNumber);
+    console.log("Spawning bubbles at cycle", this.currentCycleNumber);
     
     const bubbles: Bubble[] = [];
-    const height = this.canvas.height;
-    const centerY = height / 2;
-    const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
     
-    // Generate for each wave position
-    this.positions.forEach((y, positionIndex) => {
-      // Calculate bubble radius - larger in the center, smaller at edges
-      const normalizedPos = (y - centerY) / (height / 2);
-      const radiusMultiplier = 2.5 + 4 * Math.cos(normalizedPos * Math.PI);
-      const bubbleRadius = baseRadius * radiusMultiplier;
-      
+    // Spawn bubbles using the pre-calculated templates
+    this.bubbleTemplates.forEach(bubbleTemplate => {
+      // Generate a unique group ID for this bubble
       const groupId = this.currentGroupId++;
+      
+      // Create an array to hold the particles for this bubble
       const particles: Particle[] = [];
       
-      // Create particles evenly distributed around the bubble perimeter
-      const particleAngles = CanvasController.PARTICLE_ANGLES;
-      particleAngles.forEach((angle, idx) => {
-        // Calculate particle position relative to bubble center
-        const offsetX = Math.cos(angle) * bubbleRadius;
-        const offsetY = Math.sin(angle) * bubbleRadius;
+      // Create particles using the templates
+      bubbleTemplate.particles.forEach((particleTemplate, idx) => {
+        // Calculate absolute position of this particle
+        const particleX = x + particleTemplate.offsetX;
+        const particleY = bubbleTemplate.position.y + particleTemplate.offsetY;
         
-        // Calculate absolute particle position
-        const particleX = x + offsetX;
-        const particleY = y + offsetY;
-
-        // Create physics body with size from our constant
+        // Create physics body with consistent properties
         const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
           friction: 0.0,        
           frictionAir: 0.0, 
@@ -300,38 +374,36 @@ export class CanvasController {
             group: 0   
           }
         });
-
-        // Set initial velocity
-        const baseSpeed = 5;
-        const velocityX = Math.cos(angle) * baseSpeed * 1.2;
-        const velocityY = Math.sin(angle) * baseSpeed * 0.9;
         
+        // Set velocity from the template
         Matter.Body.setVelocity(body, {
-          x: velocityX,
-          y: velocityY
+          x: particleTemplate.velocityX,
+          y: particleTemplate.velocityY
         });
-
+        
+        // Add the body to the physics world
         Matter.Composite.add(this.engine.world, body);
         
-        // Initialize particle with energy based on the power parameter
+        // Create the particle object
         const particle: Particle = {
           body,
-          groupId: groupId,
+          groupId,
           cycleNumber: this.currentCycleNumber,
           index: idx,
           energy: this.params.power,
           initialEnergy: this.params.power,
-          collided: 0 // Initialize with no collisions
+          collided: 0
         };
+        
         particles.push(particle);
       });
-
-      // Create the bubble
+      
+      // Create the bubble with the newly created particles
       bubbles.push({
         x,
-        y,
-        radius: bubbleRadius,
-        initialRadius: bubbleRadius,
+        y: bubbleTemplate.position.y,
+        radius: bubbleTemplate.radius,
+        initialRadius: bubbleTemplate.radius,
         particles,
         groupId,
         cycleNumber: this.currentCycleNumber,
@@ -339,7 +411,7 @@ export class CanvasController {
         initialEnergy: this.params.power
       });
     });
-
+    
     return bubbles;
   }
 
@@ -905,9 +977,9 @@ Updates the energy of individual particles based on their vertical velocity
     
     // Generate bubbles when crossing the activation point (previous frame was before, current frame is after)
     if (prevCyclePct < activationPoint && cyclePct >= activationPoint) {
-      console.log('Generating bubbles at cycle', this.currentCycleNumber + 1);
-      // Generate new bubbles at the activation line
-      const newBubbles = this.generateBubbles(this.activationLineX);
+      console.log('Spawning bubbles at cycle', this.currentCycleNumber + 1);
+      // Spawn new bubbles at the activation line using our templates
+      const newBubbles = this.spawnBubbles(this.activationLineX);
       // Add to the list of bubbles
       this.bubbles.push(...newBubbles);
       // Emit cycle started event if callback is registered
