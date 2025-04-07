@@ -14,9 +14,9 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
-  mouthOpening: number;  // 0 = closed oval, 1 = half oval (maximum opening)
-  showWaves: boolean;    // Whether to show the wave visualization
-  showSmooth: boolean;   // Whether to use smooth bezier curves for wave visualization
+  mouthOpening: number;
+  showWaves: boolean; 
+  showSmooth: boolean;
 }
 
 interface Bubble {
@@ -42,7 +42,7 @@ export class CanvasController {
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 60;
+  private static readonly PARTICLES_PER_RING: number = 120;
   private static readonly PARTICLE_RADIUS: number = 4.0;
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -111,9 +111,9 @@ export class CanvasController {
       showOval: false,
       ovalPosition: 0.5,
       ovalEccentricity: 0.6,
-      mouthOpening: 0, // default: closed oval (no opening)
-      showWaves: false, // default: don't show waves
-      showSmooth: false // default: don't use smooth bezier curves
+      mouthOpening: 0, 
+      showWaves: false, 
+      showSmooth: false 
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -177,11 +177,9 @@ export class CanvasController {
             continue; // Skip this collision as it's too small
           }
           
-          // Square the dot product to emphasize stronger collisions (quadratic scaling)
-          const squaredImpact = impactMagnitude * impactMagnitude;
           
           // Apply a more aggressive scaling factor for more dramatic effects
-          const scaledImpact = squaredImpact * this.params.power * 5.0; 
+          const scaledImpact = impactMagnitude ^ 3 * this.params.power * 5.0; 
           
           // Normalize to a higher range (0 to 3.0) for more dramatic max effects
           const normalizedIntensity = Math.min(scaledImpact, 3.0);
@@ -222,15 +220,15 @@ export class CanvasController {
     const centerY = height / 2;
     const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
     
-    // Calculate wave positions
-    const wavePositions = this.calculateWavePositions(height);
+    // Calculate wave positions and store them in this.positions
+    this.positions = this.calculateWavePositions(height);
     
     // Clear existing caches
     this.bubblePositions = [];
     this.particleTemplates = [];
     
     // For each wave position, calculate bubble and particle positions/templates
-    wavePositions.forEach((y, bubbleIndex) => {
+    this.positions.forEach((y, bubbleIndex) => {
       // Calculate bubble radius based on distance from center (same formula as in generateBubbles)
       const normalizedPos = (y - centerY) / (height / 2);
       const radiusMultiplier = 2.5 + 4 * Math.cos(normalizedPos * Math.PI);
@@ -273,6 +271,9 @@ export class CanvasController {
       this.particleTemplates.push(particleTemplatesForBubble);
     });
     
+    // Debug log to check if positions are properly initialized
+    console.log("Position cache initialized with", this.bubblePositions.length, "bubbles");
+    
     this.positionsInitialized = true;
   }
 
@@ -312,6 +313,8 @@ export class CanvasController {
       this.initializePositionCache();
     }
 
+    console.log("Generating bubbles with", this.bubblePositions.length, "cached positions");
+    
     const bubbles: Bubble[] = [];
     
     // Use cached bubble positions and templates
