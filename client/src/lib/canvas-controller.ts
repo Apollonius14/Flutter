@@ -1,4 +1,13 @@
 import * as Matter from 'matter-js';
+import { 
+  Particle, 
+  Point2D,
+  groupParticles,
+  calculateCentroid,
+  getParticleDirectionAngle,
+  drawQuadraticBezierCurve,
+  calculateLineThickness
+} from './canvas-utility';
 
 interface AnimationParams {
   power: number;
@@ -9,16 +18,6 @@ interface AnimationParams {
   mouthOpening: number;  // 0 = closed oval, 1 = half oval (maximum opening)
   showWaves: boolean;    // Whether to show the wave visualization
   showSmooth: boolean;   // Whether to use smooth bezier curves for wave visualization
-}
-
-interface Particle {
-  body: Matter.Body;
-  groupId: number;
-  cycleNumber: number;
-  index: number; 
-  energy: number; 
-  initialEnergy: number;
-  collided: number; // 0 = never collided, 1+ = collided at least once
 }
 
 interface Bubble {
@@ -33,13 +32,6 @@ interface Bubble {
   initialEnergy: number;
 }
 
-// New interface for representing a point in 2D space
-interface Point2D {
-  x: number;
-  y: number;
-}
-
-
 // Interface for segment glow data
 interface SegmentGlow {
   intensity: number;
@@ -49,12 +41,12 @@ interface SegmentGlow {
 
 
 export class CanvasController {
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 78;
-  private static readonly PARTICLE_RADIUS: number = 2.0;
+  private static readonly PARTICLES_PER_RING: number = 60;
+  private static readonly PARTICLE_RADIUS: number = 4.0;
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
@@ -180,7 +172,7 @@ export class CanvasController {
           
           // Apply a threshold to filter out tiny collisions and static noise
           // Ignore collisions that don't meet the minimum threshold
-          const COLLISION_THRESHOLD = 0.4;
+          const COLLISION_THRESHOLD = 0.3;
           if (impactMagnitude < COLLISION_THRESHOLD) {
             continue; // Skip this collision as it's too small
           }
@@ -290,7 +282,7 @@ export class CanvasController {
           }
         });
 
-        const baseSpeed = 9; 
+        const baseSpeed = 5; 
 
 
         Matter.Body.setVelocity(body, {
@@ -520,38 +512,22 @@ export class CanvasController {
   }
   
   private renderWaves(ctx: CanvasRenderingContext2D): void {
-    // Group particles by cycleNumber
-    const cycleGroups = new Map<number, Particle[]>();
-    
+    // First, collect all particles from all bubbles
+    const allParticles: Particle[] = [];
     for (const bubble of this.bubbles) {
-      const cycle = bubble.cycleNumber;
-      
-      if (!cycleGroups.has(cycle)) {
-        cycleGroups.set(cycle, []);
-      }
-      
-      for (const particle of bubble.particles) {
-        cycleGroups.get(cycle)?.push(particle);
-      }
+      allParticles.push(...bubble.particles);
     }
     
+    // Group particles by cycleNumber
+    const cycleGroups = groupParticles(allParticles, p => p.cycleNumber);
+    
     // Render each cycle's particles
-    cycleGroups.forEach(particles => {
+    for (const [, particles] of Array.from(cycleGroups.entries())) {
       // Group by groupId (bubble)
-      const bubbleGroups = new Map<number, Particle[]>();
-      
-      for (const particle of particles) {
-        const group = particle.groupId;
-        
-        if (!bubbleGroups.has(group)) {
-          bubbleGroups.set(group, []);
-        }
-        
-        bubbleGroups.get(group)?.push(particle);
-      }
+      const bubbleGroups = groupParticles(particles, p => p.groupId);
       
       // Render each bubble's particles as a wave
-      bubbleGroups.forEach(bubbleParticles => {
+      for (const [, bubbleParticles] of Array.from(bubbleGroups.entries())) {
         // Sort by index to maintain the same order
         bubbleParticles.sort((a, b) => a.index - b.index);
         
@@ -562,7 +538,7 @@ export class CanvasController {
         // Draw non-collided (cyan) wave lines first
         if (nonCollidedParticles.length >= 2) {
           ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
-          ctx.lineWidth = 9.5;
+          ctx.lineWidth = 7.5;
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -585,7 +561,7 @@ export class CanvasController {
         // Draw collided (yellow) wave lines
         if (collidedParticles.length >= 2) {
           ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; // Yellow
-          ctx.lineWidth = 7
+          ctx.lineWidth = 5
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -604,8 +580,8 @@ export class CanvasController {
           
           ctx.stroke();
         }
-      });
-    });
+      }
+    }
   }
   
   private renderSmoothWaves(
@@ -613,217 +589,77 @@ export class CanvasController {
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    // Helper function to group particles by direction angle
-    const groupParticlesByDirection = (particles: Particle[]) => {
-      const buckets = new Map<number, Particle[]>();
-      const bucketSize = 5; // Increased from 5 to 10 degrees for smoother curves
-      
-      for (const particle of particles) {
-        // Calculate direction of particle's motion
-        const velocity = particle.body.velocity;
-        const angle = Math.atan2(velocity.y, velocity.x) * 180 / Math.PI;
-        
-        // Round to nearest bucketSize degrees
-        const bucketAngle = Math.round(angle / bucketSize) * bucketSize;
-        
-        if (!buckets.has(bucketAngle)) {
-          buckets.set(bucketAngle, []);
-        }
-        
-        buckets.get(bucketAngle)?.push(particle);
-      }
-      
-      return buckets;
-    };
+    const bucketSize = 5; // Angle bucket size in degrees
     
-    // Function to calculate the direction angle of a particle
-    const getDirectionAngle = (particle: Particle): number => {
-      const vel = particle.body.velocity;
-      return Math.atan2(vel.y, vel.x);
-    };
-    
-    // Function to calculate centroid of a group of particles
-    const calculateCentroid = (particles: Particle[]): Point2D => {
-      if (particles.length === 0) return { x: 0, y: 0 };
-      
-      let sumX = 0;
-      let sumY = 0;
-      
-      for (const particle of particles) {
-        sumX += particle.body.position.x;
-        sumY += particle.body.position.y;
-      }
-      
-      return {
-        x: sumX / particles.length,
-        y: sumY / particles.length
-      };
-    };
-    
-    // Draw smooth curves for non-collided particles (more prominent)
-    if (nonCollidedParticles.length > 5) { // Need enough particles for meaningful curve
-      const buckets = groupParticlesByDirection(nonCollidedParticles);
+    // Process non-collided particles (cyan)
+    if (nonCollidedParticles.length > 5) {
+      // Group particles by direction angle
+      const buckets = groupParticles(nonCollidedParticles, p => getParticleDirectionAngle(p, bucketSize));
       const centroids: Point2D[] = [];
       
       // Extract and sort centroids by angle bucket
       Array.from(buckets.entries())
-        .map(([angleBucket, particles]) => {
-          return {
-            angleBucket: Number(angleBucket), // Convert string key to number
-            centroid: calculateCentroid(particles),
-            count: particles.length
-          };
-        })
+        .map(([angleBucket, particles]) => ({
+          angleBucket: Number(angleBucket),
+          centroid: calculateCentroid(particles),
+          count: particles.length
+        }))
         .filter(item => item.count >= 2) // Only use buckets with multiple particles
-        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
+        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket
         .forEach(item => centroids.push(item.centroid));
       
       // Draw bezier curve through centroids if we have enough points
       if (centroids.length >= 4) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(5, 255, 245, 0.95)"; // Brighter cyan
-        ctx.lineWidth = 20;
+        // Calculate line width based on particle count
+        const lineWidth = calculateLineThickness(
+          nonCollidedParticles.length, 
+          3.5,  // Base thickness
+          14    // Max thickness
+        );
         
-        const startPoint = centroids[0];
-        ctx.moveTo(startPoint.x, startPoint.y);
-        
-        // Linear blending constraint factor - controls how much the curve can deviate
-        const influenceFactor = 0.3; // Lower values = less curve deviation
-        
-        // Use constrained quadratic curves through centroids
-        for (let i = 1; i < centroids.length - 2; i++) {
-          const c1 = centroids[i];
-          const c2 = centroids[i + 1];
-          
-          // Use the midpoint between current and next as the bezier end
-          const endX = (c1.x + c2.x) / 2;
-          const endY = (c1.y + c2.y) / 2;
-          
-          // Apply linear blending constraint to control point
-          // This pulls the control point closer to the line between adjacent midpoints
-          // reducing the "pull" effect that causes wild deviations
-          const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
-          const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
-          
-          // Calculate the midpoint of the line segment (this is our reference line)
-          const midX = (prevX + endX) / 2;
-          const midY = (prevY + endY) / 2;
-          
-          // Apply linear blending constraint - limit control point deviation
-          const controlX = midX + influenceFactor * (c1.x - midX);
-          const controlY = midY + influenceFactor * (c1.y - midY);
-          
-          // Use the constrained control point
-          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-        }
-        
-        // Add the final segment if we have enough points
-        if (centroids.length >= 3) {
-          const last = centroids.length - 1;
-          const secondLast = centroids.length - 2;
-          
-          // Apply same constraint to final segment
-          const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
-          const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
-          const lastX = centroids[last].x;
-          const lastY = centroids[last].y;
-          
-          // Reference midpoint
-          const midX = (prevEndX + lastX) / 2;
-          const midY = (prevEndY + lastY) / 2;
-          
-          // Constrained control point
-          const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
-          const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
-          
-          ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
-        }
-        
-        ctx.stroke();
+        // Draw the curve
+        drawQuadraticBezierCurve(
+          ctx,
+          centroids,
+          { strokeStyle: "rgba(5, 255, 245, 0.95)", lineWidth }, // Brilliant cyan
+          0.3 // Influence factor (curve smoothness)
+        );
       }
     }
     
-    // Draw smooth curves for collided particles (less prominent)
+    // Process collided particles (yellow)
     if (collidedParticles.length > 5) {
-      const buckets = groupParticlesByDirection(collidedParticles);
+      // Group particles by direction angle
+      const buckets = groupParticles(collidedParticles, p => getParticleDirectionAngle(p, bucketSize));
       const centroids: Point2D[] = [];
       
       // Extract and sort centroids by angle bucket
       Array.from(buckets.entries())
-        .map(([angleBucket, particles]) => {
-          return {
-            angleBucket: Number(angleBucket), // Convert string key to number
-            centroid: calculateCentroid(particles),
-            count: particles.length
-          };
-        })
+        .map(([angleBucket, particles]) => ({
+          angleBucket: Number(angleBucket),
+          centroid: calculateCentroid(particles),
+          count: particles.length
+        }))
         .filter(item => item.count >= 2) // Only use buckets with multiple particles
-        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
+        .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket
         .forEach(item => centroids.push(item.centroid));
       
       // Draw bezier curve through centroids if we have enough points
       if (centroids.length >= 4) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(255, 255, 120, 0.55)"; // Yellow but less bright
-        ctx.lineWidth = 15.5;
+        // Calculate line width based on particle count
+        const lineWidth = calculateLineThickness(
+          collidedParticles.length, 
+          3.0,  // Base thickness
+          12    // Max thickness
+        );
         
-        const startPoint = centroids[0];
-        ctx.moveTo(startPoint.x, startPoint.y);
-        
-        // Linear blending constraint factor - controls how much the curve can deviate
-        // Slightly higher for collided particles to allow more deviation
-        const influenceFactor = 0.35; // Lower values = less curve deviation
-        
-        // Use constrained quadratic curves through centroids
-        for (let i = 1; i < centroids.length - 2; i++) {
-          const c1 = centroids[i];
-          const c2 = centroids[i + 1];
-          
-          // Use the midpoint between current and next as the bezier end
-          const endX = (c1.x + c2.x) / 2;
-          const endY = (c1.y + c2.y) / 2;
-          
-          // Apply linear blending constraint to control point
-          // This pulls the control point closer to the line between adjacent midpoints
-          // reducing the "pull" effect that causes wild deviations
-          const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
-          const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
-          
-          // Calculate the midpoint of the line segment (this is our reference line)
-          const midX = (prevX + endX) / 2;
-          const midY = (prevY + endY) / 2;
-          
-          // Apply linear blending constraint - limit control point deviation
-          const controlX = midX + influenceFactor * (c1.x - midX);
-          const controlY = midY + influenceFactor * (c1.y - midY);
-          
-          // Use the constrained control point
-          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-        }
-        
-        // Add the final segment if we have enough points
-        if (centroids.length >= 3) {
-          const last = centroids.length - 1;
-          const secondLast = centroids.length - 2;
-          
-          // Apply same constraint to final segment
-          const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
-          const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
-          const lastX = centroids[last].x;
-          const lastY = centroids[last].y;
-          
-          // Reference midpoint
-          const midX = (prevEndX + lastX) / 2;
-          const midY = (prevEndY + lastY) / 2;
-          
-          // Constrained control point
-          const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
-          const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
-          
-          ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
-        }
-        
-        ctx.stroke();
+        // Draw the curve with slightly higher influence factor for more variation
+        drawQuadraticBezierCurve(
+          ctx,
+          centroids,
+          { strokeStyle: "rgba(255, 255, 120, 0.55)", lineWidth }, // Yellow
+          0.35 // Slightly higher influence factor
+        );
       }
     }
   }
@@ -841,254 +677,93 @@ export class CanvasController {
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    // Helper function to group particles by direction angle
+    const ANGLE_BUCKETS = 72; // Number of angle buckets (5 degrees each)
+    
+    // Helper function to group particles by direction angle with cycle-specific buckets
     const groupParticlesByDirection = (particles: Particle[]) => {
-      const buckets = new Map<string, Particle[]>();
-      const ANGLE_BUCKETS = 72; // Number of angle buckets (10 degrees each)
-      
-      for (const particle of particles) {
-        const body = particle.body;
-        const velocity = body.velocity;
-        
-        // Calculate angle of movement (in radians)
+      return groupParticles(particles, particle => {
+        const velocity = particle.body.velocity;
         const angle = Math.atan2(velocity.y, velocity.x);
-        
-        // Normalize to 0-360 degrees and split into buckets
         const degrees = ((angle * 180 / Math.PI) + 360) % 360;
         const bucketIndex = Math.floor(degrees / (360 / ANGLE_BUCKETS));
-        
-        const key = bucketIndex.toString();
-        if (!buckets.has(key)) {
-          buckets.set(key, []);
-        }
-        buckets.get(key)!.push(particle);
-      }
-      
-      return buckets;
+        return bucketIndex.toString();
+      });
     };
     
-    // Helper to calculate centroid (average position) of a group of particles
-    const calculateCentroid = (particles: Particle[]): Point2D => {
-      let sumX = 0;
-      let sumY = 0;
-      
-      for (const particle of particles) {
-        const position = particle.body.position;
-        sumX += position.x;
-        sumY += position.y;
-      }
-      
-      return {
-        x: sumX / particles.length,
-        y: sumY / particles.length
-      };
-    };
-    
-    // NEW STEP: First group all particles by cycle number
-    const nonCollidedByCycle = new Map<number, Particle[]>();
-    const collidedByCycle = new Map<number, Particle[]>();
-    
-    // Group non-collided particles by cycle
-    for (const particle of nonCollidedParticles) {
-      const cycleNum = particle.cycleNumber;
-      if (!nonCollidedByCycle.has(cycleNum)) {
-        nonCollidedByCycle.set(cycleNum, []);
-      }
-      nonCollidedByCycle.get(cycleNum)!.push(particle);
-    }
-    
-    // Group collided particles by cycle
-    for (const particle of collidedParticles) {
-      const cycleNum = particle.cycleNumber;
-      if (!collidedByCycle.has(cycleNum)) {
-        collidedByCycle.set(cycleNum, []);
-      }
-      collidedByCycle.get(cycleNum)!.push(particle);
-    }
+    // First group all particles by cycle number
+    const nonCollidedByCycle = groupParticles(nonCollidedParticles, p => p.cycleNumber);
+    const collidedByCycle = groupParticles(collidedParticles, p => p.cycleNumber);
     
     // Draw smooth curves for non-collided particles, grouped by cycle
-    // Convert Map iterator to array to avoid downlevelIteration issues
-    for (const [cycleNum, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
+    for (const [, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
       if (particlesInCycle.length > 5) { // Need enough particles for meaningful curve
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
         
         // Extract and sort centroids by angle bucket
         Array.from(buckets.entries())
-          .map(([angleBucket, particles]) => {
-            return {
-              angleBucket: Number(angleBucket), // Convert string key to number
-              centroid: calculateCentroid(particles),
-              count: particles.length
-            };
-          })
+          .map(([angleBucket, particles]) => ({
+            angleBucket: Number(angleBucket),
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          }))
           .filter(item => item.count >= 2) // Only use buckets with multiple particles
           .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
         if (centroids.length >= 4) {
-          // Calculate line width based on particle count (proportional to square of particle count)
-          const particleCount = particlesInCycle.length;
-          const baseThickness = 3.5;
-          const maxThickness = 15;
-          // Square function with scaling to keep reasonable thickness range
-          const scaledThickness = Math.min(maxThickness, baseThickness * Math.pow(particleCount / 30, 2));
+          // Calculate line width based on particle count
+          const lineWidth = calculateLineThickness(
+            particlesInCycle.length,
+            3.5,  // Base thickness
+            15    // Max thickness
+          );
           
-          ctx.beginPath();
-          ctx.strokeStyle = "rgba(0, 255, 255, 1.0)"; // Brilliant cyan
-          ctx.lineWidth = scaledThickness;
-          
-          const startPoint = centroids[0];
-          ctx.moveTo(startPoint.x, startPoint.y);
-          
-          // Linear blending constraint factor - controls how much the curve can deviate
-          const influenceFactor = 0.3; // Lower values = less curve deviation
-          
-          // Use constrained quadratic curves through centroids
-          for (let i = 1; i < centroids.length - 2; i++) {
-            const c1 = centroids[i];
-            const c2 = centroids[i + 1];
-            
-            // Use the midpoint between current and next as the bezier end
-            const endX = (c1.x + c2.x) / 2;
-            const endY = (c1.y + c2.y) / 2;
-            
-            // Apply linear blending constraint to control point
-            // This pulls the control point closer to the line between adjacent midpoints
-            // reducing the "pull" effect that causes wild deviations
-            const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
-            const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
-            
-            // Calculate the midpoint of the line segment (this is our reference line)
-            const midX = (prevX + endX) / 2;
-            const midY = (prevY + endY) / 2;
-            
-            // Apply linear blending constraint - limit control point deviation
-            const controlX = midX + influenceFactor * (c1.x - midX);
-            const controlY = midY + influenceFactor * (c1.y - midY);
-            
-            // Use the constrained control point
-            ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-          }
-          
-          // Add the final segment if we have enough points
-          if (centroids.length >= 3) {
-            const last = centroids.length - 1;
-            const secondLast = centroids.length - 2;
-            
-            // Apply same constraint to final segment
-            const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
-            const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
-            const lastX = centroids[last].x;
-            const lastY = centroids[last].y;
-            
-            // Reference midpoint
-            const midX = (prevEndX + lastX) / 2;
-            const midY = (prevEndY + lastY) / 2;
-            
-            // Constrained control point
-            const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
-            const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
-            
-            ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
-          }
-          
-          ctx.stroke();
+          // Draw the curve
+          drawQuadraticBezierCurve(
+            ctx,
+            centroids,
+            { strokeStyle: "rgba(0, 255, 255, 1.0)", lineWidth }, // Brilliant cyan
+            0.3 // Influence factor (curve smoothness)
+          );
         }
       }
     }
     
     // Draw smooth curves for collided particles, grouped by cycle
-    // Convert Map iterator to array to avoid downlevelIteration issues
-    for (const [cycleNum, particlesInCycle] of Array.from(collidedByCycle.entries())) {
+    for (const [, particlesInCycle] of Array.from(collidedByCycle.entries())) {
       if (particlesInCycle.length > 5) {
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
         
         // Extract and sort centroids by angle bucket
         Array.from(buckets.entries())
-          .map(([angleBucket, particles]) => {
-            return {
-              angleBucket: Number(angleBucket), // Convert string key to number
-              centroid: calculateCentroid(particles),
-              count: particles.length
-            };
-          })
+          .map(([angleBucket, particles]) => ({
+            angleBucket: Number(angleBucket),
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          }))
           .filter(item => item.count >= 2) // Only use buckets with multiple particles
           .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
         if (centroids.length >= 4) {
-          // Calculate line width based on particle count (proportional to square of particle count)
-          const particleCount = particlesInCycle.length;
-          const baseThickness = 3.0;
-          const maxThickness = 12;
-          // Square function with scaling to keep reasonable thickness range
-          const scaledThickness = Math.min(maxThickness, baseThickness * Math.pow(particleCount / 25, 2));
+          // Calculate line width based on particle count
+          const lineWidth = calculateLineThickness(
+            particlesInCycle.length,
+            2.0,  // Base thickness
+            10    // Max thickness
+          );
           
-          ctx.beginPath();
-          ctx.strokeStyle = "rgba(255, 215, 0, 1.0)"; // Golden yellow
-          ctx.lineWidth = scaledThickness;
-          
-          const startPoint = centroids[0];
-          ctx.moveTo(startPoint.x, startPoint.y);
-          
-          // Linear blending constraint factor - controls how much the curve can deviate
-          // Slightly higher for collided particles to allow more deviation
-          const influenceFactor = 0.35; // Lower values = less curve deviation
-          
-          // Use constrained quadratic curves through centroids
-          for (let i = 1; i < centroids.length - 2; i++) {
-            const c1 = centroids[i];
-            const c2 = centroids[i + 1];
-            
-            // Use the midpoint between current and next as the bezier end
-            const endX = (c1.x + c2.x) / 2;
-            const endY = (c1.y + c2.y) / 2;
-            
-            // Apply linear blending constraint to control point
-            // This pulls the control point closer to the line between adjacent midpoints
-            // reducing the "pull" effect that causes wild deviations
-            const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
-            const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
-            
-            // Calculate the midpoint of the line segment (this is our reference line)
-            const midX = (prevX + endX) / 2;
-            const midY = (prevY + endY) / 2;
-            
-            // Apply linear blending constraint - limit control point deviation
-            const controlX = midX + influenceFactor * (c1.x - midX);
-            const controlY = midY + influenceFactor * (c1.y - midY);
-            
-            // Use the constrained control point
-            ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-          }
-          
-          // Add the final segment if we have enough points
-          if (centroids.length >= 3) {
-            const last = centroids.length - 1;
-            const secondLast = centroids.length - 2;
-            
-            // Apply same constraint to final segment
-            const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
-            const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
-            const lastX = centroids[last].x;
-            const lastY = centroids[last].y;
-            
-            // Reference midpoint
-            const midX = (prevEndX + lastX) / 2;
-            const midY = (prevEndY + lastY) / 2;
-            
-            // Constrained control point
-            const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
-            const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
-            
-            ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
-          }
-          
-          ctx.stroke();
+          // Draw the curve with slightly higher influence factor for more variation
+          drawQuadraticBezierCurve(
+            ctx,
+            centroids,
+            { strokeStyle: "rgba(255, 215, 0, 1.0)", lineWidth }, // Golden yellow
+            0.35 // Slightly higher influence factor
+          );
         }
       }
     }
@@ -1123,7 +798,7 @@ export class CanvasController {
     const ovalComposite = Matter.Composite.create();
     
     // More segments for smoother oval
-    const segments = 49;
+    const segments = 69;
     
     // Calculate the oval circumference step angle
     const angleStep = (Math.PI * 2) / segments;
@@ -1294,7 +969,7 @@ export class CanvasController {
     // Apply stronger motion blur effect instead of completely clearing the canvas
     // Set a semi-transparent black rectangle over the previous frame
     // Lower alpha = more motion blur (longer trails)
-    ctx.fillStyle = "rgba(26, 26, 26, 0.65)"; // Dark background with alpha for more pronounced motion blur
+    ctx.fillStyle = "rgba(26, 26, 26, 0.35)"; // Dark background with alpha for more pronounced motion blur
     ctx.fillRect(0, 0, width, height);
     
     // Update glow data for oval segments (data management only)

@@ -1,0 +1,78 @@
+1. Repeated Particle Grouping Logic
+Where: renderWaves, renderSmoothWaves, and renderSmoothWavesByCycle all group particles by various criteria (cycle number, group ID, direction angle).
+Issue: Each method reimplements similar Map-based grouping with slight variations. For example:
+renderWaves groups by cycleNumber and groupId.
+renderSmoothWaves groups by direction angle.
+renderSmoothWavesByCycle groups by cycleNumber and direction angle.
+Fix: Abstract this into a reusable utility function: type ParticleGroupKey = number | string;
+function groupParticles(
+  particles: Particle[],
+  keyFn: (p: Particle) => ParticleGroupKey
+): Map {
+  const groups = new Map();
+  for (const particle of particles) {
+    const key = keyFn(particle);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(particle);
+  }
+  return groups;
+}
+
+Use in renderWaves: groupParticles(particles, p => p.cycleNumber).
+Use in renderSmoothWaves: groupParticles(particles, p => Math.round(Math.atan2(p.body.velocity.y, p.body.velocity.x) * 180 / Math.PI / 5) * 5).
+Reduces ~50 lines of redundant code and makes logic reusable.
+2. Duplicate Bezier Curve Logic
+Where: renderSmoothWaves and renderSmoothWavesByCycle have nearly identical quadratic Bezier curve drawing code (lines like ctx.quadraticCurveTo(controlX, controlY, endX, endY)).
+Issue: The only differences are styling (color, width) and minor parameter tweaks (e.g., influenceFactor). This is ~100 lines duplicated.
+Fix: Extract a drawQuadraticBezierCurve function: function drawQuadraticBezierCurve(
+  ctx: CanvasRenderingContext2D,
+  centroids: Point2D[],
+  style: { strokeStyle: string; lineWidth: number },
+  influenceFactor: number
+) {
+  ctx.beginPath();
+  ctx.strokeStyle = style.strokeStyle;
+  ctx.lineWidth = style.lineWidth;
+  const startPoint = centroids[0];
+  ctx.moveTo(startPoint.x, startPoint.y);
+
+  for (let i = 1; i < centroids.length - 2; i++) {
+    const c1 = centroids[i], c2 = centroids[i + 1];
+    const endX = (c1.x + c2.x) / 2, endY = (c1.y + c2.y) / 2;
+    const prevX = i === 1 ? startPoint.x : (centroids[i - 1].x + c1.x) / 2;
+    const prevY = i === 1 ? startPoint.y : (centroids[i - 1].y + c1.y) / 2;
+    const midX = (prevX + endX) / 2, midY = (prevY + endY) / 2;
+    const controlX = midX + influenceFactor * (c1.x - midX);
+    const controlY = midY + influenceFactor * (c1.y - midY);
+    ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+  }
+
+  if (centroids.length >= 3) {
+    const last = centroids.length - 1, secondLast = centroids.length - 2;
+    const prevEndX = (centroids[secondLast - 1].x + centroids[secondLast].x) / 2;
+    const prevEndY = (centroids[secondLast - 1].y + centroids[secondLast].y) / 2;
+    const lastX = centroids[last].x, lastY = centroids[last].y;
+    const midX = (prevEndX + lastX) / 2, midY = (prevEndY + lastY) / 2;
+    const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
+    const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
+    ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
+  }
+
+  ctx.stroke();
+}
+
+Call it with different styles: drawQuadraticBezierCurve(ctx, centroids, { strokeStyle: "rgba(5, 255, 245, 0.95)", lineWidth: 14 }, 0.3).
+Cuts ~80 lines and centralizes curve logic.
+3. Redundant Calculations
+Where: calculateCentroid is defined identically in renderSmoothWaves and renderSmoothWavesByCycle.
+Issue: Same logic, two places—classic duplication.
+Fix: Move to a shared utility: function calculateCentroid(particles: Particle[]): Point2D {
+  if (particles.length === 0) return { x: 0, y: 0 };
+  const sum = particles.reduce(
+    (acc, p) => ({ x: acc.x + p.body.position.x, y: acc.y + p.body.position.y }),
+    { x: 0, y: 0 }
+  );
+  return { x: sum.x / particles.length, y: sum.y / particles.length };
+}
+
+Reduces ~10 lines and ensures consistency.
