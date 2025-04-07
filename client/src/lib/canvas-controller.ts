@@ -38,6 +38,7 @@ interface SegmentGlow {
 }
 
 export class CanvasController {
+  // Constants
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
@@ -47,18 +48,17 @@ export class CanvasController {
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
-    const baseAngles: number[] = [];
     const particleCount = CanvasController.PARTICLES_PER_RING;
     const halfCount = Math.floor(particleCount / 2);
 
     // Add center particle at 0°
-    baseAngles.push(0);
+    particleAngles.push(0);
 
     // Add symmetric pairs of particles
     for (let i = 1; i <= halfCount; i++) {
       const angle = (i / halfCount) * Math.PI;
-      baseAngles.push(angle);
-      baseAngles.push(-angle);
+      particleAngles.push(angle);
+      particleAngles.push(-angle);
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -87,8 +87,8 @@ export class CanvasController {
   private ovalBody: Matter.Composite | null = null;
   private segmentGlows: SegmentGlow[] = [];
   
-  // Cached positions and templates
   // Templates for particle positions, velocities, and other properties
+  
   private bubbleTemplates: {
     position: { x: number; y: number };
     radius: number;
@@ -130,13 +130,14 @@ export class CanvasController {
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
 
-    // Initialize positions for wave patterns
+    // 1. Initialize vertical positions for bubbles
     this.initializePositions();
     
-    // Initialize particle templates for all bubbles (one-time expensive calculation)
+    // 2. Initialize particle templates (pre-calculated positions and velocities)
+    // This is a key optimization that avoids recalculating trig functions on every cycle
     this.initializeParticleTemplates();
 
-    // Initialize the oval if needed
+    // 3. Initialize the oval if needed
     this.updateOval();
     
 
@@ -234,10 +235,8 @@ export class CanvasController {
   }
   
   /**
-   * Initializes templates for all bubble and particle positions
-   * This pre-calculates all the expensive math operations (trig functions)
-   * Only needs to be run once during initialization
-   */
+   * Initializes templates for all bubble and particle positions **/
+
   private initializeParticleTemplates(): void {
     if (this.templatesInitialized) return;
     
