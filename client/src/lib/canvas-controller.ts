@@ -50,7 +50,7 @@ interface SegmentGlow {
 
 export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
   private static readonly PARTICLES_PER_RING: number = 78;
@@ -364,7 +364,7 @@ export class CanvasController {
       
       // Calculate decay factor - higher vertical velocity means faster decay
       // This will penalize vertical motion, emphasizing horizontal waves
-      const velocityFactor = 0.5 + (verticalVelocity * 0.5); // 20% penalty per unit of vertical velocity
+      const velocityFactor = 0.5 + (verticalVelocity * 2); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
       const decay = particle.initialEnergy * 0.001 * 0.5 * velocityFactor;
@@ -393,10 +393,10 @@ export class CanvasController {
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = CanvasController.PARTICLE_RADIUS
+    size: number = CanvasController.PARTICLE_RADIUS * 10
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
-    let finalOpacity = opacity * this.params.power;
+    let finalOpacity = opacity * this.params.power * 0.5;
     let particleSize = size;
     
     if (particle) {
@@ -562,7 +562,7 @@ export class CanvasController {
         // Draw non-collided (cyan) wave lines first
         if (nonCollidedParticles.length >= 2) {
           ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 9.5;
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -585,7 +585,7 @@ export class CanvasController {
         // Draw collided (yellow) wave lines
         if (collidedParticles.length >= 2) {
           ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; // Yellow
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 7
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -616,7 +616,7 @@ export class CanvasController {
     // Helper function to group particles by direction angle
     const groupParticlesByDirection = (particles: Particle[]) => {
       const buckets = new Map<number, Particle[]>();
-      const bucketSize = 10; // Increased from 5 to 10 degrees for smoother curves
+      const bucketSize = 5; // Increased from 5 to 10 degrees for smoother curves
       
       for (const particle of particles) {
         // Calculate direction of particle's motion
@@ -682,7 +682,7 @@ export class CanvasController {
       if (centroids.length >= 4) {
         ctx.beginPath();
         ctx.strokeStyle = "rgba(5, 255, 245, 0.95)"; // Brighter cyan
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 20;
         
         const startPoint = centroids[0];
         ctx.moveTo(startPoint.x, startPoint.y);
@@ -765,7 +765,7 @@ export class CanvasController {
       if (centroids.length >= 4) {
         ctx.beginPath();
         ctx.strokeStyle = "rgba(255, 255, 120, 0.55)"; // Yellow but less bright
-        ctx.lineWidth = 3.5;
+        ctx.lineWidth = 15.5;
         
         const startPoint = centroids[0];
         ctx.moveTo(startPoint.x, startPoint.y);
@@ -844,7 +844,7 @@ export class CanvasController {
     // Helper function to group particles by direction angle
     const groupParticlesByDirection = (particles: Particle[]) => {
       const buckets = new Map<string, Particle[]>();
-      const ANGLE_BUCKETS = 36; // Number of angle buckets (10 degrees each)
+      const ANGLE_BUCKETS = 72; // Number of angle buckets (10 degrees each)
       
       for (const particle of particles) {
         const body = particle.body;
@@ -907,7 +907,8 @@ export class CanvasController {
     }
     
     // Draw smooth curves for non-collided particles, grouped by cycle
-    for (const [cycleNum, particlesInCycle] of nonCollidedByCycle.entries()) {
+    // Convert Map iterator to array to avoid downlevelIteration issues
+    for (const [cycleNum, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
       if (particlesInCycle.length > 5) { // Need enough particles for meaningful curve
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
@@ -927,9 +928,16 @@ export class CanvasController {
         
         // Draw bezier curve through centroids if we have enough points
         if (centroids.length >= 4) {
+          // Calculate line width based on particle count (proportional to square of particle count)
+          const particleCount = particlesInCycle.length;
+          const baseThickness = 3.5;
+          const maxThickness = 15;
+          // Square function with scaling to keep reasonable thickness range
+          const scaledThickness = Math.min(maxThickness, baseThickness * Math.pow(particleCount / 30, 2));
+          
           ctx.beginPath();
-          ctx.strokeStyle = "rgba(5, 255, 245, 0.95)"; // Brighter cyan
-          ctx.lineWidth = 6;
+          ctx.strokeStyle = "rgba(0, 255, 230, 1.0)"; // More vibrant cyan
+          ctx.lineWidth = scaledThickness;
           
           const startPoint = centroids[0];
           ctx.moveTo(startPoint.x, startPoint.y);
@@ -992,7 +1000,8 @@ export class CanvasController {
     }
     
     // Draw smooth curves for collided particles, grouped by cycle
-    for (const [cycleNum, particlesInCycle] of collidedByCycle.entries()) {
+    // Convert Map iterator to array to avoid downlevelIteration issues
+    for (const [cycleNum, particlesInCycle] of Array.from(collidedByCycle.entries())) {
       if (particlesInCycle.length > 5) {
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
@@ -1012,9 +1021,16 @@ export class CanvasController {
         
         // Draw bezier curve through centroids if we have enough points
         if (centroids.length >= 4) {
+          // Calculate line width based on particle count (proportional to square of particle count)
+          const particleCount = particlesInCycle.length;
+          const baseThickness = 3.0;
+          const maxThickness = 12;
+          // Square function with scaling to keep reasonable thickness range
+          const scaledThickness = Math.min(maxThickness, baseThickness * Math.pow(particleCount / 25, 2));
+          
           ctx.beginPath();
-          ctx.strokeStyle = "rgba(255, 255, 120, 0.55)"; // Yellow but less bright
-          ctx.lineWidth = 3.5;
+          ctx.strokeStyle = "rgba(255, 235, 60, 0.85)"; // More vibrant yellow
+          ctx.lineWidth = scaledThickness;
           
           const startPoint = centroids[0];
           ctx.moveTo(startPoint.x, startPoint.y);
@@ -1107,7 +1123,7 @@ export class CanvasController {
     const ovalComposite = Matter.Composite.create();
     
     // More segments for smoother oval
-    const segments = 54;
+    const segments = 49;
     
     // Calculate the oval circumference step angle
     const angleStep = (Math.PI * 2) / segments;
@@ -1233,8 +1249,8 @@ export class CanvasController {
     // Apply eccentricity - lower values make a more circular oval
     // 0.0 = perfect circle, 1.0 = very elongated horizontal oval
     const eccentricity = this.params.ovalEccentricity;
-    const ovalWidth = ovalBaseSize * (1 + eccentricity * 0.5);
-    const ovalHeight = ovalBaseSize * (1 - eccentricity * 0.3);
+    const ovalWidth = ovalBaseSize * (1 + eccentricity );
+    const ovalHeight = ovalBaseSize * (1 - eccentricity);
     
     // Create the oval composite with the mouth opening parameter
     this.ovalBody = this.createOvalBody(
@@ -1275,8 +1291,10 @@ export class CanvasController {
     const { width, height } = this.canvas;
     const ctx = this.ctx;
   
-    // Clear canvas 
-    ctx.fillStyle = "#1a1a1a";
+    // Apply motion blur effect instead of completely clearing the canvas
+    // Set a semi-transparent black rectangle over the previous frame
+    // Lower alpha = more motion blur (longer trails)
+    ctx.fillStyle = "rgba(26, 26, 26, 0.85)"; // Dark background with alpha for motion blur
     ctx.fillRect(0, 0, width, height);
     
     // Update glow data for oval segments (data management only)
@@ -1377,7 +1395,7 @@ export class CanvasController {
           const adjustedIntensity = segmentGlow.intensity * decayFactor;
           
           // Map intensity to opacity (0.1 to 0.6)
-          fillOpacity = 0.1 + Math.min(0.5, adjustedIntensity * 0.2);
+          fillOpacity = 0.3 + Math.min(0.5, adjustedIntensity * 0.2);
         }
         
         // Fill with white or very light gray

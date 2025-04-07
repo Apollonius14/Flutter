@@ -50,10 +50,10 @@ interface SegmentGlow {
 
 export class CanvasController {
   private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
   private static readonly PHYSICS_TIMESTEP_MS: number = 8; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 88;
+  private static readonly PARTICLES_PER_RING: number = 120;
   private static readonly PARTICLE_RADIUS: number = 0.1;
   private static readonly FIXED_BUBBLE_RADIUS: number = 3; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -364,7 +364,7 @@ export class CanvasController {
       
       // Calculate decay factor - higher vertical velocity means faster decay
       // This will penalize vertical motion, emphasizing horizontal waves
-      const velocityFactor = 1 + (verticalVelocity * 1); // 20% penalty per unit of vertical velocity
+      const velocityFactor = 0.4 + (verticalVelocity * 2); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
       const decay = particle.initialEnergy * 0.001 * velocityFactor;
@@ -393,10 +393,10 @@ export class CanvasController {
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = 2.0
+    size: number = 10.0
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
-    let finalOpacity = opacity * this.params.power;
+    let finalOpacity = opacity * this.params.power * 0.5;
     let particleSize = size;
     
     if (particle) {
@@ -480,7 +480,7 @@ export class CanvasController {
       const glowAge = (now - glow.lastUpdateTime) / 1000;
       
       // Apply smoother exponential decay to the intensity with longer persistence
-      const currentIntensity = glow.intensity * Math.exp(-9 * glowAge); // Slower decay for more visible effects
+      const currentIntensity = glow.intensity * Math.exp(-10 * glowAge); // Slower decay for more visible effects
       
       // Render segment with enhanced pink glow
       const vertices = segment.vertices;
@@ -496,7 +496,7 @@ export class CanvasController {
       const fillOpacity = currentIntensity;
       // More vibrant colors for high intensities
       const r = 255;
-      const g = Math.max(20, Math.min(180, 90 + currentIntensity * 90)); // Enhanced green value range
+      const g = Math.max(10, Math.min(100, 30 + currentIntensity * 90)); // Enhanced green value range
       const b = Math.max(150, Math.min(240, 170 + currentIntensity * 70)); // Enhanced blue value range
       
       // Only use fill, no stroke for a more fluid look
@@ -626,7 +626,7 @@ export class CanvasController {
               
               // Fixed opacity for non-collided (blue) lines - doubled from base (requirement A)
               ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)'; // Blue line with fixed opacity (doubled but capped at 0.9)
-              ctx.lineWidth = 2.5;
+              ctx.lineWidth = 7.5;
               ctx.stroke();
             }
           }
@@ -651,7 +651,7 @@ export class CanvasController {
               // Fixed opacity for collided (yellow) lines - 30% reduced from base (requirement B)
               ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellow line with fixed opacity (0.6 * 0.7)
               // Reduced line thickness by 30% for collided lines (requirement B)
-              ctx.lineWidth = 1.5;
+              ctx.lineWidth = 6.5;
               ctx.stroke();
             }
           }
@@ -677,7 +677,7 @@ export class CanvasController {
     
     // Function to group particles by direction in 10-degree buckets
     const groupParticlesByDirection = (particles: Particle[]): Map<number, Particle[]> => {
-      const bucketSize = 10; // 10-degree bucket size (widened from 5 to reduce computational load)
+      const bucketSize = 20; // 10-degree bucket size (widened from 5 to reduce computational load)
       const buckets = new Map<number, Particle[]>();
       
       for (const particle of particles) {
@@ -754,7 +754,7 @@ export class CanvasController {
         
         // Set style properties for non-collided curve (blue)
         ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 10.5;
         ctx.stroke();
       }
     }
@@ -801,7 +801,7 @@ export class CanvasController {
         
         // Set style properties for collided curve (yellow)
         ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)';
-        ctx.lineWidth = 2.0;
+        ctx.lineWidth = 9.0;
         ctx.stroke();
       }
     }
@@ -854,7 +854,7 @@ export class CanvasController {
   ): Matter.Composite {
     const wallThickness = 24;
     const ovalBody = Matter.Composite.create();
-    const segments = 58;
+    const segments = 49;
 
     // Calculate the mouth opening angle based on mouthOpening parameter
     // When mouthOpening is 0, there's no opening
@@ -951,7 +951,7 @@ export class CanvasController {
     const newCenterX = width * this.params.ovalPosition;
     const centerY = height / 2; 
     const majorAxis = width * 0.5; // Reduced size for zoomed-out view
-    const minorAxis = majorAxis * (1 - this.params.ovalEccentricity * 0.8);
+    const minorAxis = majorAxis * (1 - 0.5 * this.params.ovalEccentricity ^ 2);
     
     if (!this.params.showOval) {
       if (this.ovalBody) {
@@ -1029,7 +1029,7 @@ export class CanvasController {
     }
 
     // Reduce motion blur effect to make particles stay visible longer
-    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.05)'; 
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.02)'; 
     this.ctx.fillRect(0, 0, width, height);
 
     // =====================================
