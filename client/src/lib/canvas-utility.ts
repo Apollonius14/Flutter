@@ -1,4 +1,4 @@
-import * as Matter from 'matter-js';
+import Matter from 'matter-js';
 
 // Interface for a particle in the simulation
 export interface Particle {

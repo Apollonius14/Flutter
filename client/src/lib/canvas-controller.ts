@@ -1,4 +1,4 @@
-import * as Matter from 'matter-js';
+import Matter from 'matter-js';
 import { 
   Particle, 
   Point2D,
@@ -39,8 +39,8 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private CYCLE_PERIOD_MS: number = 6667 * 0.4;  
-  private PARTICLE_LIFETIME_CYCLES: number = 3;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4;  
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
   private static readonly PARTICLES_PER_RING: number = 70;
@@ -705,7 +705,7 @@ Updates the energy of individual particles based on their vertical velocity
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 8) {
+        if (centroids.length >= 6) {
           // Calculate line width based on particle count
           const lineWidth = calculateLineThickness(
             particlesInCycle.length,
@@ -717,7 +717,7 @@ Updates the energy of individual particles based on their vertical velocity
           drawQuadraticBezierCurve(
             ctx,
             centroids,
-            { strokeStyle: "rgba(255, 0, 255, 1.0)", lineWidth }, // Brilliant cyan
+            { strokeStyle: "rgba(254, 0, 254, 1.0)", lineWidth }, // Brilliant cyan
             0.3 // Influence factor (curve smoothness)
           );
         }
@@ -908,11 +908,11 @@ Updates the energy of individual particles based on their vertical velocity
     
     // Calculate oval positioning based on the ovalPosition parameter (0.0 to 1.0)
     // This places the oval horizontally across the canvas with 20% padding on each side
-    const ovalCenterX = width * (0.1 + this.params.ovalPosition * 0.6);
+    const ovalCenterX = width * (0.2 + this.params.ovalPosition * 0.6);
     const ovalCenterY = height / 2; // Vertical center
     
     // Calculate oval dimensions - using a size based on canvas height
-    const ovalBaseSize = height * 0.45; // 35% of canvas height
+    const ovalBaseSize = height * 0.4; // 35% of canvas height
     
     // Apply eccentricity - lower values make a more circular oval
     // 0.0 = perfect circle, 1.0 = very elongated horizontal oval
