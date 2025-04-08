@@ -686,34 +686,33 @@ Updates the energy of individual particles based on their vertical velocity
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    // Calculate the distance between consecutive wave fronts
-    // This is approximately half the distance particles travel over 1 cycle
-    const cycleDistance = this.canvasWidth * 0.5; // approximate distance per cycle
-    // Space between consecutive wavefronts
-    const wavefrontSpace = cycleDistance * 0.5;
+    // Ripple configuration: 5 lines with decreasing width and increasing opacity
+    const rippleConfig = [
+      { widthFactor: 20.0, opacity: 0.05 },  // Widest line, lowest opacity
+      { widthFactor: 10.0, opacity: 0.1 },   // Medium width line
+      { widthFactor: 5.0, opacity: 0.2 },    // Medium-thin line
+      { widthFactor: 2.5, opacity: 0.4 },    // Thinner line
+      { widthFactor: 1.0, opacity: 0.8 }     // Thinnest line, highest opacity
+    ];
     
     // Draw non-collided (cyan) ripple wave lines first
     if (nonCollidedParticles.length >= 2) {
-      // Ripple configuration: 5 lines with decreasing width and increasing opacity
-      const ripples = [
-        { width: wavefrontSpace * 1.0, opacity: 0.05 },  // Doubled width of first line
-        { width: wavefrontSpace * 0.5, opacity: 0.1 },   // Also doubled the remaining lines
-        { width: wavefrontSpace * 0.25, opacity: 0.2 },
-        { width: wavefrontSpace * 0.125, opacity: 0.4 },
-        { width: wavefrontSpace * 0.0625, opacity: 0.8 }
-      ];
+      // Sort particles by x-position to ensure consistent rendering
+      const sortedParticles = [...nonCollidedParticles].sort((a, b) => 
+        a.body.position.x - b.body.position.x
+      );
       
-      // Render each ripple line
-      ripples.forEach(ripple => {
-        ctx.strokeStyle = `rgba(5, 255, 245, ${ripple.opacity})`; 
-        ctx.lineWidth = ripple.width;
+      // Render each ripple line with varying width and opacity
+      rippleConfig.forEach(config => {
+        ctx.strokeStyle = `rgba(5, 255, 245, ${config.opacity})`; 
+        ctx.lineWidth = config.widthFactor;
         ctx.beginPath();
         
         let prev: Particle | null = null;
         
-        for (const particle of nonCollidedParticles) {
+        for (const particle of sortedParticles) {
           if (prev) {
-            // Only connect if x-distance is not too far
+            // Only connect if x-distance is not too far to avoid jumps
             const dx = Math.abs(particle.body.position.x - prev.body.position.x);
             if (dx < 10) {
               ctx.moveTo(prev.body.position.x, prev.body.position.y);
@@ -729,27 +728,25 @@ Updates the energy of individual particles based on their vertical velocity
     
     // Draw collided (magenta) ripple wave lines
     if (collidedParticles.length >= 2) {
-      // Same configuration for collided particles but with magenta color
-      const ripples = [
-        { width: wavefrontSpace * 1.0, opacity: 0.025 },  // Doubled width of first line
-        { width: wavefrontSpace * 0.5, opacity: 0.05 },   // Also doubled the remaining lines
-        { width: wavefrontSpace * 0.25, opacity: 0.1 },
-        { width: wavefrontSpace * 0.125, opacity: 0.2 },
-        { width: wavefrontSpace * 0.0625, opacity: 0.4 }
-      ];
+      // Sort particles by x-position for consistent rendering
+      const sortedParticles = [...collidedParticles].sort((a, b) => 
+        a.body.position.x - b.body.position.x
+      );
       
-      // Render each ripple line
-      ripples.forEach(ripple => {
-        ctx.strokeStyle = `rgba(255, 0, 255, ${ripple.opacity})`;
-        ctx.lineWidth = ripple.width;
+      // Render each ripple line with varying width and opacity
+      rippleConfig.forEach(config => {
+        // Reduce opacity for magenta lines
+        const adjustedOpacity = config.opacity * 0.5;
+        ctx.strokeStyle = `rgba(255, 0, 255, ${adjustedOpacity})`;
+        ctx.lineWidth = config.widthFactor;
         ctx.beginPath();
         
         let prev: Particle | null = null;
         
-        for (const particle of collidedParticles) {
+        for (const particle of sortedParticles) {
           if (prev) {
             const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-            if (dx < 5) { // Threshold to avoid connecting distant particles
+            if (dx < 5) { // Tighter threshold to avoid connecting distant particles
               ctx.moveTo(prev.body.position.x, prev.body.position.y);
               ctx.lineTo(particle.body.position.x, particle.body.position.y);
             }
@@ -907,19 +904,13 @@ Updates the energy of individual particles based on their vertical velocity
     nonCollidedByCycle: Map<number, Particle[]>,
     collidedByCycle: Map<number, Particle[]>
   ): void {
-    // Calculate the distance between consecutive wave fronts
-    // This is approximately half the distance particles travel over 1 cycle
-    const cycleDistance = this.canvasWidth * 0.5; // approximate distance per cycle
-    // Space between consecutive wavefronts
-    const wavefrontSpace = cycleDistance * 0.5;
-    
     // Ripple configuration: 5 lines with decreasing width and increasing opacity
-    const ripples = [
-      { width: wavefrontSpace * 1.0, opacity: 0.05, factor: 0.6 },  // Doubled width of first line
-      { width: wavefrontSpace * 0.5, opacity: 0.1, factor: 0.7 },   // Also doubled the remaining lines
-      { width: wavefrontSpace * 0.25, opacity: 0.2, factor: 0.8 },
-      { width: wavefrontSpace * 0.125, opacity: 0.4, factor: 0.9 },
-      { width: wavefrontSpace * 0.0625, opacity: 0.8, factor: 1.0 }
+    const rippleConfig = [
+      { widthFactor: 1.0, opacity: 0.05, influenceFactor: 0.15 },  // Widest line, lowest opacity
+      { widthFactor: 0.5, opacity: 0.1, influenceFactor: 0.175 },  // Medium width line
+      { widthFactor: 0.25, opacity: 0.2, influenceFactor: 0.2 },   // Medium-thin line
+      { widthFactor: 0.125, opacity: 0.4, influenceFactor: 0.225 }, // Thinner line
+      { widthFactor: 0.0625, opacity: 0.8, influenceFactor: 0.25 }  // Thinnest line, highest opacity
     ];
     
     // Draw ripple waves for non-collided particles
@@ -941,26 +932,25 @@ Updates the energy of individual particles based on their vertical velocity
         
         // Draw multiple bezier curves if we have enough points
         if (centroids.length >= 8) {
-          // Base line width calculation
+          // Calculate base line width based on particle count
           const baseLineWidth = calculateLineThickness(
             particlesInCycle.length,
-            3.5,  // Base thickness
-            10    // Max thickness
+            3.5,  // Base thickness minimum
+            10    // Base thickness maximum
           );
           
-          // Draw each ripple with different opacity and thickness
-          ripples.forEach(ripple => {
-            // Updated calculation to account for the doubled widths
-            const lineWidth = baseLineWidth * ripple.width / wavefrontSpace;
+          // Draw five parallel bezier curves with different widths and opacities
+          rippleConfig.forEach(config => {
+            const lineWidth = baseLineWidth * config.widthFactor;
             
             drawQuadraticBezierCurve(
               ctx,
               centroids,
               { 
-                strokeStyle: `rgba(5, 255, 245, ${ripple.opacity})`, 
+                strokeStyle: `rgba(5, 255, 245, ${config.opacity})`, 
                 lineWidth
               },
-              0.2 * ripple.factor // Varying influence factor for different ripples
+              config.influenceFactor // Each ripple has a slightly different curve shape
             );
           });
         }
@@ -986,26 +976,25 @@ Updates the energy of individual particles based on their vertical velocity
         
         // Draw multiple bezier curves if we have enough points
         if (centroids.length >= 8) {
-          // Base line width calculation
+          // Calculate base line width based on particle count
           const baseLineWidth = calculateLineThickness(
             particlesInCycle.length,
-            2.0,  // Base thickness
-            10    // Max thickness
+            2.0,  // Base thickness for collided particles (slightly thinner)
+            8     // Maximum thickness for collided particles
           );
           
-          // Draw each ripple with different opacity and thickness
-          ripples.forEach(ripple => {
-            // Updated calculation to account for the doubled widths
-            const lineWidth = baseLineWidth * ripple.width / wavefrontSpace;
+          // Draw five parallel bezier curves with different widths and opacities
+          rippleConfig.forEach(config => {
+            const lineWidth = baseLineWidth * config.widthFactor;
             
             drawQuadraticBezierCurve(
               ctx,
               centroids,
               { 
-                strokeStyle: `rgba(255, 0, 255, ${ripple.opacity / 2})`, 
+                strokeStyle: `rgba(255, 0, 255, ${config.opacity / 2})`, // Lower opacity for magenta
                 lineWidth
               },
-              0.1 * ripple.factor // Varying influence factor for different ripples
+              config.influenceFactor * 0.8 // Make collided ripples slightly less curved
             );
           });
         }
