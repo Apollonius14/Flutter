@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";;
+import { AlertCircle } from "lucide-react";
 
 export default function NotFound() {
   return (

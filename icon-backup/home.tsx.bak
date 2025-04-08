@@ -3,13 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
-import Circle from "lucide-react/dist/esm/icons/circle";
-import Languages from "lucide-react/dist/esm/icons/languages";
-import Loader from "lucide-react/dist/esm/icons/loader";
-import Waves from "lucide-react/dist/esm/icons/waves";
-import GitBranchPlus from "lucide-react/dist/esm/icons/git-branch-plus";;
+import { ChevronLeft, ChevronRight, Circle, Languages, Loader, Waves, GitBranchPlus } from "lucide-react";
 import { CanvasController } from "@/lib/canvas-controller";
 
 const translations = {
