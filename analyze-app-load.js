@@ -11,309 +11,244 @@
  * 5. Startup performance metrics
  */
 
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
-import { fileURLToPath } from 'url';
-import util from 'util';
 
-// ES Module compatibility
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Function to format file sizes
+// Formatting utilities
 function formatSize(bytes) {
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  if (bytes === 0) return '0 Bytes';
-  const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)), 10);
-  if (i === 0) return `${bytes} ${sizes[i]}`;
-  return `${(bytes / (1024 ** i)).toFixed(2)} ${sizes[i]}`;
+  if (bytes < 1024) return bytes + ' B';
+  else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  else if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  else return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
 
-// Function to get directory size recursively
+// Recursively get directory size with an option to output top contributors
 function getDirSize(dirPath, maxDepth = 2, currentDepth = 0) {
-  if (!fs.existsSync(dirPath)) return { size: 0, fileCount: 0, subDirs: {} };
-  
-  const stats = fs.statSync(dirPath);
-  if (!stats.isDirectory()) return { size: stats.size, fileCount: 1, subDirs: {} };
-  
   let totalSize = 0;
-  let fileCount = 0;
-  const subDirs = {};
+  let sizeMap = {};
   
   try {
     const files = fs.readdirSync(dirPath);
     
     for (const file of files) {
       const filePath = path.join(dirPath, file);
-      try {
-        const stat = fs.statSync(filePath);
+      const stats = fs.statSync(filePath);
+      
+      if (stats.isDirectory()) {
+        const { size, subDirs } = getDirSize(filePath, maxDepth, currentDepth + 1);
+        totalSize += size;
         
-        if (stat.isDirectory()) {
-          const subResult = { size: 0, fileCount: 0, subDirs: {} };
-          
-          if (currentDepth < maxDepth) {
-            const childResult = getDirSize(filePath, maxDepth, currentDepth + 1);
-            subResult.size = childResult.size;
-            subResult.fileCount = childResult.fileCount;
-            if (currentDepth + 1 < maxDepth) {
-              subResult.subDirs = childResult.subDirs;
-            }
-          } else {
-            // Just get total size without recursing further
-            const getSize = dirPath => {
-              let size = 0;
-              try {
-                const files = fs.readdirSync(dirPath);
-                for (const file of files) {
-                  const filePath = path.join(dirPath, file);
-                  const stat = fs.statSync(filePath);
-                  if (stat.isDirectory()) {
-                    size += getSize(filePath);
-                  } else {
-                    size += stat.size;
-                    fileCount++;
-                  }
-                }
-              } catch (err) {
-                console.error(`Error reading ${dirPath}: ${err.message}`);
-              }
-              return size;
-            };
-            
-            subResult.size = getSize(filePath);
-          }
-          
-          subDirs[file] = subResult;
-          totalSize += subResult.size;
-          fileCount += subResult.fileCount;
-        } else {
-          totalSize += stat.size;
-          fileCount++;
-        }
-      } catch (err) {
-        console.error(`Error processing ${filePath}: ${err.message}`);
-      }
-    }
-  } catch (err) {
-    console.error(`Error reading directory ${dirPath}: ${err.message}`);
-  }
-  
-  return { size: totalSize, fileCount, subDirs };
-}
-
-// Function to analyze dependency tree
-function analyzeDependencyTree() {
-  console.log('\n📦 DEPENDENCY TREE ANALYSIS');
-  console.log('==========================');
-  
-  try {
-    const npmList = execSync('npm list --depth=0').toString();
-    console.log('Top-level dependencies:');
-    console.log(npmList);
-    
-    // Get production dependencies only
-    console.log('\nProduction dependencies only:');
-    const prodDeps = execSync('npm list --prod --depth=0').toString();
-    console.log(prodDeps);
-    
-    // Get dev dependencies only
-    console.log('\nDev dependencies only:');
-    const devDeps = execSync('npm list --dev --depth=0').toString();
-    console.log(devDeps);
-  } catch (err) {
-    console.log('Dependency tree information (with some errors):');
-    console.log(err.stdout ? err.stdout.toString() : 'No output');
-  }
-}
-
-// Function to analyze npm package.json
-async function analyzePackageJson() {
-  console.log('\n📄 PACKAGE.JSON ANALYSIS');
-  console.log('=======================');
-  
-  try {
-    const packageJsonContent = fs.readFileSync('./package.json', 'utf8');
-    const packageJson = JSON.parse(packageJsonContent);
-    
-    const depCount = Object.keys(packageJson.dependencies || {}).length;
-    const devDepCount = Object.keys(packageJson.devDependencies || {}).length;
-    
-    console.log(`Total dependencies: ${depCount + devDepCount}`);
-    console.log(`- Regular dependencies: ${depCount}`);
-    console.log(`- Dev dependencies: ${devDepCount}`);
-    
-    // List the main engines and their versions
-    if (packageJson.engines) {
-      console.log('\nEngines:');
-      Object.entries(packageJson.engines).forEach(([engine, version]) => {
-        console.log(`- ${engine}: ${version}`);
-      });
-    }
-    
-    // List scripts that might affect load time
-    if (packageJson.scripts) {
-      console.log('\nRelevant scripts:');
-      const relevantScripts = ['start', 'dev', 'build', 'prebuild', 'postbuild'];
-      relevantScripts.forEach(script => {
-        if (packageJson.scripts[script]) {
-          console.log(`- ${script}: ${packageJson.scripts[script]}`);
-        }
-      });
-    }
-  } catch (err) {
-    console.error(`Error analyzing package.json: ${err.message}`);
-  }
-}
-
-// Function to perform module resolution analysis
-function analyzeModuleResolution() {
-  console.log('\n🔍 MODULE RESOLUTION ANALYSIS');
-  console.log('===========================');
-  
-  const testModules = [
-    'react', 
-    'react-dom', 
-    'matter-js', 
-    'express', 
-    'tailwindcss',
-    'vite',
-    'drizzle-orm',
-    'lucide-react'
-  ];
-  
-  console.log('Module resolution paths:');
-  testModules.forEach(moduleName => {
-    try {
-      // Using file system checks instead of require.resolve
-      const nodeModulesPath = path.join(process.cwd(), 'node_modules', moduleName);
-      if (fs.existsSync(nodeModulesPath)) {
-        console.log(`- ${moduleName}: ${nodeModulesPath}`);
-        
-        // Get module package.json
-        const packageJsonPath = path.join(nodeModulesPath, 'package.json');
-        if (fs.existsSync(packageJsonPath)) {
-          const packageJsonContent = fs.readFileSync(packageJsonPath, 'utf8');
-          const modulePackage = JSON.parse(packageJsonContent);
-          console.log(`  Version: ${modulePackage.version}`);
-          console.log(`  Main: ${modulePackage.main || 'not specified'}`);
-          console.log(`  Module type: ${modulePackage.type || 'commonjs (default)'}`);
-        } else {
-          console.log(`  No package.json accessible`);
+        if (currentDepth < maxDepth) {
+          sizeMap[file] = { size, percentage: 0, subDirs };
         }
       } else {
-        console.log(`- ${moduleName}: Not found in node_modules`);
+        totalSize += stats.size;
       }
-    } catch (err) {
-      console.log(`- ${moduleName}: Error analyzing (${err.message})`);
     }
-  });
+    
+    // Calculate percentages for subdirectories
+    if (currentDepth < maxDepth && totalSize > 0) {
+      for (const dir in sizeMap) {
+        sizeMap[dir].percentage = ((sizeMap[dir].size / totalSize) * 100).toFixed(2) + '%';
+      }
+      
+      // Sort by size descending
+      const sortedSizeMap = {};
+      Object.keys(sizeMap)
+        .sort((a, b) => sizeMap[b].size - sizeMap[a].size)
+        .forEach(key => {
+          sortedSizeMap[key] = {
+            size: formatSize(sizeMap[key].size),
+            percentage: sizeMap[key].percentage,
+            ...(sizeMap[key].subDirs && Object.keys(sizeMap[key].subDirs).length > 0 ? { subDirs: sizeMap[key].subDirs } : {})
+          };
+        });
+      
+      return { size: totalSize, subDirs: sortedSizeMap };
+    }
+    
+    return { size: totalSize, subDirs: {} };
+  } catch (error) {
+    console.error(`Error analyzing ${dirPath}:`, error.message);
+    return { size: 0, subDirs: {} };
+  }
 }
 
-// Function to analyze build/transpile tools
-function analyzeBuildTools() {
-  console.log('\n🔧 BUILD TOOLS ANALYSIS');
-  console.log('=====================');
+// Analyze the dependency tree from package.json
+function analyzeDependencyTree() {
+  console.log('\n📊 DEPENDENCY STRUCTURE ANALYSIS');
+  console.log('===============================');
   
-  // Check for common build tools configuration files
-  const configFiles = [
-    'vite.config.ts',
-    'vite.config.js',
-    'webpack.config.js',
-    'babel.config.js',
-    '.babelrc',
-    'tsconfig.json',
-    'tailwind.config.js',
-    'postcss.config.js'
-  ];
+  try {
+    // Analyze node_modules directory
+    console.log('📦 Node Modules Analysis:');
+    const nmPath = path.join(process.cwd(), 'node_modules');
+    
+    if (fs.existsSync(nmPath)) {
+      const { size, subDirs } = getDirSize(nmPath, 2);
+      console.log(`Total node_modules size: ${formatSize(size)}`);
+      console.log('\nTop-level dependencies by size:');
+      console.log(JSON.stringify(subDirs, null, 2));
+    } else {
+      console.log('node_modules directory not found');
+    }
+  } catch (error) {
+    console.error('Error analyzing dependency tree:', error.message);
+  }
+}
+
+// Analyze package.json for dev dependencies vs regular dependencies
+async function analyzePackageJson() {
+  console.log('\n📄 PACKAGE.JSON ANALYSIS');
+  console.log('======================');
   
-  console.log('Build configuration files:');
-  configFiles.forEach(file => {
-    if (fs.existsSync(file)) {
-      console.log(`- ${file} (exists)`);
+  try {
+    if (fs.existsSync('package.json')) {
+      const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
       
-      // For some configs, we can provide more detail
-      if (file === 'tsconfig.json') {
-        try {
-          const tsconfigContent = fs.readFileSync('./tsconfig.json', 'utf8');
-          const tsconfig = JSON.parse(tsconfigContent);
-          console.log(`  Target: ${tsconfig.compilerOptions?.target || 'not specified'}`);
-          console.log(`  Module: ${tsconfig.compilerOptions?.module || 'not specified'}`);
-          console.log(`  Strict mode: ${tsconfig.compilerOptions?.strict || false}`);
-        } catch (e) {
-          console.log('  Could not parse tsconfig.json');
+      const deps = Object.keys(packageJson.dependencies || {}).length;
+      const devDeps = Object.keys(packageJson.devDependencies || {}).length;
+      
+      console.log(`Dependencies: ${deps}`);
+      console.log(`DevDependencies: ${devDeps}`);
+      
+      // Check for potential misplaced dev dependencies
+      const devDepsInProd = [];
+      const typeDefs = [];
+      
+      for (const dep in packageJson.dependencies || {}) {
+        if (dep.startsWith('@types/')) {
+          typeDefs.push(dep);
+        } else if (
+          dep.includes('test') || 
+          dep.includes('dev') || 
+          dep.includes('build') || 
+          dep.includes('lint') ||
+          dep.includes('prettier') ||
+          dep.includes('eslint') ||
+          dep.includes('typescript') ||
+          dep.includes('vite')
+        ) {
+          devDepsInProd.push(dep);
         }
       }
+      
+      if (typeDefs.length > 0) {
+        console.log('\nPotential type definitions in dependencies (should be in devDependencies):');
+        console.log(typeDefs.join(', '));
+      }
+      
+      if (devDepsInProd.length > 0) {
+        console.log('\nPotential development packages in dependencies:');
+        console.log(devDepsInProd.join(', '));
+      }
     } else {
-      console.log(`- ${file} (not found)`);
+      console.log('package.json not found');
     }
-  });
+  } catch (error) {
+    console.error('Error analyzing package.json:', error.message);
+  }
 }
 
-// Main function to run all analyses
-async function main() {
-  console.log('🔍 APP LOAD TIME ANALYSIS');
-  console.log('========================');
-  console.log(`Analysis started at: ${new Date().toISOString()}`);
-  console.log(`Current working directory: ${process.cwd()}`);
+// Analyze module resolution performance
+function analyzeModuleResolution() {
+  console.log('\n⏱️ MODULE RESOLUTION TIME ANALYSIS');
+  console.log('================================');
   
-  // Analyze the filesystem
-  console.log('\n📂 FILE SYSTEM ANALYSIS');
-  console.log('======================');
-  console.log('Analyzing file sizes, please wait...');
-  
-  // Analyze node_modules
-  const nodeModulesPath = path.join(process.cwd(), 'node_modules');
-  if (fs.existsSync(nodeModulesPath)) {
-    console.log('\nNode Modules Analysis:');
+  try {
+    // Measure Node.js module resolution time
+    console.log('Running a simple Node.js script with --trace-module-resolution flag...');
+    const startTime = Date.now();
+    
+    const testScript = `
+    const fs = require('fs');
+    const path = require('path');
+    const React = require('react');
+    const ReactDOM = require('react-dom');
+    console.log('Modules loaded successfully');
+    `;
+    
+    fs.writeFileSync('temp-module-test.js', testScript, 'utf8');
     
     try {
-      // Get overall size
-      const { size, fileCount } = getDirSize(nodeModulesPath, 0);
-      console.log(`Total node_modules size: ${formatSize(size)} (${fileCount} files)`);
-      
-      // Get top-level packages by size
-      console.log('\nTop node_modules by size:');
-      const topDirs = fs.readdirSync(nodeModulesPath)
-        .filter(dir => !dir.startsWith('.'))
-        .map(dir => {
-          const dirPath = path.join(nodeModulesPath, dir);
-          if (fs.statSync(dirPath).isDirectory()) {
-            const { size } = getDirSize(dirPath, 0);
-            return { name: dir, size };
-          }
-          return { name: dir, size: 0 };
-        })
-        .sort((a, b) => b.size - a.size)
-        .slice(0, 20);
-      
-      topDirs.forEach(dir => {
-        console.log(`- ${dir.name}: ${formatSize(dir.size)}`);
+      execSync('node --trace-module-resolution temp-module-test.js > module-resolution.log 2>&1', {
+        timeout: 10000
       });
-    } catch (err) {
-      console.error(`Error analyzing node_modules: ${err.message}`);
+    } catch (error) {
+      console.log('Error running module resolution test, but this might be expected.');
     }
-  } else {
-    console.log('No node_modules directory found.');
+    
+    const endTime = Date.now();
+    console.log(`Module resolution time: ${endTime - startTime}ms`);
+    
+    // Clean up
+    if (fs.existsSync('temp-module-test.js')) {
+      fs.unlinkSync('temp-module-test.js');
+    }
+    
+    // Report on module resolution log size
+    if (fs.existsSync('module-resolution.log')) {
+      const stats = fs.statSync('module-resolution.log');
+      console.log(`Module resolution log size: ${formatSize(stats.size)}`);
+      
+      // Count resolution steps
+      const logContent = fs.readFileSync('module-resolution.log', 'utf8');
+      const resolutionSteps = logContent.split('\n').filter(line => line.includes('looking for')).length;
+      console.log(`Number of module resolution steps: ${resolutionSteps}`);
+      
+      // Cleanup log
+      fs.unlinkSync('module-resolution.log');
+    }
+  } catch (error) {
+    console.error('Error analyzing module resolution:', error.message);
   }
+}
+
+// Analyze Vite and other build tools
+function analyzeBuildTools() {
+  console.log('\n🛠️ BUILD TOOLS ANALYSIS');
+  console.log('=====================');
   
-  // Analyze project source files
-  const sourceAnalysis = {
-    client: getDirSize('./client', 1),
-    server: getDirSize('./server', 1),
-    shared: getDirSize('./shared', 1)
-  };
+  try {
+    // Check Vite config
+    if (fs.existsSync('vite.config.ts') || fs.existsSync('vite.config.js')) {
+      console.log('Vite configuration found.');
+      
+      // Estimate the impact of Vite plugins
+      const config = fs.existsSync('vite.config.ts') 
+        ? fs.readFileSync('vite.config.ts', 'utf8')
+        : fs.readFileSync('vite.config.js', 'utf8');
+      
+      const pluginCount = (config.match(/plugin/g) || []).length;
+      console.log(`Estimated Vite plugins: ~${pluginCount}`);
+      
+      // Check for optimizations
+      const hasOptimize = config.includes('optimizeDeps');
+      console.log(`Has dependency optimization: ${hasOptimize ? 'Yes' : 'No'}`);
+      
+      const hasBuild = config.includes('build:');
+      console.log(`Has build configuration: ${hasBuild ? 'Yes' : 'No'}`);
+    } else {
+      console.log('No Vite configuration found');
+    }
+  } catch (error) {
+    console.error('Error analyzing build tools:', error.message);
+  }
+}
+
+// Main function
+async function main() {
+  console.log('🔍 APPLICATION LOAD TIME ANALYSIS');
+  console.log('==============================');
+  console.log(`Started at: ${new Date().toISOString()}`);
+  console.log(`Node.js version: ${process.version}`);
   
-  console.log('\nProject Source Files Analysis:');
-  Object.entries(sourceAnalysis).forEach(([dir, analysis]) => {
-    console.log(`- ${dir}: ${formatSize(analysis.size)} (${analysis.fileCount} files)`);
-  });
+  // Analyze dependency structure
+  analyzeDependencyTree();
   
   // Analyze package.json
-  analyzePackageJson();
-  
-  // Analyze dependency tree
-  analyzeDependencyTree();
+  await analyzePackageJson();
   
   // Analyze module resolution
   analyzeModuleResolution();
