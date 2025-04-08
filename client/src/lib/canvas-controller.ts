@@ -39,12 +39,12 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
+  private CYCLE_PERIOD_MS: number = 6667 * 0.4;  
+  private PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 60;
-  private static readonly PARTICLE_RADIUS: number = 3.0;
+  private static readonly PARTICLES_PER_RING: number = 70;
+  private static readonly PARTICLE_RADIUS: number = 2.0;
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
@@ -133,11 +133,10 @@ export class CanvasController {
     // 1. Initialize vertical positions for bubbles
     this.initializePositions();
     
-    // 2. Initialize particle templates (pre-calculated positions and velocities)
-    // This is a key optimization that avoids recalculating trig functions on every cycle
+    // 2. Initialize particle templates (pre-calculated positions and velocities) 
     this.initializeParticleTemplates();
 
-    // 3. Initialize the oval if needed
+    // 3. Initialize oval  
     this.updateOval();
     
 
@@ -194,10 +193,10 @@ export class CanvasController {
           
           
           // Apply a more aggressive scaling factor for more dramatic effects
-          const scaledImpact = impactMagnitude ^ 3 * this.params.power * 5.0; 
+          const scaledImpact = Math.pow(impactMagnitude, 3) * this.params.power * 5.0; 
           
           // Normalize to a higher range (0 to 3.0) for more dramatic max effects
-          const normalizedIntensity = Math.min(scaledImpact, 3.0);
+          const normalizedIntensity = Math.min(Math.max(0, scaledImpact), 3.0);
           
           // Check if there's already a glow for this segment
           const existingGlowIndex = this.segmentGlows.findIndex(glow => glow.segmentId === segmentId);
@@ -271,7 +270,7 @@ export class CanvasController {
         const offsetY = Math.sin(angle) * bubbleRadius;
         
         // Calculate initial velocity
-        const baseSpeed = 5;
+        const baseSpeed = 8;
         const velocityX = Math.cos(angle) * baseSpeed * 1.2;
         const velocityY = Math.sin(angle) * baseSpeed * 0.9;
         
@@ -447,7 +446,7 @@ Updates the energy of individual particles based on their vertical velocity
       const velocityFactor = 0.5 + (verticalVelocity * 2);
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.001 * 0.5 * velocityFactor;
+      const decay = particle.initialEnergy * 0.001 * 0.2 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -497,7 +496,7 @@ Updates the energy of individual particles based on their vertical velocity
     
     // Use yellow for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
-      ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity}*0.7)`;
+      ctx.fillStyle = `rgba(255, 0, 255, ${finalOpacity}*0.7)`;
     } else {
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
     }
@@ -632,8 +631,8 @@ Updates the energy of individual particles based on their vertical velocity
         
         // Draw collided (yellow) wave lines
         if (collidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; 
-          ctx.lineWidth = 5
+          ctx.strokeStyle = "rgba(255, 0, 255, 0.45)"; 
+          ctx.lineWidth = 6
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -704,19 +703,19 @@ Updates the energy of individual particles based on their vertical velocity
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 4) {
+        if (centroids.length >= 8) {
           // Calculate line width based on particle count
           const lineWidth = calculateLineThickness(
             particlesInCycle.length,
             3.5,  // Base thickness
-            15    // Max thickness
+            10    // Max thickness
           );
           
           // Draw the curve
           drawQuadraticBezierCurve(
             ctx,
             centroids,
-            { strokeStyle: "rgba(0, 255, 255, 1.0)", lineWidth }, // Brilliant cyan
+            { strokeStyle: "rgba(255, 0, 255, 1.0)", lineWidth }, // Brilliant cyan
             0.3 // Influence factor (curve smoothness)
           );
         }
@@ -741,7 +740,7 @@ Updates the energy of individual particles based on their vertical velocity
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 4) {
+        if (centroids.length >= 8) {
           // Calculate line width based on particle count
           const lineWidth = calculateLineThickness(
             particlesInCycle.length,
@@ -753,7 +752,7 @@ Updates the energy of individual particles based on their vertical velocity
           drawQuadraticBezierCurve(
             ctx,
             centroids,
-            { strokeStyle: "rgba(255, 215, 0, 1.0)", lineWidth }, // Golden yellow
+            { strokeStyle: "rgba(255, 0, 255, 1.0)", lineWidth }, // Golden yellow
             0.35 // Slightly higher influence factor
           );
         }
@@ -790,7 +789,7 @@ Updates the energy of individual particles based on their vertical velocity
     const ovalComposite = Matter.Composite.create();
     
     // More segments for smoother oval
-    const segments = 69;
+    const segments = 59;
     
     // Calculate the oval circumference step angle
     const angleStep = (Math.PI * 2) / segments;
@@ -907,11 +906,11 @@ Updates the energy of individual particles based on their vertical velocity
     
     // Calculate oval positioning based on the ovalPosition parameter (0.0 to 1.0)
     // This places the oval horizontally across the canvas with 20% padding on each side
-    const ovalCenterX = width * (0.2 + this.params.ovalPosition * 0.6);
+    const ovalCenterX = width * (0.1 + this.params.ovalPosition * 0.6);
     const ovalCenterY = height / 2; // Vertical center
     
     // Calculate oval dimensions - using a size based on canvas height
-    const ovalBaseSize = height * 0.35; // 35% of canvas height
+    const ovalBaseSize = height * 0.45; // 35% of canvas height
     
     // Apply eccentricity - lower values make a more circular oval
     // 0.0 = perfect circle, 1.0 = very elongated horizontal oval
