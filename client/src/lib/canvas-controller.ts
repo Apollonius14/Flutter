@@ -494,11 +494,13 @@ Updates the energy of individual particles based on their vertical velocity
     ctx.beginPath();
     ctx.arc(position.x, position.y, particleSize, 0, Math.PI * 2);
     
-    // Use yellow for particles that have collided, cyan for those that haven't
+    // Use purple for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
-      ctx.fillStyle = `rgba(255, 0, 255, ${finalOpacity}*0.7)`;
+      const adjustedOpacity = Math.min(finalOpacity * 0.7, 1.0); // Calculate opacity, ensure it's <= 1.0
+      ctx.fillStyle = `rgba(255, 0, 255, ${adjustedOpacity})`;
     } else {
-      ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
+      const adjustedOpacity = Math.min(finalOpacity, 1.0); // Ensure opacity is <= a1.0
+      ctx.fillStyle = `rgba(5, 255, 245, ${adjustedOpacity})`;
     }
     
     ctx.fill();
@@ -1069,7 +1071,9 @@ Updates the energy of individual particles based on their vertical velocity
         }
         
         // Fill with appropriate color and opacity
-        ctx.fillStyle = `rgba(${glowColor}, ${fillOpacity})`;
+        // Ensure fillOpacity is a valid CSS rgba value (between 0 and 1)
+        const safeOpacity = Math.min(Math.max(0, fillOpacity), 1.0);
+        ctx.fillStyle = `rgba(${glowColor}, ${safeOpacity})`;
         ctx.fill();
       }
     }
@@ -1093,7 +1097,7 @@ Updates the energy of individual particles based on their vertical velocity
           particle.body.position, 
           0.5, // Base opacity
           particle, // Passing particle for energy/color data
-CanvasController.PARTICLE_RADIUS// Base size
+          CanvasController.PARTICLE_RADIUS // Base size
         );
       }
     }
