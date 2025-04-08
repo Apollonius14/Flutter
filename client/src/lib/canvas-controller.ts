@@ -696,11 +696,11 @@ Updates the energy of individual particles based on their vertical velocity
     if (nonCollidedParticles.length >= 2) {
       // Ripple configuration: 5 lines with decreasing width and increasing opacity
       const ripples = [
-        { width: wavefrontSpace * 0.5, opacity: 0.05 },
-        { width: wavefrontSpace * 0.25, opacity: 0.1 },
-        { width: wavefrontSpace * 0.125, opacity: 0.2 },
-        { width: wavefrontSpace * 0.0625, opacity: 0.4 },
-        { width: wavefrontSpace * 0.03125, opacity: 0.8 }
+        { width: wavefrontSpace * 1.0, opacity: 0.05 },  // Doubled width of first line
+        { width: wavefrontSpace * 0.5, opacity: 0.1 },   // Also doubled the remaining lines
+        { width: wavefrontSpace * 0.25, opacity: 0.2 },
+        { width: wavefrontSpace * 0.125, opacity: 0.4 },
+        { width: wavefrontSpace * 0.0625, opacity: 0.8 }
       ];
       
       // Render each ripple line
@@ -731,11 +731,11 @@ Updates the energy of individual particles based on their vertical velocity
     if (collidedParticles.length >= 2) {
       // Same configuration for collided particles but with magenta color
       const ripples = [
-        { width: wavefrontSpace * 0.5, opacity: 0.025 },
-        { width: wavefrontSpace * 0.25, opacity: 0.05 },
-        { width: wavefrontSpace * 0.125, opacity: 0.1 },
-        { width: wavefrontSpace * 0.0625, opacity: 0.2 },
-        { width: wavefrontSpace * 0.03125, opacity: 0.4 }
+        { width: wavefrontSpace * 1.0, opacity: 0.025 },  // Doubled width of first line
+        { width: wavefrontSpace * 0.5, opacity: 0.05 },   // Also doubled the remaining lines
+        { width: wavefrontSpace * 0.25, opacity: 0.1 },
+        { width: wavefrontSpace * 0.125, opacity: 0.2 },
+        { width: wavefrontSpace * 0.0625, opacity: 0.4 }
       ];
       
       // Render each ripple line
@@ -915,11 +915,11 @@ Updates the energy of individual particles based on their vertical velocity
     
     // Ripple configuration: 5 lines with decreasing width and increasing opacity
     const ripples = [
-      { width: wavefrontSpace * 0.5, opacity: 0.05, factor: 0.6 },
-      { width: wavefrontSpace * 0.25, opacity: 0.1, factor: 0.7 },
-      { width: wavefrontSpace * 0.125, opacity: 0.2, factor: 0.8 },
-      { width: wavefrontSpace * 0.0625, opacity: 0.4, factor: 0.9 },
-      { width: wavefrontSpace * 0.03125, opacity: 0.8, factor: 1.0 }
+      { width: wavefrontSpace * 1.0, opacity: 0.05, factor: 0.6 },  // Doubled width of first line
+      { width: wavefrontSpace * 0.5, opacity: 0.1, factor: 0.7 },   // Also doubled the remaining lines
+      { width: wavefrontSpace * 0.25, opacity: 0.2, factor: 0.8 },
+      { width: wavefrontSpace * 0.125, opacity: 0.4, factor: 0.9 },
+      { width: wavefrontSpace * 0.0625, opacity: 0.8, factor: 1.0 }
     ];
     
     // Draw ripple waves for non-collided particles
@@ -950,7 +950,8 @@ Updates the energy of individual particles based on their vertical velocity
           
           // Draw each ripple with different opacity and thickness
           ripples.forEach(ripple => {
-            const lineWidth = baseLineWidth * ripple.width / (wavefrontSpace * 0.5);
+            // Updated calculation to account for the doubled widths
+            const lineWidth = baseLineWidth * ripple.width / wavefrontSpace;
             
             drawQuadraticBezierCurve(
               ctx,
@@ -994,7 +995,8 @@ Updates the energy of individual particles based on their vertical velocity
           
           // Draw each ripple with different opacity and thickness
           ripples.forEach(ripple => {
-            const lineWidth = baseLineWidth * ripple.width / (wavefrontSpace * 0.5);
+            // Updated calculation to account for the doubled widths
+            const lineWidth = baseLineWidth * ripple.width / wavefrontSpace;
             
             drawQuadraticBezierCurve(
               ctx,
