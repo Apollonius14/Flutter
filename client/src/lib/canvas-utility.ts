@@ -1,8 +1,6 @@
-import Matter from 'matter-js';
+import * as Matter from 'matter-js';
 
-/**
- * Standard interface for particle objects
- */
+// Interface for a particle in the simulation
 export interface Particle {
   body: Matter.Body;
   groupId: number;
@@ -13,36 +11,34 @@ export interface Particle {
   collided: number; // 0 = never collided, 1+ = collided at least once
 }
 
-/**
- * Standard interface for 2D points
- */
+// Interface for 2D point coordinates
 export interface Point2D {
   x: number;
   y: number;
 }
 
-/**
- * Flexible key type for particle grouping
- */
+// Generic key type for particle grouping
 export type ParticleGroupKey = number | string;
 
 /**
- * Groups particles by a key function
+ * Groups particles based on a key generating function
  * @param particles Array of particles to group
- * @param keyFn Function that returns a key for each particle
- * @returns Map of particle groups
+ * @param keyFn Function that generates a key for each particle
+ * @returns Map of keys to arrays of particles
  */
-export function groupParticles<T extends ParticleGroupKey>(
+export function groupParticles<K extends ParticleGroupKey>(
   particles: Particle[],
-  keyFn: (p: Particle) => T
-): Map<T, Particle[]> {
-  const groups = new Map<T, Particle[]>();
+  keyFn: (particle: Particle) => K
+): Map<K, Particle[]> {
+  const groups = new Map<K, Particle[]>();
   
   for (const particle of particles) {
     const key = keyFn(particle);
+    
     if (!groups.has(key)) {
       groups.set(key, []);
     }
+    
     groups.get(key)!.push(particle);
   }
   
@@ -50,46 +46,51 @@ export function groupParticles<T extends ParticleGroupKey>(
 }
 
 /**
- * Calculates the centroid (average position) of a group of particles
+ * Calculate centroid (average position) of a group of particles
  * @param particles Array of particles
  * @returns Point2D representing the centroid
  */
 export function calculateCentroid(particles: Particle[]): Point2D {
   if (particles.length === 0) return { x: 0, y: 0 };
   
-  const sum = particles.reduce(
-    (acc, p) => ({ 
-      x: acc.x + p.body.position.x, 
-      y: acc.y + p.body.position.y 
-    }),
-    { x: 0, y: 0 }
-  );
+  let sumX = 0;
+  let sumY = 0;
   
-  return { 
-    x: sum.x / particles.length, 
-    y: sum.y / particles.length 
+  for (const particle of particles) {
+    sumX += particle.body.position.x;
+    sumY += particle.body.position.y;
+  }
+  
+  return {
+    x: sumX / particles.length,
+    y: sumY / particles.length
   };
 }
 
 /**
- * Styling options for bezier curves
+ * Calculates direction angle of a particle in degrees
+ * @param particle Particle to calculate direction for
+ * @param bucketSize Size of angle buckets in degrees
+ * @returns Bucketed angle in degrees
  */
-export interface BezierCurveStyle {
-  strokeStyle: string;
-  lineWidth: number;
+export function getParticleDirectionAngle(particle: Particle, bucketSize: number = 5): number {
+  const velocity = particle.body.velocity;
+  const angleRad = Math.atan2(velocity.y, velocity.x);
+  const angleDeg = angleRad * 180 / Math.PI;
+  return Math.round(angleDeg / bucketSize) * bucketSize;
 }
 
 /**
- * Draws a quadratic bezier curve through a series of centroids
+ * Renders a quadratic Bezier curve through a series of points
  * @param ctx Canvas rendering context
- * @param centroids Array of points to connect with a curve
- * @param style Styling options for the curve
- * @param influenceFactor Factor controlling how much the curve can deviate (0-1)
+ * @param centroids Array of points to draw curve through
+ * @param style Object containing strokeStyle and lineWidth
+ * @param influenceFactor Factor controlling curve deviation (0-1)
  */
 export function drawQuadraticBezierCurve(
   ctx: CanvasRenderingContext2D,
   centroids: Point2D[],
-  style: BezierCurveStyle,
+  style: { strokeStyle: string; lineWidth: number },
   influenceFactor: number = 0.3
 ): void {
   if (centroids.length < 3) return;
@@ -101,7 +102,7 @@ export function drawQuadraticBezierCurve(
   const startPoint = centroids[0];
   ctx.moveTo(startPoint.x, startPoint.y);
   
-  // Draw intermediate segments
+  // Draw curve segments
   for (let i = 1; i < centroids.length - 2; i++) {
     const c1 = centroids[i];
     const c2 = centroids[i + 1];
@@ -118,11 +119,11 @@ export function drawQuadraticBezierCurve(
     const midX = (prevX + endX) / 2;
     const midY = (prevY + endY) / 2;
     
-    // Apply linear blending constraint to limit control point deviation
+    // Apply linear blending constraint - limit control point deviation
     const controlX = midX + influenceFactor * (c1.x - midX);
     const controlY = midY + influenceFactor * (c1.y - midY);
     
-    // Use the constrained control point
+    // Draw the curve segment
     ctx.quadraticCurveTo(controlX, controlY, endX, endY);
   }
   
@@ -152,69 +153,18 @@ export function drawQuadraticBezierCurve(
 }
 
 /**
- * Returns the angle of a particle's velocity in degrees (0-360)
- * @param particle The particle
- * @returns Angle in degrees
+ * Calculate line width based on particle count using a square function
+ * @param particleCount Number of particles
+ * @param baseThickness Base thickness multiplier
+ * @param maxThickness Maximum thickness allowed
+ * @param normalizer Value to normalize particle count
+ * @returns Calculated line width
  */
-export function getParticleAngle(particle: Particle): number {
-  const velocity = particle.body.velocity;
-  const angleRad = Math.atan2(velocity.y, velocity.x);
-  return ((angleRad * 180 / Math.PI) + 360) % 360;
-}
-
-/**
- * Groups particles by their angle, useful for rendering wave patterns
- * @param particles Array of particles
- * @param numBuckets Number of angle buckets (determines resolution of grouping)
- * @returns Map of particles grouped by angle bucket
- */
-export function groupParticlesByAngle(
-  particles: Particle[], 
-  numBuckets: number = 36
-): Map<number, Particle[]> {
-  return groupParticles(particles, (p) => {
-    const angle = getParticleAngle(p);
-    return Math.floor(angle / (360 / numBuckets));
-  });
-}
-
-/**
- * Utility for calculating performance metrics like FPS
- */
-export class PerformanceMonitor {
-  private frameCount: number = 0;
-  private lastTime: number = 0;
-  private fps: number = 0;
-  private updateInterval: number = 1000; // ms
-  
-  /**
-   * Update the frame counter and calculate FPS
-   * @param timestamp Current timestamp
-   * @returns Current FPS
-   */
-  public update(timestamp: number): number {
-    this.frameCount++;
-    
-    if (!this.lastTime) {
-      this.lastTime = timestamp;
-    }
-    
-    const elapsed = timestamp - this.lastTime;
-    
-    if (elapsed >= this.updateInterval) {
-      this.fps = Math.round((this.frameCount * 1000) / elapsed);
-      this.frameCount = 0;
-      this.lastTime = timestamp;
-    }
-    
-    return this.fps;
-  }
-  
-  /**
-   * Get the current FPS
-   * @returns Current FPS
-   */
-  public getFPS(): number {
-    return this.fps;
-  }
+export function calculateLineThickness(
+  particleCount: number,
+  baseThickness: number = 3.5,
+  maxThickness: number = 15,
+  normalizer: number = 30
+): number {
+  return Math.min(maxThickness, baseThickness * Math.pow(particleCount / normalizer, 2));
 }
