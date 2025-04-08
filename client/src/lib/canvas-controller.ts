@@ -686,13 +686,13 @@ Updates the energy of individual particles based on their vertical velocity
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    // Ripple configuration: 5 lines with decreasing width and increasing opacity
+    // Ripple configuration: 5 lines with dramatically different widths and varying opacities
     const rippleConfig = [
-      { widthFactor: 20.0, opacity: 0.05 },  // Widest line, lowest opacity
-      { widthFactor: 10.0, opacity: 0.1 },   // Medium width line
-      { widthFactor: 5.0, opacity: 0.2 },    // Medium-thin line
-      { widthFactor: 2.5, opacity: 0.4 },    // Thinner line
-      { widthFactor: 1.0, opacity: 0.8 }     // Thinnest line, highest opacity
+      { widthFactor: 40.0, opacity: 0.1 },   // Extremely wide line, low opacity
+      { widthFactor: 20.0, opacity: 0.15 },  // Very wide line
+      { widthFactor: 10.0, opacity: 0.25 },  // Medium width line
+      { widthFactor: 5.0, opacity: 0.4 },    // Thinner line
+      { widthFactor: 2.0, opacity: 0.9 }     // Very thin line, high opacity
     ];
     
     // Draw non-collided (cyan) ripple wave lines first
@@ -904,13 +904,13 @@ Updates the energy of individual particles based on their vertical velocity
     nonCollidedByCycle: Map<number, Particle[]>,
     collidedByCycle: Map<number, Particle[]>
   ): void {
-    // Ripple configuration: 5 lines with decreasing width and increasing opacity
+    // Ripple configuration: 5 lines with dramatically different widths and varying curve shapes
     const rippleConfig = [
-      { widthFactor: 1.0, opacity: 0.05, influenceFactor: 0.15 },  // Widest line, lowest opacity
-      { widthFactor: 0.5, opacity: 0.1, influenceFactor: 0.175 },  // Medium width line
-      { widthFactor: 0.25, opacity: 0.2, influenceFactor: 0.2 },   // Medium-thin line
-      { widthFactor: 0.125, opacity: 0.4, influenceFactor: 0.225 }, // Thinner line
-      { widthFactor: 0.0625, opacity: 0.8, influenceFactor: 0.25 }  // Thinnest line, highest opacity
+      { widthFactor: 4.0, opacity: 0.1, influenceFactor: 0.05 },   // Very wide line with minimal curve
+      { widthFactor: 2.0, opacity: 0.15, influenceFactor: 0.15 },  // Wide line with gentle curve
+      { widthFactor: 1.0, opacity: 0.25, influenceFactor: 0.25 },  // Medium line with medium curve
+      { widthFactor: 0.5, opacity: 0.4, influenceFactor: 0.35 },   // Thin line with pronounced curve
+      { widthFactor: 0.25, opacity: 0.9, influenceFactor: 0.45 }   // Very thin line with extreme curve
     ];
     
     // Draw ripple waves for non-collided particles
