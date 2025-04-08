@@ -39,12 +39,12 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 120;
-  private static readonly PARTICLE_RADIUS: number = 4.0;
+  private static readonly PARTICLES_PER_RING: number = 60;
+  private static readonly PARTICLE_RADIUS: number = 3.0;
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
