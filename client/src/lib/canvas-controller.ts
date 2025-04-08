@@ -1,12 +1,6 @@
 import * as Matter from 'matter-js';
-import { 
-  Particle, 
-  Point2D,
-  groupParticles,
-  calculateCentroid,
-  drawQuadraticBezierCurve,
-  calculateLineThickness
-} from './canvas-utility';
+import { renderSmoothWavesByCycle as renderSmoothWavesByCycleUtil } from './canvas-wave-renderer';
+import { Particle as UtilParticle, Point2D as UtilPoint2D } from './canvas-utility';
 
 interface AnimationParams {
   power: number;
@@ -14,9 +8,19 @@ interface AnimationParams {
   showOval: boolean;
   ovalPosition: number; 
   ovalEccentricity: number;
-  mouthOpening: number;
-  showWaves: boolean; 
-  showSmooth: boolean;
+  mouthOpening: number;  // 0 = closed oval, 1 = half oval (maximum opening)
+  showWaves: boolean;    // Whether to show the wave visualization
+  showSmooth: boolean;   // Whether to use smooth bezier curves for wave visualization
+}
+
+interface Particle {
+  body: Matter.Body;
+  groupId: number;
+  cycleNumber: number;
+  index: number; 
+  energy: number; 
+  initialEnergy: number;
+  collided: number; // 0 = never collided, 1+ = collided at least once
 }
 
 interface Bubble {
@@ -31,34 +35,48 @@ interface Bubble {
   initialEnergy: number;
 }
 
+// New interface for representing a point in 2D space
+interface Point2D {
+  x: number;
+  y: number;
+}
+
+
+// Interface for segment glow data
 interface SegmentGlow {
   intensity: number;
   lastUpdateTime: number;
   segmentId: number;
 }
 
+
 export class CanvasController {
-  // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
-  private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.5;  
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 2;
+  private static readonly PHYSICS_TIMESTEP_MS: number = 8; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 60;
-  private static readonly PARTICLE_RADIUS: number = 3.0;
-  private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
+  private static readonly PARTICLES_PER_RING: number = 120;
+  private static readonly PARTICLE_RADIUS: number = 0.1;
+  private static readonly FIXED_BUBBLE_RADIUS: number = 3; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
+    const baseAngles: number[] = [];
     const particleCount = CanvasController.PARTICLES_PER_RING;
     const halfCount = Math.floor(particleCount / 2);
 
     // Add center particle at 0°
-    particleAngles.push(0);
+    baseAngles.push(0);
 
     // Add symmetric pairs of particles
     for (let i = 1; i <= halfCount; i++) {
       const angle = (i / halfCount) * Math.PI;
+      baseAngles.push(angle);
+      baseAngles.push(-angle);
+    }
+
+    // Apply compression to focus particles toward the front
+    for (const angle of baseAngles) {
       particleAngles.push(angle);
-      particleAngles.push(-angle);
     }
 
     return particleAngles.sort((a, b) => a - b);
@@ -81,27 +99,11 @@ export class CanvasController {
   private frameCounter: number = 0;
   private currentGroupId: number = 0;
   private currentCycleNumber: number = 0;
-  private positions: number[] = []; // Vertical positions for bubbles
+  private positions: number[] = [];
   private isRTL: boolean = false;
   private showParticles: boolean = true;
   private ovalBody: Matter.Composite | null = null;
   private segmentGlows: SegmentGlow[] = [];
-  
-  // Templates for particle positions, velocities, and other properties
-  
-  private bubbleTemplates: {
-    position: { x: number; y: number };
-    radius: number;
-    particles: {
-      offsetX: number;
-      offsetY: number;
-      velocityX: number;
-      velocityY: number;
-    }[];
-  }[] = [];
-  
-  // Flag to track if templates have been initialized
-  private templatesInitialized: boolean = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -121,23 +123,16 @@ export class CanvasController {
       frequency: 0.3,
       showOval: false,
       ovalPosition: 0.5,
-      ovalEccentricity: 0.6,
-      mouthOpening: 0, 
-      showWaves: false, 
-      showSmooth: false 
+      ovalEccentricity: 0.3,
+      mouthOpening: 0, // default: closed oval (no opening)
+      showWaves: false, // default: don't show waves
+      showSmooth: false // default: don't use smooth bezier curves
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
 
-    // 1. Initialize vertical positions for bubbles
-    this.initializePositions();
-    
-    // 2. Initialize particle templates (pre-calculated positions and velocities)
-    // This is a key optimization that avoids recalculating trig functions on every cycle
-    this.initializeParticleTemplates();
-
-    // 3. Initialize the oval if needed
+    // Initialize the oval if needed
     this.updateOval();
     
 
@@ -187,14 +182,16 @@ export class CanvasController {
           
           // Apply a threshold to filter out tiny collisions and static noise
           // Ignore collisions that don't meet the minimum threshold
-          const COLLISION_THRESHOLD = 0.3;
+          const COLLISION_THRESHOLD = 0.4;
           if (impactMagnitude < COLLISION_THRESHOLD) {
             continue; // Skip this collision as it's too small
           }
           
+          // Square the dot product to emphasize stronger collisions (quadratic scaling)
+          const squaredImpact = impactMagnitude * impactMagnitude;
           
           // Apply a more aggressive scaling factor for more dramatic effects
-          const scaledImpact = impactMagnitude ^ 3 * this.params.power * 5.0; 
+          const scaledImpact = squaredImpact * this.params.power * 5.0; 
           
           // Normalize to a higher range (0 to 3.0) for more dramatic max effects
           const normalizedIntensity = Math.min(scaledImpact, 3.0);
@@ -223,89 +220,14 @@ export class CanvasController {
   }
 
   /**
-   * Initialize positions for wave patterns
-   * Only needs to be called once during initialization
-   */
-  private initializePositions(): void {
-    // Calculate wave positions and store them
-    const height = this.canvas.height;
-    this.positions = this.calculateWavePositions(height);
-    
-    console.log("Wave positions initialized with", this.positions.length, "positions");
-  }
-  
-  /**
-   * Initializes templates for all bubble and particle positions **/
-
-  private initializeParticleTemplates(): void {
-    if (this.templatesInitialized) return;
-    
-    const x = this.canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
-    const height = this.canvas.height;
-    const centerY = height / 2;
-    const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
-    
-    // Clear any existing templates
-    this.bubbleTemplates = [];
-    
-    // For each wave position, calculate bubble and particle templates
-    this.positions.forEach(y => {
-      // Calculate bubble radius based on distance from center
-      const normalizedPos = (y - centerY) / (height / 2);
-      const radiusMultiplier = 2.5 + 4 * Math.cos(normalizedPos * Math.PI);
-      const bubbleRadius = baseRadius * radiusMultiplier;
-      
-      // Create a template for particles in this bubble
-      const particleTemplates: {
-        offsetX: number;
-        offsetY: number;
-        velocityX: number;
-        velocityY: number;
-      }[] = [];
-      
-      // Calculate positions and velocities for each particle
-      const particleAngles = CanvasController.PARTICLE_ANGLES;
-      particleAngles.forEach(angle => {
-        // Calculate offset from bubble center
-        const offsetX = Math.cos(angle) * bubbleRadius;
-        const offsetY = Math.sin(angle) * bubbleRadius;
-        
-        // Calculate initial velocity
-        const baseSpeed = 5;
-        const velocityX = Math.cos(angle) * baseSpeed * 1.2;
-        const velocityY = Math.sin(angle) * baseSpeed * 0.9;
-        
-        // Store this particle's template
-        particleTemplates.push({
-          offsetX,
-          offsetY,
-          velocityX,
-          velocityY
-        });
-      });
-      
-      // Add this bubble's complete template
-      this.bubbleTemplates.push({
-        position: { x, y },
-        radius: bubbleRadius,
-        particles: particleTemplates
-      });
-    });
-    
-    this.templatesInitialized = true;
-    console.log("Particle templates initialized with", 
-      this.bubbleTemplates.length, "bubbles and", 
-      this.bubbleTemplates.reduce((total, b) => total + b.particles.length, 0), "particles");
-  }
-
-  /**
    * Calculate wave positions across the canvas height
    */
   private calculateWavePositions(canvasHeight: number): number[] {
     const positions: number[] = [];
+    const compressionFactor = 0.2; // Reduced to create a more zoomed-out view
     const center = canvasHeight / 2;
     const numPositions = 15; 
-    const baseSpacing = (canvasHeight * 0.2) / (numPositions + 1);
+    const baseSpacing = (canvasHeight * compressionFactor) / (numPositions + 1);
     const halfSpacing = baseSpacing / 2;
 
     // Add positions from top to bottom, offset from center
@@ -328,43 +250,39 @@ export class CanvasController {
     return positions;
   }
 
-  /**
-   * Spawns new bubbles at the given x-coordinate using pre-calculated templates
-   * @param x The x-coordinate where bubbles should be spawned (usually the activation line)
-   * @returns Array of newly created Bubble objects
-   */
-  private spawnBubbles(x: number): Bubble[] {
-    // Make sure templates are initialized
-    if (!this.templatesInitialized) {
-      console.log("Templates not initialized, initializing now...");
-      this.initializeParticleTemplates();
-    }
+  private generateBubbles(x: number): Bubble[] {
+    const height = this.canvas.height;
 
-    console.log("Spawning bubbles at cycle", this.currentCycleNumber);
-    
     const bubbles: Bubble[] = [];
-    
-    // Spawn bubbles using the pre-calculated templates
-    this.bubbleTemplates.forEach(bubbleTemplate => {
-      // Generate a unique group ID for this bubble
+    const baseRadius = CanvasController.FIXED_BUBBLE_RADIUS;
+
+    // Calculate wave positions using our helper method
+    this.positions = this.calculateWavePositions(height);
+
+    x = this.activationLineX;
+    const centerY = height / 2;
+
+    this.positions.forEach(y => {
+      // Bubble radius multiplier based on the distance from center
+      const normalizedPos = (y - centerY) / (height / 2);
+      const radiusMultiplier = 2.5 + 4 * Math.cos(normalizedPos * Math.PI);
+      const bubbleRadius = baseRadius * radiusMultiplier;
       const groupId = this.currentGroupId++;
-      
-      // Create an array to hold the particles for this bubble
+
       const particles: Particle[] = [];
       
-      // Create particles using the templates
-      bubbleTemplate.particles.forEach((particleTemplate, idx) => {
-        // Calculate absolute position of this particle
-        const particleX = x + particleTemplate.offsetX;
-        const particleY = bubbleTemplate.position.y + particleTemplate.offsetY;
-        
-        // Create physics body with consistent properties
+      const particleAngles = CanvasController.PARTICLE_ANGLES;
+      particleAngles.forEach((angle, idx) => {
+        const particleX = x + Math.cos(angle) * bubbleRadius;
+        const particleY = y + Math.sin(angle) * bubbleRadius;
+
+        // Create physics body with size from our constant
         const body = Matter.Bodies.circle(particleX, particleY, CanvasController.PARTICLE_RADIUS, {
           friction: 0.0,        
           frictionAir: 0.0, 
           frictionStatic: 0.0,
           restitution: 1.0,
-          mass: 1,
+          mass:1,
           inertia: Infinity,
           slop: 0.01, 
           collisionFilter: {
@@ -373,53 +291,56 @@ export class CanvasController {
             group: 0   
           }
         });
-        
-        // Set velocity from the template
+
+        const baseSpeed = 4; 
+
+
         Matter.Body.setVelocity(body, {
-          x: particleTemplate.velocityX,
-          y: particleTemplate.velocityY
+          x: Math.cos(angle) * baseSpeed * 1.2,
+          y: Math.sin(angle) * baseSpeed * 0.9
         });
-        
-        // Add the body to the physics world
+
         Matter.Composite.add(this.engine.world, body);
-        
-        // Create the particle object
+        // Initialize particle with energy based on the power parameter
         const particle: Particle = {
           body,
-          groupId,
+          groupId: groupId,
           cycleNumber: this.currentCycleNumber,
           index: idx,
           energy: this.params.power,
           initialEnergy: this.params.power,
-          collided: 0
+          collided: 0 // Initialize with no collisions
         };
-        
         particles.push(particle);
       });
-      
-      // Create the bubble with the newly created particles
+
       bubbles.push({
         x,
-        y: bubbleTemplate.position.y,
-        radius: bubbleTemplate.radius,
-        initialRadius: bubbleTemplate.radius,
+        y,
+        radius: bubbleRadius,
+        initialRadius: bubbleRadius,
         particles,
-        groupId,
+        groupId: groupId,
         cycleNumber: this.currentCycleNumber,
         energy: this.params.power,
         initialEnergy: this.params.power
       });
     });
-    
+
     return bubbles;
   }
 
-  /*  
-Updates the energy of individual particles based on their vertical velocity
+  /**
+   * Updates the energy of individual particles based on their vertical velocity
+   * and then recalculates the bubble's total energy as the sum of its particles
+   * @param bubble The bubble to update energy for
    */
-  
+  /**
+   * Finds a particle object by its Matter.js body
+   * This is needed to map from physics bodies to our particle objects
+   */
   private findParticleByBody(body: Matter.Body): Particle | undefined {
-  
+    // Search through all bubbles and their particles
     for (const bubble of this.bubbles) {
       for (const particle of bubble.particles) {
         if (particle.body.id === body.id) {
@@ -444,10 +365,11 @@ Updates the energy of individual particles based on their vertical velocity
       const verticalVelocity = Math.abs(body.velocity.y);
       
       // Calculate decay factor - higher vertical velocity means faster decay
-      const velocityFactor = 0.5 + (verticalVelocity * 2);
+      // This will penalize vertical motion, emphasizing horizontal waves
+      const velocityFactor = 0.4 + (verticalVelocity * 2); // 20% penalty per unit of vertical velocity
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.001 * 0.5 * velocityFactor;
+      const decay = particle.initialEnergy * 0.001 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
@@ -473,32 +395,41 @@ Updates the energy of individual particles based on their vertical velocity
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = CanvasController.PARTICLE_RADIUS * 10
+    size: number = 10.0
   ): void {
     // If we have a particle with energy data, use that to adjust opacity
     let finalOpacity = opacity * this.params.power * 0.5;
     let particleSize = size;
     
     if (particle) {
+      // Use particle's energy level directly
       const energyRatio = particle.energy / particle.initialEnergy;
       
+      // Check if the particle has collided and choose color/size accordingly
       if (particle.collided > 0) {
-        finalOpacity = energyRatio; 
+        // For collided (yellow) particles: reduce opacity by 30% (requirement B)
+        finalOpacity = energyRatio * 1.05; // 30% reduced brightness for yellow particles
+        particleSize = size * 0.7; // 30% smaller yellow particles (requirement B)
       } else {
-        finalOpacity = energyRatio * 2.4;
-        particleSize = size * 2.0; 
+        // For non-collided (cyan) particles: double particle size (requirement A)
+        finalOpacity = energyRatio * 2.4; // Keep similar brightness level
+        particleSize = size * 2.0; // Double size for cyan particles (requirement A)
       }
     } else {
+      // Use passed opacity as fallback
       finalOpacity = opacity * 0.5;
     }
-  
+    
+    // Draw a filled circle for the particle
     ctx.beginPath();
     ctx.arc(position.x, position.y, particleSize, 0, Math.PI * 2);
     
     // Use yellow for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
+      // Dimmer color for particles that have collided (with reduced opacity)
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity}*0.7)`;
     } else {
+      // Brighter cyan color for particles that haven't collided
       ctx.fillStyle = `rgba(5, 255, 245, ${finalOpacity})`;
     }
     
@@ -506,159 +437,141 @@ Updates the energy of individual particles based on their vertical velocity
   }
   
   /**
-   * Updates glow data for oval segments
+   * Renders glowing oval segments based on collision data
    */
   private renderOvalGlow(ctx: CanvasRenderingContext2D, timestamp: number): void {
     if (!this.ovalBody || !this.params.showOval) return;
-
+    
+    // Get all segments of the oval
+    const segments = Matter.Composite.allBodies(this.ovalBody);
+    
+    // Filter out old glows based on decay rate
     const now = timestamp;
     
+    // Process each segment glow - remove glows older than 6 seconds (increased from 5)
     this.segmentGlows = this.segmentGlows.filter(glow => {
       const age = (now - glow.lastUpdateTime) / 1000;
-      return age < 3; 
+      return age < 6; // Increased max age for longer lasting effects
     });
-  
-    // Apply decay to all glows
-    for (const glow of this.segmentGlows) {
-      const age = (now - glow.lastUpdateTime) / 1000;
-      const decayFactor = Math.pow(0.75, age * 2);
-      glow.intensity *= decayFactor;
-    }
     
-    // Remove glows  below threshold
-    this.segmentGlows = this.segmentGlows.filter(glow => glow.intensity > 0.05);
+    // First draw all segments with a very faint pink fill (no borders)
+    segments.forEach(segment => {
+      const vertices = segment.vertices;
+      
+      ctx.beginPath();
+      ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      ctx.closePath();
+      
+      // Enhanced base glow for all segments
+      ctx.fillStyle = 'rgba(255, 200, 230, 0.05)'; // Slightly more visible base color
+      ctx.fill();
+      // No stroke for the default state
+    });
+    
+    // Then draw only the segments with active glows with more vibrant colors
+    segments.forEach(segment => {
+      // Find the glow for this segment
+      const glow = this.segmentGlows.find(g => g.segmentId === segment.id);
+      
+      if (!glow) return; // Skip segments with no collision glow
+      
+      // Calculate how old this glow is in seconds
+      const glowAge = (now - glow.lastUpdateTime) / 1000;
+      
+      // Apply smoother exponential decay to the intensity with longer persistence
+      const currentIntensity = glow.intensity * Math.exp(-10 * glowAge); // Slower decay for more visible effects
+      
+      // Render segment with enhanced pink glow
+      const vertices = segment.vertices;
+      
+      
+      ctx.beginPath();
+      ctx.moveTo(vertices[0].x, vertices[0].y);
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(vertices[i].x, vertices[i].y);
+      }
+      ctx.closePath();
+      
+      const fillOpacity = currentIntensity;
+      // More vibrant colors for high intensities
+      const r = 255;
+      const g = Math.max(10, Math.min(100, 30 + currentIntensity * 90)); // Enhanced green value range
+      const b = Math.max(150, Math.min(240, 170 + currentIntensity * 70)); // Enhanced blue value range
+      
+      // Only use fill, no stroke for a more fluid look
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
+      ctx.fill();
+      
+      // Add a multi-layer outer glow for high-intensity collisions with bloom effect
+       // Lower threshold to make glow appear more often
+        // First layer of bloom
+        ctx.beginPath();
+        ctx.moveTo(vertices[0].x, vertices[0].y);
+        for (let i = 1; i < vertices.length; i++) {
+          ctx.lineTo(vertices[i].x, vertices[i].y);
+        ctx.closePath();
+        
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${currentIntensity})`; // Higher opacity
+        ctx.fill();
+        
+        
+        }
+      
+    });
   }
   
   /**
    * Draws UI elements like sweep lines and activation lines
+   * Simplified version with fewer draw calls for better performance
    */
   private drawUIElements(width: number, height: number, progress: number): void {
-    const ctx = this.ctx;
-    
-    // Calculate new sweep line position
-    const sweepPosition = width * (0.05 + progress * 0.9);
-    this.previousSweepLineX = sweepPosition;
-    
-    // Draw activation line
-    ctx.strokeStyle = "#353583";
-    ctx.lineWidth = 1;
-    
-    ctx.beginPath();
-    ctx.moveTo(this.activationLineX, 0);
-    ctx.lineTo(this.activationLineX, height); 
-    ctx.stroke();
-    
-    // Draw sweep line with a subtle gradient
-    const gradient = ctx.createLinearGradient(sweepPosition - 10, 0, sweepPosition + 10, 0);
-    gradient.addColorStop(0, "rgba(51, 153, 255, 0)");  
-    gradient.addColorStop(0.5, "rgba(51, 153, 255, 0.6)"); 
-    
-    ctx.strokeStyle = gradient;
-    ctx.lineWidth = 2;
-    
-    ctx.beginPath();  
-    ctx.moveTo(sweepPosition, 0);
-    ctx.lineTo(sweepPosition, height);
-    ctx.stroke();
+    const timeX = width * progress;
+
+    // Single sweep line without glow effect
+    this.ctx.beginPath();
+    this.ctx.moveTo(timeX, 0);
+    this.ctx.lineTo(timeX, height);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+    this.ctx.lineWidth = 3; // Increased for better visibility in zoomed-out view
+    this.ctx.stroke();
+
+    // Single activation line without glow effect
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.activationLineX, 0);
+    this.ctx.lineTo(this.activationLineX, height);
+    this.ctx.strokeStyle = "rgba(0, 220, 255, 0.15)";
+    this.ctx.lineWidth = 2; // Increased for better visibility in zoomed-out view
+    this.ctx.stroke();
   }
 
-  
+
   public setRTL(enabled: boolean) {
     this.isRTL = enabled;
-    // Rebuild the oval with the new RTL status
-    if (this.params.showOval) {
-      this.updateOval();
-    }
+    // No need to modify physics - we'll handle this in the render phase
+    this.drawFrame(0); // Force redraw to see changes immediately
   }
-  
+
   public setShowParticles(show: boolean) {
     this.showParticles = show;
+    this.drawFrame(0); // Force redraw to see changes immediately
   }
   
   public setShowWaves(show: boolean) {
     this.params.showWaves = show;
+    this.drawFrame(0); // Force redraw to see changes immediately
   }
   
   public setShowSmooth(show: boolean) {
     this.params.showSmooth = show;
+    this.drawFrame(0); // Force redraw to see changes immediately
   }
-  
-  private renderWaves(ctx: CanvasRenderingContext2D): void {
-    // First, collect all particles from all bubbles
-    const allParticles: Particle[] = [];
-    for (const bubble of this.bubbles) {
-      allParticles.push(...bubble.particles);
-    }
-    
-    // Group particles by cycleNumber
-    const cycleGroups = groupParticles(allParticles, p => p.cycleNumber);
-    
-    // Render each cycle's particles
-    for (const [, particles] of Array.from(cycleGroups.entries())) {
-      // Group by groupId (bubble)
-      const bubbleGroups = groupParticles(particles, p => p.groupId);
-      
-      // Render each bubble's particles as a wave
-      for (const [, bubbleParticles] of Array.from(bubbleGroups.entries())) {
-        // Sort by index to maintain the same order
-        bubbleParticles.sort((a, b) => a.index - b.index);
-        
-        // Split particles into collided and uncollided 
-        const collidedParticles = bubbleParticles.filter(p => p.collided > 0);
-        const nonCollidedParticles = bubbleParticles.filter(p => p.collided === 0);
-        
-        // Draw non-collided (cyan) wave lines first
-        if (nonCollidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
-          ctx.lineWidth = 7.5;
-          ctx.beginPath();
-          
-          let prev: Particle | null = null;
-          
-          for (const particle of nonCollidedParticles) {
-            if (prev) {
-              // Only connect if x-distance is not too far
-              const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 10) {
-                ctx.moveTo(prev.body.position.x, prev.body.position.y);
-                ctx.lineTo(particle.body.position.x, particle.body.position.y);
-              }
-            }
-            prev = particle;
-          }
-          
-          ctx.stroke();
-        }
-        
-        // Draw collided (yellow) wave lines
-        if (collidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(255, 255, 120, 0.45)"; 
-          ctx.lineWidth = 5
-          ctx.beginPath();
-          
-          let prev: Particle | null = null;
-          
-          for (const particle of collidedParticles) {
-            if (prev) {
-              const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 5) { // Threshold to avoid connecting distant particles
-                ctx.moveTo(prev.body.position.x, prev.body.position.y);
-                ctx.lineTo(particle.body.position.x, particle.body.position.y);
-              }
-            }
-            prev = particle;
-          }
-          
-          ctx.stroke();
-        }
-      }
-    }
-  }
-  
   
   /**
-   * Enhanced renderSmoothWaves that groups particles by cycle number first
-   * This preserves visual coherence by keeping particles from the same generation together
+   * Enhanced renderer for smooth waves grouped by cycle number
+   * This is a wrapper around the imported renderSmoothWavesByCycle function
    * 
    * @param ctx Canvas rendering context
    * @param nonCollidedParticles Array of particles that have never collided with the oval
@@ -669,467 +582,675 @@ Updates the energy of individual particles based on their vertical velocity
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    const ANGLE_BUCKETS = 72; // Number of angle buckets (5 degrees each)
+    // Call the imported renderer function from canvas-wave-renderer.ts
+    // Since our Particle interface is compatible with the UtilParticle interface,
+    // we can safely pass the particles as they are
+    renderSmoothWavesByCycleUtil(ctx, nonCollidedParticles, collidedParticles);
+  }
+  
+  // Render wave lines connecting particles by cycle
+  private renderWaves(ctx: CanvasRenderingContext2D): void {
+    if (!this.params.showWaves) return;
     
-    // Helper function to group particles by direction angle with cycle-specific buckets
-    const groupParticlesByDirection = (particles: Particle[]) => {
-      return groupParticles(particles, particle => {
-        const velocity = particle.body.velocity;
-        const angle = Math.atan2(velocity.y, velocity.x);
-        const degrees = ((angle * 180 / Math.PI) + 360) % 360;
-        const bucketIndex = Math.floor(degrees / (360 / ANGLE_BUCKETS));
-        return bucketIndex.toString();
-      });
+    // Group particles by cycle number
+    const particlesByCycle = new Map<number, Particle[]>();
+    
+    // Collect all visible particles from all bubbles
+    for (const bubble of this.bubbles) {
+      for (const particle of bubble.particles) {
+        const cycleNumber = particle.cycleNumber;
+        
+        if (!particlesByCycle.has(cycleNumber)) {
+          particlesByCycle.set(cycleNumber, []);
+        }
+        
+        particlesByCycle.get(cycleNumber)?.push(particle);
+      }
+    }
+    
+    // Process each cycle's particles
+    particlesByCycle.forEach((particles, cycleNumber) => {
+      // Further group by collided status (0 or 1+)
+      const nonCollidedParticles = particles.filter(p => p.collided === 0);
+      const collidedParticles = particles.filter(p => p.collided > 0);
+      
+      // Sort particles by their original index to maintain the creation order
+      nonCollidedParticles.sort((a, b) => a.index - b.index);
+      collidedParticles.sort((a, b) => a.index - b.index);
+      
+      // Define the maximum x-difference threshold for drawing lines
+      // Since PARTICLE_RADIUS is very small (0.1), we'll use a more practical value
+      // Using 5 * particle radius would be too small, so we'll set a fixed pixel value
+      const maxXDiff = 12; // 12 pixels threshold for better visibility
+      
+      if (this.params.showSmooth) {
+        // SMOOTH MODE: Group particles by direction and draw Bezier curves
+        this.renderSmoothWaves(ctx, nonCollidedParticles, collidedParticles);
+      } else {
+        // NORMAL MODE: Draw individual connecting lines
+        
+        // Draw connecting lines for non-collided particles (blue)
+        if (nonCollidedParticles.length > 1) {
+          // Each segment will be drawn individually with a check for x-difference
+          for (let i = 1; i < nonCollidedParticles.length; i++) {
+            const prevParticle = nonCollidedParticles[i-1];
+            const particle = nonCollidedParticles[i];
+            
+            // Calculate the absolute x-difference between particles
+            const dx = Math.abs(particle.body.position.x - prevParticle.body.position.x);
+            
+            // Only draw the line if x-difference is less than the threshold
+            if (dx <= maxXDiff) {
+              ctx.beginPath();
+              ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
+              ctx.lineTo(particle.body.position.x, particle.body.position.y);
+              
+              // Fixed opacity for non-collided (blue) lines - doubled from base (requirement A)
+              ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)'; // Blue line with fixed opacity (doubled but capped at 0.9)
+              ctx.lineWidth = 7.5;
+              ctx.stroke();
+            }
+          }
+        }
+        
+        // Draw connecting lines for collided particles (yellow)
+        if (collidedParticles.length > 1) {
+          // Each segment will be drawn individually with a check for x-difference
+          for (let i = 1; i < collidedParticles.length; i++) {
+            const prevParticle = collidedParticles[i-1];
+            const particle = collidedParticles[i];
+            
+            // Calculate the absolute x-difference between particles
+            const dx = Math.abs(particle.body.position.x - prevParticle.body.position.x);
+            
+            // Only draw the line if x-difference is less than the threshold
+            if (dx <= maxXDiff) {
+              ctx.beginPath();
+              ctx.moveTo(prevParticle.body.position.x, prevParticle.body.position.y);
+              ctx.lineTo(particle.body.position.x, particle.body.position.y);
+              
+              // Fixed opacity for collided (yellow) lines - 30% reduced from base (requirement B)
+              ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellow line with fixed opacity (0.6 * 0.7)
+              // Reduced line thickness by 30% for collided lines (requirement B)
+              ctx.lineWidth = 6.5;
+              ctx.stroke();
+            }
+          }
+        }
+      }
+    });
+  }
+  
+  // Method to render smooth bezier curves through particle centroids
+  private renderSmoothWaves(
+    ctx: CanvasRenderingContext2D,
+    nonCollidedParticles: Particle[],
+    collidedParticles: Particle[]
+  ): void {
+    // Function to calculate angle in degrees from velocity
+    const getDirectionAngle = (particle: Particle): number => {
+      const vx = particle.body.velocity.x;
+      const vy = particle.body.velocity.y;
+      // Calculate angle in degrees (0-360)
+      const angleRad = Math.atan2(vy, vx);
+      return ((angleRad * 180 / Math.PI) + 360) % 360;
     };
     
-    // First group all particles by cycle number
-    const nonCollidedByCycle = groupParticles(nonCollidedParticles, p => p.cycleNumber);
-    const collidedByCycle = groupParticles(collidedParticles, p => p.cycleNumber);
-    
-    // Draw smooth curves for non-collided particles, grouped by cycle
-    for (const [, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
-      if (particlesInCycle.length > 5) { // Need enough particles for meaningful curve
-        const buckets = groupParticlesByDirection(particlesInCycle);
-        const centroids: Point2D[] = [];
+    // Function to group particles by direction in 10-degree buckets
+    const groupParticlesByDirection = (particles: Particle[]): Map<number, Particle[]> => {
+      const bucketSize = 20; // 10-degree bucket size (widened from 5 to reduce computational load)
+      const buckets = new Map<number, Particle[]>();
+      
+      for (const particle of particles) {
+        const angle = getDirectionAngle(particle);
+        const bucketKey = Math.floor(angle / bucketSize) * bucketSize;
         
-        // Extract and sort centroids by angle bucket
-        Array.from(buckets.entries())
-          .map(([angleBucket, particles]) => ({
-            angleBucket: Number(angleBucket),
+        if (!buckets.has(bucketKey)) {
+          buckets.set(bucketKey, []);
+        }
+        
+        buckets.get(bucketKey)?.push(particle);
+      }
+      
+      return buckets;
+    };
+    
+    // Function to calculate centroid of a group of particles
+    const calculateCentroid = (particles: Particle[]): Point2D => {
+      if (particles.length === 0) return { x: 0, y: 0 };
+      
+      let sumX = 0;
+      let sumY = 0;
+      
+      for (const particle of particles) {
+        sumX += particle.body.position.x;
+        sumY += particle.body.position.y;
+      }
+      
+      return {
+        x: sumX / particles.length,
+        y: sumY / particles.length
+      };
+    };
+    
+    // Draw smooth curves for non-collided particles (blue)
+    if (nonCollidedParticles.length > 5) { // Need enough particles for meaningful curve
+      const buckets = groupParticlesByDirection(nonCollidedParticles);
+      const centroids: Point2D[] = [];
+      
+      // Extract centroids in order of x-coordinate
+      Array.from(buckets.entries())
+        .map(([_, particles]) => {
+          return {
             centroid: calculateCentroid(particles),
             count: particles.length
-          }))
-          .filter(item => item.count >= 2) // Only use buckets with multiple particles
-          .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
-          .forEach(item => centroids.push(item.centroid));
+          };
+        })
+        .filter(item => item.count >= 2) // Only use buckets with multiple particles
+        .sort((a, b) => a.centroid.x - b.centroid.x) // Sort by x-coordinate
+        .forEach(item => centroids.push(item.centroid));
+      
+      // Draw bezier curve through centroids if we have enough points
+      if (centroids.length >= 4) {
+        ctx.beginPath();
         
-        // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 4) {
-          // Calculate line width based on particle count
-          const lineWidth = calculateLineThickness(
-            particlesInCycle.length,
-            3.5,  // Base thickness
-            15    // Max thickness
-          );
+        // Start from the first centroid
+        ctx.moveTo(centroids[0].x, centroids[0].y);
+        
+        // Draw cubic bezier curves through the centroids
+        for (let i = 1; i < centroids.length - 2; i++) {
+          const c1 = centroids[i];
+          const c2 = centroids[i + 1];
+          const end = centroids[i + 2];
           
-          // Draw the curve
-          drawQuadraticBezierCurve(
-            ctx,
-            centroids,
-            { strokeStyle: "rgba(0, 255, 255, 1.0)", lineWidth }, // Brilliant cyan
-            0.3 // Influence factor (curve smoothness)
-          );
+          // Calculate control points for smoother curves
+          const cp1x = c1.x + (c2.x - centroids[i - 1].x) / 6;
+          const cp1y = c1.y + (c2.y - centroids[i - 1].y) / 6;
+          const cp2x = c2.x - (end.x - c1.x) / 6;
+          const cp2y = c2.y - (end.y - c1.y) / 6;
+          
+          // Draw cubic bezier segment
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, end.x, end.y);
         }
+        
+        // Set style properties for non-collided curve (blue)
+        ctx.strokeStyle = 'rgba(0, 170, 255, 0.9)';
+        ctx.lineWidth = 10.5;
+        ctx.stroke();
       }
     }
     
-    // Draw smooth curves for collided particles, grouped by cycle
-    for (const [, particlesInCycle] of Array.from(collidedByCycle.entries())) {
-      if (particlesInCycle.length > 5) {
-        const buckets = groupParticlesByDirection(particlesInCycle);
-        const centroids: Point2D[] = [];
-        
-        // Extract and sort centroids by angle bucket
-        Array.from(buckets.entries())
-          .map(([angleBucket, particles]) => ({
-            angleBucket: Number(angleBucket),
+    // Draw smooth curves for collided particles (yellow)
+    if (collidedParticles.length > 5) { // Need enough particles for meaningful curve
+      const buckets = groupParticlesByDirection(collidedParticles);
+      const centroids: Point2D[] = [];
+      
+      // Extract centroids in order of x-coordinate
+      Array.from(buckets.entries())
+        .map(([_, particles]) => {
+          return {
             centroid: calculateCentroid(particles),
             count: particles.length
-          }))
-          .filter(item => item.count >= 2) // Only use buckets with multiple particles
-          .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
-          .forEach(item => centroids.push(item.centroid));
+          };
+        })
+        .filter(item => item.count >= 2) // Only use buckets with multiple particles
+        .sort((a, b) => a.centroid.x - b.centroid.x) // Sort by x-coordinate
+        .forEach(item => centroids.push(item.centroid));
+      
+      // Draw bezier curve through centroids if we have enough points
+      if (centroids.length >= 4) {
+        ctx.beginPath();
         
-        // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 4) {
-          // Calculate line width based on particle count
-          const lineWidth = calculateLineThickness(
-            particlesInCycle.length,
-            2.0,  // Base thickness
-            10    // Max thickness
-          );
+        // Start from the first centroid
+        ctx.moveTo(centroids[0].x, centroids[0].y);
+        
+        // Draw cubic bezier curves through the centroids
+        for (let i = 1; i < centroids.length - 2; i++) {
+          const c1 = centroids[i];
+          const c2 = centroids[i + 1];
+          const end = centroids[i + 2];
           
-          // Draw the curve with slightly higher influence factor for more variation
-          drawQuadraticBezierCurve(
-            ctx,
-            centroids,
-            { strokeStyle: "rgba(255, 215, 0, 1.0)", lineWidth }, // Golden yellow
-            0.35 // Slightly higher influence factor
-          );
+          // Calculate control points for smoother curves
+          const cp1x = c1.x + (c2.x - centroids[i - 1].x) / 6;
+          const cp1y = c1.y + (c2.y - centroids[i - 1].y) / 6;
+          const cp2x = c2.x - (end.x - c1.x) / 6;
+          const cp2y = c2.y - (end.y - c1.y) / 6;
+          
+          // Draw cubic bezier segment
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, end.x, end.y);
         }
+        
+        // Set style properties for collided curve (yellow)
+        ctx.strokeStyle = 'rgba(255, 200, 0, 0.6)';
+        ctx.lineWidth = 9.0;
+        ctx.stroke();
       }
     }
   }
-  
+
   public updateParams(params: AnimationParams) {
-    const updateOvalNeeded = 
-      this.params.showOval !== params.showOval ||
-      this.params.ovalPosition !== params.ovalPosition ||
-      this.params.ovalEccentricity !== params.ovalEccentricity ||
-      this.params.mouthOpening !== params.mouthOpening;
-    
+    const prevShowOval = this.params.showOval;
+    const prevPosition = this.params.ovalPosition;
+    const prevEccentricity = this.params.ovalEccentricity;
+    const prevMouthOpening = this.params.mouthOpening;
+
     this.params = params;
-    
-    if (updateOvalNeeded) {
+
+    // Check if oval-related parameters have changed
+    const ovalChanged = prevShowOval !== params.showOval || 
+                        prevPosition !== params.ovalPosition || 
+                        prevEccentricity !== params.ovalEccentricity ||
+                        prevMouthOpening !== params.mouthOpening;
+
+    if (ovalChanged) {
+      // Check which specific parameters changed
+      const eccentricityChanged = prevEccentricity !== params.ovalEccentricity;
+      const mouthOpeningChanged = prevMouthOpening !== params.mouthOpening;
+
+      // If we need to create a new oval, delete the old one first
+      // We recreate the oval if eccentricity or mouth opening changed or if the oval visibility changed
+      if (this.ovalBody && (eccentricityChanged || mouthOpeningChanged || prevShowOval !== params.showOval)) {
+        Matter.Composite.remove(this.engine.world, this.ovalBody);
+        this.ovalBody = null;
+      }
+
       this.updateOval();
     }
+
+    // Redraw the frame if parameters changed and animation is not running
+    if (ovalChanged && this.animationFrame === null) {
+      this.drawFrame(0);
+    }
   }
-  
+
   /**
    * Creates a new oval composite
    * Separated from updateOval for better code organization
    */
   private createOvalBody(
-    ovalCenterX: number, 
-    ovalCenterY: number, 
-    ovalWidth: number, 
-    ovalHeight: number, 
-    mouthOpening: number
+    centerX: number,
+    centerY: number,
+    majorAxis: number,
+    minorAxis: number
   ): Matter.Composite {
-    // Create a composite to hold all segment bodies
-    const ovalComposite = Matter.Composite.create();
-    
-    // More segments for smoother oval
-    const segments = 69;
-    
-    // Calculate the oval circumference step angle
-    const angleStep = (Math.PI * 2) / segments;
+    const wallThickness = 24;
+    const ovalBody = Matter.Composite.create();
+    const segments = 49;
+
+    // Calculate the mouth opening angle based on mouthOpening parameter
+    // When mouthOpening is 0, there's no opening
+    // When mouthOpening is 1, half of the oval is open (PI radians)
+    // The opening should be symmetrical around the horizontal axis
+    const mouthAngle = Math.PI * this.params.mouthOpening;
     
     for (let i = 0; i < segments; i++) {
-      // Calculate start and end angle of this segment
-      const startAngle = i * angleStep;
-      const endAngle = startAngle + angleStep;
-      
-      // Calculate whether this segment should be part of the "mouth" opening
-      // The mouth should be symmetrical about the horizontal axis
-      
-      // Calculate the mouth opening angle based on mouthOpening parameter
-      // When mouthOpening is 0, there's no opening
-      // When mouthOpening is 1, half of the oval is open (PI radians)
-      const mouthWidth = mouthOpening * Math.PI; // up to 180 degrees
-      
+      // Calculate current angle and next angle
+      const angle = (i / segments) * Math.PI * 2;
+      const nextAngle = ((i + 1) / segments) * Math.PI * 2;
+
       // Normalize angle to [0, 2π)
-      const midAngle = ((startAngle + endAngle) / 2 + Math.PI * 2) % (Math.PI * 2);
+      const normalizedAngle = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
       
-      // Determine if this segment is in the mouth region
-      let inMouthRegion = false;
+      // Check if this segment should be skipped (part of the mouth opening)
+      let inMouthRegion;
       
+      // The mouth opening should be symmetrical across the horizontal axis
       if (this.isRTL) {
         // For RTL, the opening is on the left side (π radians)
+        
+        // Calculate how far we are from the left horizontal line (π radians)
+        // We need to consider the angle either above or below the horizontal line
         // For angles in the left half of the circle, we need the smaller angle to the horizontal
-        const angleFromLeftHorizontal = Math.abs(midAngle - Math.PI);
+        const angleFromLeftHorizontal = Math.abs(normalizedAngle - Math.PI);
         
         // The mouth should be centered on the left side (π radians) 
         // and symmetrical up and down (from 3π/2 to π/2, going clockwise)
-        inMouthRegion = (angleFromLeftHorizontal <= mouthWidth/2) && 
+        inMouthRegion = (angleFromLeftHorizontal <= mouthAngle/2) && 
                         // This ensures we're on the left side of the oval
-                        (midAngle > Math.PI/2 && midAngle < Math.PI * 3/2);
+                        (normalizedAngle > Math.PI/2 && normalizedAngle < Math.PI * 3/2);
       } else {
         // For LTR, the opening is on the right side (0 or 2π radians)
-        // We need the smaller angle to the horizontal axis
-        const angleFromRightHorizontal = (midAngle <= Math.PI) 
-                                       ? midAngle 
-                                       : 2 * Math.PI - midAngle;
+        
+        // For angles near 0 or 2π (right horizontal), get the smaller angle to the axis
+        // For angles close to 0, it's just the angle itself
+        // For angles close to 2π, it's 2π - angle
+        const angleFromRightHorizontal = normalizedAngle <= Math.PI 
+                                       ? normalizedAngle 
+                                       : 2 * Math.PI - normalizedAngle;
         
         // The mouth should be centered on the right side (0 radians)
         // and symmetrical up and down (from π/2 to 3π/2, going counterclockwise) 
-        inMouthRegion = (angleFromRightHorizontal <= mouthWidth/2) && 
+        inMouthRegion = (angleFromRightHorizontal <= mouthAngle/2) && 
                         // This ensures we're on the right side of the oval
-                        (midAngle < Math.PI/2 || midAngle > Math.PI * 3/2);
+                        (normalizedAngle < Math.PI/2 || normalizedAngle > Math.PI * 3/2);
       }
-      
-      // Skip creating this segment if it's part of the mouth opening
-      if (inMouthRegion) {
-        continue;
-      }
-      
-      // Calculate vertices of the segment
-      const startX = ovalCenterX + Math.cos(startAngle) * ovalWidth;
-      const startY = ovalCenterY + Math.sin(startAngle) * ovalHeight;
-      const endX = ovalCenterX + Math.cos(endAngle) * ovalWidth;
-      const endY = ovalCenterY + Math.sin(endAngle) * ovalHeight;
-      
-      // Create thickness for the oval wall - offset inward
-      const innerScale = 0.9; // 10% smaller for thickness
-      const innerStartX = ovalCenterX + Math.cos(startAngle) * ovalWidth * innerScale;
-      const innerStartY = ovalCenterY + Math.sin(startAngle) * ovalHeight * innerScale;
-      const innerEndX = ovalCenterX + Math.cos(endAngle) * ovalWidth * innerScale;
-      const innerEndY = ovalCenterY + Math.sin(endAngle) * ovalHeight * innerScale;
-      
-      // Create a quad segment using 4 vertices
-      const segment = Matter.Bodies.fromVertices(
-        (startX + endX + innerStartX + innerEndX) / 4, // center x
-        (startY + endY + innerStartY + innerEndY) / 4, // center y
-        [[
-          { x: startX, y: startY },
-          { x: endX, y: endY },
-          { x: innerEndX, y: innerEndY },
-          { x: innerStartX, y: innerStartY }
-        ]],
-        {
-          isStatic: true, // Oval doesn't move
-          friction: 0.0,
-          frictionStatic: 0.0,
-          frictionAir: 0,
-          restitution: 1.0, // perfectly elastic
-          slop: 0.005, // reduced from default for precise collisions
-          collisionFilter: {
-            category: 0x0002, // Oval category
-            mask: 0x0001, // Only collide with particles
-            group: 0
-          }
+
+      // Skip this segment if it's part of the mouth opening
+      if (inMouthRegion) continue;
+
+      // Calculate current position on the ellipse
+      const x1 = centerX + (majorAxis / 2) * Math.cos(angle);
+      const y1 = centerY + (minorAxis / 2) * Math.sin(angle);
+
+      // Calculate next position on the ellipse
+      const x2 = centerX + (majorAxis / 2) * Math.cos(nextAngle);
+      const y2 = centerY + (minorAxis / 2) * Math.sin(nextAngle);
+
+      // Calculate midpoint and length of segment
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const segmentLength = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+      // Calculate angle of the segment
+      const segmentAngle = Math.atan2(y2 - y1, x2 - x1);
+
+      const segment = Matter.Bodies.rectangle(midX, midY, segmentLength, wallThickness, {
+        isStatic: true,
+        angle: segmentAngle,
+        restitution: 1.0,
+        friction: 0.0,
+        frictionAir: 0,
+        frictionStatic: 0.0,
+        slop: 0.005,  
+        collisionFilter: {
+          category: 0x0002,
+          mask: 0x0001,
+          group: 0
         }
-      );
-      
-      // Add the segment to the composite
-      Matter.Composite.add(ovalComposite, segment);
+      });
+
+      // Add the segment to our composite
+      Matter.Composite.add(ovalBody, segment);
     }
-    
-    // Return the complete oval composite
-    return ovalComposite;
+
+    return ovalBody;
   }
-  
+
   private updateOval() {
-    // If the oval already exists, remove it from the world
-    if (this.ovalBody) {
-      Matter.Composite.remove(this.engine.world, this.ovalBody);
-      this.ovalBody = null;
-    }
-    
-    if (!this.params.showOval) {
-      this.engine.timing.timeScale = 1.0; // Reset time scale with no oval
-      return;
-    }
-    
-    // Get canvas dimensions
     const width = this.canvas.width;
     const height = this.canvas.height;
+    const newCenterX = width * this.params.ovalPosition;
+    const centerY = height / 2; 
+    const majorAxis = width * 0.5; // Reduced size for zoomed-out view
+    const minorAxis = majorAxis * (1 - 0.5 * this.params.ovalEccentricity ^ 2);
     
-    // Calculate oval positioning based on the ovalPosition parameter (0.0 to 1.0)
-    // This places the oval horizontally across the canvas with 20% padding on each side
-    const ovalCenterX = width * (0.2 + this.params.ovalPosition * 0.6);
-    const ovalCenterY = height / 2; // Vertical center
-    
-    // Calculate oval dimensions - using a size based on canvas height
-    const ovalBaseSize = height * 0.35; // 35% of canvas height
-    
-    // Apply eccentricity - lower values make a more circular oval
-    // 0.0 = perfect circle, 1.0 = very elongated horizontal oval
-    const eccentricity = this.params.ovalEccentricity;
-    const ovalWidth = ovalBaseSize * (1 + eccentricity );
-    const ovalHeight = ovalBaseSize * (1 - eccentricity);
-    
-    // Create the oval composite with the mouth opening parameter
-    this.ovalBody = this.createOvalBody(
-      ovalCenterX, 
-      ovalCenterY, 
-      ovalWidth, 
-      ovalHeight, 
-      this.params.mouthOpening
-    );
-    
-    // Add the oval to the physics world
-    Matter.Composite.add(this.engine.world, this.ovalBody);
-    
-    // When the oval is present, use more substeps for more accurate collision detection
-    this.engine.timing.timeScale = 0.5; // Slow down physics by half
+    if (!this.params.showOval) {
+      if (this.ovalBody) {
+        Matter.Composite.remove(this.engine.world, this.ovalBody);
+        this.ovalBody = null;
+      }
+      return;
+    }
+
+    // If oval body doesn't exist yet or eccentricity changed, create a new one
+    if (!this.ovalBody) {
+      // Create and add a new oval
+      this.ovalBody = this.createOvalBody(newCenterX, centerY, majorAxis, minorAxis);
+      Matter.Composite.add(this.engine.world, this.ovalBody);
+      return;
+    }
+
+    // If only the position changed, we can just translate the existing oval
+    const bodies = Matter.Composite.allBodies(this.ovalBody);
+    if (bodies.length > 0) {
+      // Calculate the center of the current oval by averaging all body positions
+      let totalX = 0;
+      bodies.forEach(body => {
+        totalX += body.position.x;
+      });
+      const currentCenterX = totalX / bodies.length;
+
+      // Calculate the translation vector
+      const dx = newCenterX - currentCenterX;
+
+      // Check if position actually changed and eccentricity is the same
+      if (Math.abs(dx) > 0.1) {
+        // Translate all bodies in the oval composite
+        Matter.Composite.translate(this.ovalBody, { x: dx, y: 0 });
+      }
+    } 
+    else {
+      // If somehow the oval is empty, create a new one
+      Matter.Composite.remove(this.engine.world, this.ovalBody);
+      this.ovalBody = this.createOvalBody(newCenterX, centerY, majorAxis, minorAxis);
+      Matter.Composite.add(this.engine.world, this.ovalBody);
+    }
   }
-  
+
   public play() {
     if (this.animationFrame !== null) return;
     this.startTime = performance.now();
     this.animate();
   }
-  
+
   public pause() {
     if (this.animationFrame === null) return;
     cancelAnimationFrame(this.animationFrame);
     this.animationFrame = null;
+    this.startTime = null;
   }
-  
+
   public cleanup() {
     this.pause();
     Matter.Engine.clear(this.engine);
-    this.bubbles = [];
-    this.segmentGlows = [];
+    Matter.World.clear(this.engine.world, false);
   }
-  
+
   private drawFrame(progress: number) {
-    const { width, height } = this.canvas;
-    const ctx = this.ctx;
-  
-    // Apply stronger motion blur effect instead of completely clearing the canvas
-    // Set a semi-transparent black rectangle over the previous frame
-    // Lower alpha = more motion blur (longer trails)
-    ctx.fillStyle = "rgba(26, 26, 26, 0.35)"; // Dark background with alpha for more pronounced motion blur
-    ctx.fillRect(0, 0, width, height);
-    
-    // Update glow data for oval segments (data management only)
-    this.renderOvalGlow(ctx, performance.now());
-  
-    // Check if we need to generate bubbles
-    // Use progress to ensure bubbles are generated exactly once per cycle
-    const cyclePct = progress * 100;
-    // Generate bubbles when we're at the activation line (around 30% into the cycle)
-    const activationPoint = CanvasController.ACTIVATION_LINE_POSITION * 100;
-    const prevCyclePct = ((performance.now() - 16.67) - (this.startTime || 0)) % CanvasController.CYCLE_PERIOD_MS / CanvasController.CYCLE_PERIOD_MS * 100;
-    
-    // Generate bubbles when crossing the activation point (previous frame was before, current frame is after)
-    if (prevCyclePct < activationPoint && cyclePct >= activationPoint) {
-      console.log('Spawning bubbles at cycle', this.currentCycleNumber + 1);
-      // Spawn new bubbles at the activation line using our templates
-      const newBubbles = this.spawnBubbles(this.activationLineX);
-      // Add to the list of bubbles
-      this.bubbles.push(...newBubbles);
-      // Emit cycle started event if callback is registered
-      if (this.onCycleStart) this.onCycleStart();
-      
-      // Update cycle time and cycle number
-      this.lastCycleTime = performance.now();
-      this.currentCycleNumber++;
+    // Define width and height variables that can be used throughout this method
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+
+    // Apply RTL transformation if enabled
+    this.ctx.save();
+    if (this.isRTL) {
+      // Flip the canvas horizontally for RTL mode
+      this.ctx.scale(-1, 1);
+      this.ctx.translate(-width, 0);
     }
-    
-    // Collect all particles by collision state
-    let allParticles: Particle[] = [];
-    let collidedParticles: Particle[] = [];
-    let nonCollidedParticles: Particle[] = [];
-    
-    // Update all bubbles and remove fully decayed ones
+
+    // Reduce motion blur effect to make particles stay visible longer
+    this.ctx.fillStyle = 'rgba(26, 26, 26, 0.02)'; 
+    this.ctx.fillRect(0, 0, width, height);
+
+    // =====================================
+    // Step 1: Draw UI elements (sweep lines, activation lines)
+    // =====================================
+    this.drawUIElements(width, height, progress);
+
+    // =====================================
+    // Step 2: Handle particle spawning at activation line
+    // =====================================
+    const timeX = width * progress;
+
+    // Check if the sweep line has crossed the activation line (left to right only)
+    const hasPassedActivationLine = 
+      (this.previousSweepLineX < this.activationLineX && timeX >= this.activationLineX);
+
+    // Activation line spawning - create blue particles when sweep line crosses activation line
+    if (hasPassedActivationLine) {
+      const newBubbles = this.generateBubbles(this.activationLineX);
+      this.bubbles.push(...newBubbles);
+    }
+
+    // Update previous position for next frame
+    this.previousSweepLineX = timeX;
+
+    // =====================================
+    // Step 3: Define screen bounds for physics and rendering optimization
+    // =====================================
+    const bufferMargin = 10;
+    const screenBounds = {
+      min: { x: -bufferMargin, y: -bufferMargin },
+      max: { x: width + bufferMargin, y: height + bufferMargin }
+    };
+
+    // Update and draw bubbles
     this.bubbles = this.bubbles.filter(bubble => {
-      // Update energy based on particles
-      this.updateBubbleEnergy(bubble);
-      
-      // Filter empty bubbles
-      if (bubble.particles.length === 0) return false;
-      
-      // Check if too old (by cycle number)
+      // Optimize physics by only processing particles within or near the canvas
+      if (bubble.particles.length > 0) {
+        bubble.particles.forEach(particle => {
+          const pos = particle.body.position;
+          const isOnScreen = 
+            pos.x >= screenBounds.min.x && 
+            pos.x <= screenBounds.max.x && 
+            pos.y >= screenBounds.min.y && 
+            pos.y <= screenBounds.max.y;
+
+          // Only process physics for on-screen particles
+          if (isOnScreen) {
+            // Enable collisions for on-screen particles
+            const collisionFilter = {
+              category: 0x0001,
+              mask: 0x0002, // Only collide with the oval (0x0002), not other particles
+              group: 0 // Using standard group to rely on mask
+            };
+            Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
+            // Keep normal physics simulation for on-screen particles
+            Matter.Body.setStatic(particle.body, false);
+          } else {
+            // Disable collisions for off-screen particles to save computation
+            const collisionFilter = {
+              category: 0x0000,
+              mask: 0x0000, // Don't collide with anything
+              group: 0 // Don't allow collision with other particles
+            };
+            Matter.Body.set(particle.body, 'collisionFilter', collisionFilter);
+            // Make off-screen particles static to further reduce computation
+            Matter.Body.setStatic(particle.body, true);
+          }
+        });
+      }
+
+      if (bubble.particles.length > 0) {
+        // Use energy for opacity control
+        let opacity = bubble.energy / bubble.initialEnergy;
+
+        // Skip rendering if no energy left
+        if (opacity <= 0) {
+          return true; 
+        }
+
+        if (bubble.particles.length > 3) {
+          // Get visible particles for rendering
+          const visibleParticles = bubble.particles.filter(p => {
+            const pos = p.body.position;
+            return pos.x >= 0 && pos.x <= this.canvas.width && 
+                   pos.y >= 0 && pos.y <= this.canvas.height;
+          });
+
+          // Draw individual particles if enabled
+          if (this.showParticles) {
+            visibleParticles.forEach(particle => {
+              const pos = particle.body.position;
+              // Pass the particle object to use its energy for rendering
+              this.renderParticle(this.ctx, pos, opacity, particle);
+            });
+          }
+        }
+      }
+
+      // Check if the bubble has expired based on its cycle number
       if (this.currentCycleNumber - bubble.cycleNumber > CanvasController.PARTICLE_LIFETIME_CYCLES) {
-        // Remove all physics bodies from the world
-        for (const particle of bubble.particles) {
-          Matter.Composite.remove(this.engine.world, particle.body);
+        if (bubble.particles.length > 0) {
+          bubble.particles.forEach(particle => {
+            Matter.Composite.remove(this.engine.world, particle.body);
+          });
         }
         return false;
       }
-      
-      // Collect particles for rendering
-      for (const particle of bubble.particles) {
-        allParticles.push(particle);
-        
-        if (particle.collided > 0) {
-          collidedParticles.push(particle);
-        } else {
-          nonCollidedParticles.push(particle);
-        }
-      }
-      
       return true;
     });
-    
-    // Draw UI elements (sweep lines, etc.)
-    this.drawUIElements(width, height, progress);
-    
-    // Draw oval glow (if needed)
+
+    // Draw the oval if it exists and is supposed to be shown
     if (this.params.showOval && this.ovalBody) {
-      // Draw each oval segment with a very faint gray fill
-      const segments = Matter.Composite.allBodies(this.ovalBody);
-      
-      // Simple approach: draw each segment with a fill
-      for (const segment of segments) {
-        // Find if this segment has a glow from collision
-        const segmentGlow = this.segmentGlows.find(glow => glow.segmentId === segment.id);
-        
-        // Get the vertices of the segment
-        const verts = segment.vertices;
-        
-        // Draw the segment with a fill
-        ctx.beginPath();
-        ctx.moveTo(verts[0].x, verts[0].y);
-        ctx.lineTo(verts[1].x, verts[1].y);
-        ctx.lineTo(verts[2].x, verts[2].y);
-        ctx.lineTo(verts[3].x, verts[3].y);
-        ctx.closePath();
-        
-        // More noticeable gray fill by default
-        let fillOpacity = 0.2; // Slightly more visible default
-        let glowColor = "255, 255, 255"; // White glow by default
-        
-        // If this segment has been hit, increase opacity based on impact intensity
-        if (segmentGlow && segmentGlow.intensity > 0) {
-          // Decay the glow intensity over time
-          const timeElapsed = performance.now() - segmentGlow.lastUpdateTime;
-          const decayFactor = Math.max(0, 1 - timeElapsed / 800); // Faster decay for more dynamic effect
-          
-          // Apply decay to the intensity
-          const adjustedIntensity = segmentGlow.intensity * decayFactor;
-          
-          // Map intensity to opacity (0.2 to 0.8)
-          fillOpacity = 0.4 + Math.min(0.4, adjustedIntensity * 0.3);
-          
-          // Use a bright cyan color for impacted segments
-          glowColor = "100, 255, 255";
-        }
-        
-        // Fill with appropriate color and opacity
-        ctx.fillStyle = `rgba(${glowColor}, ${fillOpacity})`;
-        ctx.fill();
-      }
+      // Always render the glow effect on oval segments
+      this.renderOvalGlow(this.ctx, performance.now());
     }
     
-    // Draw wave visualization if enabled
+    // Render wave visualization if enabled
     if (this.params.showWaves) {
       if (this.params.showSmooth) {
-        // Draw smoothed curves through particle groups, grouped by cycle
-        this.renderSmoothWavesByCycle(ctx, nonCollidedParticles, collidedParticles);
+        // Collect all particles and separate them by collision status
+        const allParticles = this.bubbles.flatMap(bubble => bubble.particles);
+        const nonCollidedParticles = allParticles.filter(p => p.collided === 0);
+        const collidedParticles = allParticles.filter(p => p.collided > 0);
+        
+        // Use the enhanced cycle-based renderer for smooth waves
+        this.renderSmoothWavesByCycle(this.ctx, nonCollidedParticles, collidedParticles);
       } else {
-        // Draw simpler piecewise linear wave visualization
-        this.renderWaves(ctx);
-      }
-    }
-    
-    // Draw individual particles if enabled
-    if (this.showParticles) {
-      for (const particle of allParticles) {
-        this.renderParticle(
-          ctx, 
-          particle.body.position, 
-          0.5, // Base opacity
-          particle, // Passing particle for energy/color data
-CanvasController.PARTICLE_RADIUS// Base size
-        );
+        // Use the simple linear renderer for normal waves
+        this.renderWaves(this.ctx);
       }
     }
 
-    // Track render stats
-    this.frameCounter++;
+    // Restore canvas state (important for RTL transformation)
+    this.ctx.restore();
   }
-  
+
   private animate() {
-    const currentTime = performance.now();
-    if (!this.startTime) this.startTime = currentTime;
-    
-    const progress = ((currentTime - this.startTime) % CanvasController.CYCLE_PERIOD_MS) / CanvasController.CYCLE_PERIOD_MS;
-    
-    // Draw the current frame
-    this.drawFrame(progress);
-    
-    // Update physics engine at a fixed timestep
-    this.updatePhysics(currentTime);
-    
-    // Request the next animation frame
+    if (!this.startTime) return;
+
+    // Calculate time elapsed since last frame
+    const elapsed = performance.now() - this.startTime;
+    const cyclePeriod = CanvasController.CYCLE_PERIOD_MS;
+    const currentCycleTime = Math.floor(elapsed / cyclePeriod);
+
+    // Increment Cycles
+    if (currentCycleTime > this.lastCycleTime) {
+      this.lastCycleTime = currentCycleTime;
+      this.currentCycleNumber++;
+      console.log(`Starting cycle ${this.currentCycleNumber}`);
+
+      // Kill bubbles and their particles if they're too old or no longer in a bubble
+      const activeBodies = new Set(this.bubbles.flatMap(b => b.particles.map(p => p.body)));
+      Matter.Composite.allBodies(this.engine.world).forEach(body => {
+        // Skip walls and other static bodies
+        if (body.isStatic) return;
+
+        // If the body is not in active bubbles, remove it from the world
+        if (!activeBodies.has(body)) {
+          Matter.Composite.remove(this.engine.world, body);
+        }
+      });
+
+      // Call the cycle start callback if it exists
+      if (this.onCycleStart) {
+        this.onCycleStart();
+      }
+    }
+
+    // Get normalized progress through current cycle (0 to 1)
+    const progress = (elapsed % cyclePeriod) / cyclePeriod;
+
+    // Always update physics
+    this.updatePhysics(elapsed);
+
+    // Render only every other frame to improve performance
+    this.frameCounter++;
+    if (this.frameCounter % 2 === 0) {
+      this.drawFrame(progress);
+    }
+
     this.animationFrame = requestAnimationFrame(() => this.animate());
   }
-  
+
   private updatePhysics(timestamp: number) {
-    // Update using multiple smaller steps for more accurate collision detection
-    // Use more substeps when the oval is present (8 vs 4)
-    const numSteps = this.params.showOval ? 6 : 3;
-    
-    // Calculate the timestep size (in seconds)
-    const timeStep = CanvasController.PHYSICS_TIMESTEP_MS / 1000 / numSteps;
-    
-    // Apply multiple smaller steps
-    for (let i = 0; i < numSteps; i++) {
-      Matter.Engine.update(this.engine, timeStep * 1000, 1.0); // Use second param in ms
+    // Use fixed timestep for more consistent physics
+    const fixedDeltaTime = CanvasController.PHYSICS_TIMESTEP_MS;
+
+    // Use a variable number of substeps based on whether oval is shown
+    const numSubSteps = this.params.showOval ? 5 : 3; // Doubled substeps: 8 when oval present, 4 when not
+    const subStepTime = fixedDeltaTime / numSubSteps;
+
+    // Perform physics updates in substeps for better stability
+    // No need to reset friction values every update as they're set during body creation
+    for (let i = 0; i < numSubSteps; i++) {
+      // Use fixed time step for more consistent physics
+      Matter.Engine.update(this.engine, subStepTime);
     }
+
+    // Update bubble energies
+    this.bubbles.forEach(bubble => this.updateBubbleEnergy(bubble));
   }
 }
