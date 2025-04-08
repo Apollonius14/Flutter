@@ -17,6 +17,7 @@ interface AnimationParams {
   mouthOpening: number;
   showWaves: boolean; 
   showSmooth: boolean;
+  showRipple: boolean; // Whether to show the ripple effect (multiple wave lines)
 }
 
 interface Bubble {
@@ -124,7 +125,8 @@ export class CanvasController {
       ovalEccentricity: 0.6,
       mouthOpening: 0, 
       showWaves: false, 
-      showSmooth: false 
+      showSmooth: false,
+      showRipple: false
     };
 
     this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
@@ -443,7 +445,7 @@ Updates the energy of individual particles based on their vertical velocity
       const verticalVelocity = Math.abs(body.velocity.y);
       
       // Calculate decay factor - higher vertical velocity means faster decay
-      const velocityFactor = 0.5 + (verticalVelocity * 2);
+      const velocityFactor = 0.5 + (verticalVelocity * 4);
       
       // Apply time-based decay multiplied by the velocity factor
       const decay = particle.initialEnergy * 0.001 * 0.2 * velocityFactor;
@@ -522,7 +524,7 @@ Updates the energy of individual particles based on their vertical velocity
     // Apply decay to all glows
     for (const glow of this.segmentGlows) {
       const age = (now - glow.lastUpdateTime) / 1000;
-      const decayFactor = Math.pow(0.75, age * 2);
+      const decayFactor = Math.pow(0.8, age * 2.2);
       glow.intensity *= decayFactor;
     }
     
@@ -584,6 +586,10 @@ Updates the energy of individual particles based on their vertical velocity
     this.params.showSmooth = show;
   }
   
+  public setShowRipple(show: boolean) {
+    this.params.showRipple = show;
+  }
+  
   private renderWaves(ctx: CanvasRenderingContext2D): void {
     // First, collect all particles from all bubbles
     const allParticles: Particle[] = [];
@@ -608,51 +614,151 @@ Updates the energy of individual particles based on their vertical velocity
         const collidedParticles = bubbleParticles.filter(p => p.collided > 0);
         const nonCollidedParticles = bubbleParticles.filter(p => p.collided === 0);
         
-        // Draw non-collided (cyan) wave lines first
-        if (nonCollidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
-          ctx.lineWidth = 7.5;
-          ctx.beginPath();
-          
-          let prev: Particle | null = null;
-          
-          for (const particle of nonCollidedParticles) {
-            if (prev) {
-              // Only connect if x-distance is not too far
-              const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 10) {
-                ctx.moveTo(prev.body.position.x, prev.body.position.y);
-                ctx.lineTo(particle.body.position.x, particle.body.position.y);
-              }
-            }
-            prev = particle;
-          }
-          
-          ctx.stroke();
-        }
-        
-        // Draw collided (yellow) wave lines
-        if (collidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(255, 0, 255, 0.45)"; 
-          ctx.lineWidth = 6
-          ctx.beginPath();
-          
-          let prev: Particle | null = null;
-          
-          for (const particle of collidedParticles) {
-            if (prev) {
-              const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 5) { // Threshold to avoid connecting distant particles
-                ctx.moveTo(prev.body.position.x, prev.body.position.y);
-                ctx.lineTo(particle.body.position.x, particle.body.position.y);
-              }
-            }
-            prev = particle;
-          }
-          
-          ctx.stroke();
+        // Check if ripple effect is enabled
+        if (this.params.showRipple) {
+          this.renderRippleWaves(ctx, nonCollidedParticles, collidedParticles);
+        } else {
+          this.renderStandardWaves(ctx, nonCollidedParticles, collidedParticles);
         }
       }
+    }
+  }
+  
+  /**
+   * Renders the standard waves with a single line
+   */
+  private renderStandardWaves(
+    ctx: CanvasRenderingContext2D,
+    nonCollidedParticles: Particle[],
+    collidedParticles: Particle[]
+  ): void {
+    // Draw non-collided (cyan) wave lines first
+    if (nonCollidedParticles.length >= 2) {
+      ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
+      ctx.lineWidth = 7.5;
+      ctx.beginPath();
+      
+      let prev: Particle | null = null;
+      
+      for (const particle of nonCollidedParticles) {
+        if (prev) {
+          // Only connect if x-distance is not too far
+          const dx = Math.abs(particle.body.position.x - prev.body.position.x);
+          if (dx < 10) {
+            ctx.moveTo(prev.body.position.x, prev.body.position.y);
+            ctx.lineTo(particle.body.position.x, particle.body.position.y);
+          }
+        }
+        prev = particle;
+      }
+      
+      ctx.stroke();
+    }
+    
+    // Draw collided (yellow) wave lines
+    if (collidedParticles.length >= 2) {
+      ctx.strokeStyle = "rgba(255, 0, 255, 0.45)"; 
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      
+      let prev: Particle | null = null;
+      
+      for (const particle of collidedParticles) {
+        if (prev) {
+          const dx = Math.abs(particle.body.position.x - prev.body.position.x);
+          if (dx < 5) { // Threshold to avoid connecting distant particles
+            ctx.moveTo(prev.body.position.x, prev.body.position.y);
+            ctx.lineTo(particle.body.position.x, particle.body.position.y);
+          }
+        }
+        prev = particle;
+      }
+      
+      ctx.stroke();
+    }
+  }
+  
+  /**
+   * Renders waves with the ripple effect (5 lines of varying thickness and opacity)
+   */
+  private renderRippleWaves(
+    ctx: CanvasRenderingContext2D,
+    nonCollidedParticles: Particle[],
+    collidedParticles: Particle[]
+  ): void {
+    // Calculate the distance between consecutive wave fronts
+    // This is approximately half the distance particles travel over 1 cycle
+    const cycleDistance = this.canvasWidth * 0.5; // approximate distance per cycle
+    // Space between consecutive wavefronts
+    const wavefrontSpace = cycleDistance * 0.5;
+    
+    // Draw non-collided (cyan) ripple wave lines first
+    if (nonCollidedParticles.length >= 2) {
+      // Ripple configuration: 5 lines with decreasing width and increasing opacity
+      const ripples = [
+        { width: wavefrontSpace * 0.5, opacity: 0.05 },
+        { width: wavefrontSpace * 0.25, opacity: 0.1 },
+        { width: wavefrontSpace * 0.125, opacity: 0.2 },
+        { width: wavefrontSpace * 0.0625, opacity: 0.4 },
+        { width: wavefrontSpace * 0.03125, opacity: 0.8 }
+      ];
+      
+      // Render each ripple line
+      ripples.forEach(ripple => {
+        ctx.strokeStyle = `rgba(5, 255, 245, ${ripple.opacity})`; 
+        ctx.lineWidth = ripple.width;
+        ctx.beginPath();
+        
+        let prev: Particle | null = null;
+        
+        for (const particle of nonCollidedParticles) {
+          if (prev) {
+            // Only connect if x-distance is not too far
+            const dx = Math.abs(particle.body.position.x - prev.body.position.x);
+            if (dx < 10) {
+              ctx.moveTo(prev.body.position.x, prev.body.position.y);
+              ctx.lineTo(particle.body.position.x, particle.body.position.y);
+            }
+          }
+          prev = particle;
+        }
+        
+        ctx.stroke();
+      });
+    }
+    
+    // Draw collided (magenta) ripple wave lines
+    if (collidedParticles.length >= 2) {
+      // Same configuration for collided particles but with magenta color
+      const ripples = [
+        { width: wavefrontSpace * 0.5, opacity: 0.025 },
+        { width: wavefrontSpace * 0.25, opacity: 0.05 },
+        { width: wavefrontSpace * 0.125, opacity: 0.1 },
+        { width: wavefrontSpace * 0.0625, opacity: 0.2 },
+        { width: wavefrontSpace * 0.03125, opacity: 0.4 }
+      ];
+      
+      // Render each ripple line
+      ripples.forEach(ripple => {
+        ctx.strokeStyle = `rgba(255, 0, 255, ${ripple.opacity})`;
+        ctx.lineWidth = ripple.width;
+        ctx.beginPath();
+        
+        let prev: Particle | null = null;
+        
+        for (const particle of collidedParticles) {
+          if (prev) {
+            const dx = Math.abs(particle.body.position.x - prev.body.position.x);
+            if (dx < 5) { // Threshold to avoid connecting distant particles
+              ctx.moveTo(prev.body.position.x, prev.body.position.y);
+              ctx.lineTo(particle.body.position.x, particle.body.position.y);
+            }
+          }
+          prev = particle;
+        }
+        
+        ctx.stroke();
+      });
     }
   }
   
@@ -687,10 +793,26 @@ Updates the energy of individual particles based on their vertical velocity
     const nonCollidedByCycle = groupParticles(nonCollidedParticles, p => p.cycleNumber);
     const collidedByCycle = groupParticles(collidedParticles, p => p.cycleNumber);
     
+    // Determine if we should use ripple effect
+    if (this.params.showRipple) {
+      this.renderSmoothRippleWaves(ctx, nonCollidedByCycle, collidedByCycle);
+    } else {
+      this.renderSmoothStandardWaves(ctx, nonCollidedByCycle, collidedByCycle);
+    }
+  }
+  
+  /**
+   * Renders smooth standard waves (single line per cycle)
+   */
+  private renderSmoothStandardWaves(
+    ctx: CanvasRenderingContext2D,
+    nonCollidedByCycle: Map<number, Particle[]>,
+    collidedByCycle: Map<number, Particle[]>
+  ): void {
     // Draw smooth curves for non-collided particles, grouped by cycle
     for (const [, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
       if (particlesInCycle.length > 5) { // Need enough particles for meaningful curve
-        const buckets = groupParticlesByDirection(particlesInCycle);
+        const buckets = this.groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
         
         // Extract and sort centroids by angle bucket
@@ -705,7 +827,7 @@ Updates the energy of individual particles based on their vertical velocity
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 6) {
+        if (centroids.length >= 8) {
           // Calculate line width based on particle count
           const lineWidth = calculateLineThickness(
             particlesInCycle.length,
@@ -717,8 +839,8 @@ Updates the energy of individual particles based on their vertical velocity
           drawQuadraticBezierCurve(
             ctx,
             centroids,
-            { strokeStyle: "rgba(254, 0, 254, 1.0)", lineWidth }, // Brilliant cyan
-            0.3 // Influence factor (curve smoothness)
+            { strokeStyle: "rgba(255, 0, 255, 1.0)", lineWidth }, // Brilliant cyan
+            0.2 // Influence factor (curve smoothness)
           );
         }
       }
@@ -727,7 +849,7 @@ Updates the energy of individual particles based on their vertical velocity
     // Draw smooth curves for collided particles, grouped by cycle
     for (const [, particlesInCycle] of Array.from(collidedByCycle.entries())) {
       if (particlesInCycle.length > 5) {
-        const buckets = groupParticlesByDirection(particlesInCycle);
+        const buckets = this.groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
         
         // Extract and sort centroids by angle bucket
@@ -755,8 +877,135 @@ Updates the energy of individual particles based on their vertical velocity
             ctx,
             centroids,
             { strokeStyle: "rgba(255, 0, 255, 1.0)", lineWidth }, // Golden yellow
-            0.35 // Slightly higher influence factor
+            0.1 // Slightly higher influence factor
           );
+        }
+      }
+    }
+  }
+  
+  /**
+   * Helper method to group particles by direction angle with cycle-specific buckets
+   */
+  private groupParticlesByDirection(particles: Particle[]) {
+    const ANGLE_BUCKETS = 72; // Number of angle buckets (5 degrees each)
+    
+    return groupParticles(particles, particle => {
+      const velocity = particle.body.velocity;
+      const angle = Math.atan2(velocity.y, velocity.x);
+      const degrees = ((angle * 180 / Math.PI) + 360) % 360;
+      const bucketIndex = Math.floor(degrees / (360 / ANGLE_BUCKETS));
+      return bucketIndex.toString();
+    });
+  }
+  
+  /**
+   * Renders smooth ripple waves (5 lines of varying thickness and opacity per cycle)
+   */
+  private renderSmoothRippleWaves(
+    ctx: CanvasRenderingContext2D,
+    nonCollidedByCycle: Map<number, Particle[]>,
+    collidedByCycle: Map<number, Particle[]>
+  ): void {
+    // Calculate the distance between consecutive wave fronts
+    // This is approximately half the distance particles travel over 1 cycle
+    const cycleDistance = this.canvasWidth * 0.5; // approximate distance per cycle
+    // Space between consecutive wavefronts
+    const wavefrontSpace = cycleDistance * 0.5;
+    
+    // Ripple configuration: 5 lines with decreasing width and increasing opacity
+    const ripples = [
+      { width: wavefrontSpace * 0.5, opacity: 0.05, factor: 0.6 },
+      { width: wavefrontSpace * 0.25, opacity: 0.1, factor: 0.7 },
+      { width: wavefrontSpace * 0.125, opacity: 0.2, factor: 0.8 },
+      { width: wavefrontSpace * 0.0625, opacity: 0.4, factor: 0.9 },
+      { width: wavefrontSpace * 0.03125, opacity: 0.8, factor: 1.0 }
+    ];
+    
+    // Draw ripple waves for non-collided particles
+    for (const [, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
+      if (particlesInCycle.length > 5) {
+        const buckets = this.groupParticlesByDirection(particlesInCycle);
+        const centroids: Point2D[] = [];
+        
+        // Extract and sort centroids by angle bucket
+        Array.from(buckets.entries())
+          .map(([angleBucket, particles]) => ({
+            angleBucket: Number(angleBucket),
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          }))
+          .filter(item => item.count >= 2)
+          .sort((a, b) => a.angleBucket - b.angleBucket)
+          .forEach(item => centroids.push(item.centroid));
+        
+        // Draw multiple bezier curves if we have enough points
+        if (centroids.length >= 8) {
+          // Base line width calculation
+          const baseLineWidth = calculateLineThickness(
+            particlesInCycle.length,
+            3.5,  // Base thickness
+            10    // Max thickness
+          );
+          
+          // Draw each ripple with different opacity and thickness
+          ripples.forEach(ripple => {
+            const lineWidth = baseLineWidth * ripple.width / (wavefrontSpace * 0.5);
+            
+            drawQuadraticBezierCurve(
+              ctx,
+              centroids,
+              { 
+                strokeStyle: `rgba(5, 255, 245, ${ripple.opacity})`, 
+                lineWidth
+              },
+              0.2 * ripple.factor // Varying influence factor for different ripples
+            );
+          });
+        }
+      }
+    }
+    
+    // Draw ripple waves for collided particles
+    for (const [, particlesInCycle] of Array.from(collidedByCycle.entries())) {
+      if (particlesInCycle.length > 5) {
+        const buckets = this.groupParticlesByDirection(particlesInCycle);
+        const centroids: Point2D[] = [];
+        
+        // Extract and sort centroids
+        Array.from(buckets.entries())
+          .map(([angleBucket, particles]) => ({
+            angleBucket: Number(angleBucket),
+            centroid: calculateCentroid(particles),
+            count: particles.length
+          }))
+          .filter(item => item.count >= 2)
+          .sort((a, b) => a.angleBucket - b.angleBucket)
+          .forEach(item => centroids.push(item.centroid));
+        
+        // Draw multiple bezier curves if we have enough points
+        if (centroids.length >= 8) {
+          // Base line width calculation
+          const baseLineWidth = calculateLineThickness(
+            particlesInCycle.length,
+            2.0,  // Base thickness
+            10    // Max thickness
+          );
+          
+          // Draw each ripple with different opacity and thickness
+          ripples.forEach(ripple => {
+            const lineWidth = baseLineWidth * ripple.width / (wavefrontSpace * 0.5);
+            
+            drawQuadraticBezierCurve(
+              ctx,
+              centroids,
+              { 
+                strokeStyle: `rgba(255, 0, 255, ${ripple.opacity / 2})`, 
+                lineWidth
+              },
+              0.1 * ripple.factor // Varying influence factor for different ripples
+            );
+          });
         }
       }
     }
