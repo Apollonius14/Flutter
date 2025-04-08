@@ -1,5 +1,6 @@
 // BEFORE OPTIMIZATION
 // This style imports the entire lucide-react library (33MB)
+import React from "react";
 import { ChevronDown, ChevronLeft, Circle, Languages, Loader, Waves, GitBranchPlus } from "lucide-react";
 
 function MyComponent() {

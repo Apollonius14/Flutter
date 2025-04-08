@@ -9,9 +9,9 @@
  * 2. Run it with: node update-icon-imports.js
  */
 
-const fs = require('fs');
-const path = require('path');
-const glob = require('glob');
+import fs from 'fs';
+import path from 'path';
+import { glob } from 'glob';
 
 // Map of lucide icon names to their file paths
 const iconNameToPath = {
@@ -37,42 +37,37 @@ const iconNameToPath = {
 };
 
 // Find all TypeScript and TSX files
-glob('client/src/**/*.{ts,tsx}', (err, files) => {
-  if (err) {
-    console.error('Error finding files:', err);
-    return;
-  }
+const files = await glob('client/src/**/*.{ts,tsx}');
 
-  files.forEach(file => {
-    const content = fs.readFileSync(file, 'utf8');
+for (const file of files) {
+  const content = fs.readFileSync(file, 'utf8');
+  
+  // Find imports from lucide-react
+  const importRegex = /import\s+{([^}]+)}\s+from\s+["']lucide-react["']/g;
+  let match;
+  let newContent = content;
+  
+  while ((match = importRegex.exec(content)) !== null) {
+    const iconsList = match[1];
+    // Get individual icon names
+    const icons = iconsList.split(',').map(icon => icon.trim());
     
-    // Find imports from lucide-react
-    const importRegex = /import\s+{([^}]+)}\s+from\s+["']lucide-react["']/g;
-    let match;
-    let newContent = content;
+    // Create individual imports
+    const newImports = icons
+      .filter(icon => Object.keys(iconNameToPath).includes(icon))
+      .map(icon => `import ${icon} from "lucide-react/dist/esm/icons/${iconNameToPath[icon]}";`)
+      .join('\n');
     
-    while ((match = importRegex.exec(content)) !== null) {
-      const iconsList = match[1];
-      // Get individual icon names
-      const icons = iconsList.split(',').map(icon => icon.trim());
-      
-      // Create individual imports
-      const newImports = icons
-        .filter(icon => Object.keys(iconNameToPath).includes(icon))
-        .map(icon => `import ${icon} from "lucide-react/dist/esm/icons/${iconNameToPath[icon]}";`)
-        .join('\n');
-      
-      // Replace the old import with the new imports
-      newContent = newContent.replace(match[0], newImports);
-    }
-    
-    // Write the modified content back to the file
-    if (newContent !== content) {
-      fs.writeFileSync(file, newContent, 'utf8');
-      console.log(`Updated imports in ${file}`);
-    }
-  });
-});
+    // Replace the old import with the new imports
+    newContent = newContent.replace(match[0], newImports);
+  }
+  
+  // Write the modified content back to the file
+  if (newContent !== content) {
+    fs.writeFileSync(file, newContent, 'utf8');
+    console.log(`Updated imports in ${file}`);
+  }
+}
 
 // Note: This is a proof of concept. In a production environment, 
 // you'd want to add error handling, backup files before modifying them,
