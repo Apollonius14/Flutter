@@ -24,7 +24,6 @@ const translations = {
     particles: "Particles",
     waves: "Wave Lines",
     smooth: "Smooth Waves",
-    ripple: "Ripple Effect",
     oval: "Oval",
     position: "Position",
     eccentricity: "Eccentricity",
@@ -41,7 +40,6 @@ const translations = {
     particles: "الجسيمات",
     waves: "خطوط الموجة",
     smooth: "موجات سلسة",
-    ripple: "تأثير التموج",
     oval: "بيضاوي",
     position: "الموضع",
     eccentricity: "التمركز",
@@ -59,7 +57,6 @@ export default function Home() {
   const [showParticles, setShowParticles] = useState(true);
   const [showWaves, setShowWaves] = useState(false);
   const [showSmooth, setShowSmooth] = useState(false);
-  const [showRipple, setShowRipple] = useState(false);
   const [showOval, setShowOval] = useState(false);
   const [ovalPosition, setOvalPosition] = useState(0.5); // default position at center (0.5 = 50%)
   const [ovalEccentricity, setOvalEccentricity] = useState(0.7); // default eccentricity of 0.7
@@ -116,8 +113,7 @@ export default function Home() {
         ovalEccentricity,
         mouthOpening,
         showWaves,
-        showSmooth,
-        showRipple
+        showSmooth
       });
       lastPowerValue.current = powerValue;
       setCycleStarted(true);
@@ -125,7 +121,7 @@ export default function Home() {
       // Reset cycle tracking when paused
       setCycleStarted(false);
     }
-  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves, showSmooth, showRipple]);
+  }, [controller, powerValue, isPlaying, cycleStarted, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves, showSmooth]);
   
   // Add a listener to know when a cycle starts
   useEffect(() => {
@@ -142,8 +138,7 @@ export default function Home() {
           ovalEccentricity,
           mouthOpening,
           showWaves,
-          showSmooth,
-          showRipple
+          showSmooth
         });
         lastPowerValue.current = powerValue;
       }
@@ -158,7 +153,7 @@ export default function Home() {
         controller.onCycleStart = null;
       }
     };
-  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves, showSmooth, showRipple]);
+  }, [controller, powerValue, showOval, ovalPosition, ovalEccentricity, mouthOpening, showWaves, showSmooth]);
 
   useEffect(() => {
     if (!controller) return;
@@ -189,11 +184,6 @@ export default function Home() {
     controller.setShowSmooth(showSmooth);
   }, [showSmooth, controller]);
   
-  useEffect(() => {
-    if (!controller) return;
-    controller.setShowRipple(showRipple);
-  }, [showRipple, controller]);
-  
   // Dedicated effect for oval settings
   useEffect(() => {
     if (!controller) return;
@@ -205,26 +195,16 @@ export default function Home() {
       ovalEccentricity,
       mouthOpening,
       showWaves,
-      showSmooth,
-      showRipple
+      showSmooth
     });
-  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, mouthOpening, showWaves, showSmooth, showRipple]);
+  }, [controller, showOval, ovalPosition, ovalEccentricity, powerValue, mouthOpening, showWaves, showSmooth]);
 
   const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleLanguage = () => setLanguage(lang => lang === 'en' ? 'ar' : 'en');
   const toggleRTL = () => setIsRTL(prev => !prev);
   const toggleShowParticles = () => setShowParticles(prev => !prev);
-  const toggleShowWaves = () => {
-    const newValue = !showWaves;
-    setShowWaves(newValue);
-    if (!newValue) {
-      // If waves are turned off, also turn off smooth and ripple
-      setShowSmooth(false);
-      setShowRipple(false);
-    }
-  };
+  const toggleShowWaves = () => setShowWaves(prev => !prev);
   const toggleShowSmooth = () => setShowSmooth(prev => !prev);
-  const toggleShowRipple = () => setShowRipple(prev => !prev);
   const toggleShowOval = () => setShowOval(prev => !prev);
 
   return (
@@ -392,19 +372,6 @@ export default function Home() {
                 >
                   <GitBranchPlus className="h-4 w-4" />
                 </Button>
-                
-                {/* Ripple button - only visible when waves are enabled */}
-                {showWaves && (
-                  <Button
-                    size="sm"
-                    variant={showRipple ? "default" : "outline"}
-                    onClick={toggleShowRipple}
-                    className={`border-gray-600 ${showRipple ? 'bg-cyan-500 text-white' : 'text-gray-400'}`}
-                    title={t.ripple}
-                  >
-                    {t.ripple}
-                  </Button>
-                )}
               </div>
             </div>
           </CardContent>
