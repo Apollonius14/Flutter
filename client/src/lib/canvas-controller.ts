@@ -39,11 +39,11 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.4;  
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
   private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 70;
+  private static readonly PARTICLES_PER_RING: number = 80;
   private static readonly PARTICLE_RADIUS: number = 2.0;
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -271,7 +271,7 @@ export class CanvasController {
         
         // Calculate initial velocity
         const baseSpeed = 8;
-        const velocityX = Math.cos(angle) * baseSpeed * 1.2;
+        const velocityX = Math.cos(angle) * baseSpeed * 1.3;
         const velocityY = Math.sin(angle) * baseSpeed * 0.9;
         
         // Store this particle's template
@@ -443,7 +443,7 @@ Updates the energy of individual particles based on their vertical velocity
       const verticalVelocity = Math.abs(body.velocity.y);
       
       // Calculate decay factor - higher vertical velocity means faster decay
-      const velocityFactor = 0.5 + (verticalVelocity * 2);
+      const velocityFactor = 0.4 + (verticalVelocity * 3.5);
       
       // Apply time-based decay multiplied by the velocity factor
       const decay = particle.initialEnergy * 0.001 * 0.2 * velocityFactor;
