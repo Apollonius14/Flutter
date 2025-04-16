@@ -39,11 +39,11 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.3;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.15;  
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 4;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 80;
+  private static readonly PARTICLES_PER_RING: number = 70;
   private static readonly PARTICLE_RADIUS: number = 2.0;
   private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -182,7 +182,7 @@ export class CanvasController {
           const dotProduct = velocity.x * normal.x + velocity.y * normal.y;
           
           // Take absolute value since we care about magnitude of impact, not direction
-          const impactMagnitude = Math.abs(dotProduct);
+          const impactMagnitude = Math.abs(dotProduct)*0.2;
           
           // Apply a threshold to filter out tiny collisions and static noise
           // Ignore collisions that don't meet the minimum threshold
@@ -270,7 +270,7 @@ export class CanvasController {
         const offsetY = Math.sin(angle) * bubbleRadius;
         
         // Calculate initial velocity
-        const baseSpeed = 8;
+        const baseSpeed = 16;
         const velocityX = Math.cos(angle) * baseSpeed * 1.3;
         const velocityY = Math.sin(angle) * baseSpeed * 0.9;
         
@@ -446,7 +446,7 @@ Updates the energy of individual particles based on their vertical velocity
       const velocityFactor = 0.4 + (verticalVelocity * 3.5);
       
       // Apply time-based decay multiplied by the velocity factor
-      const decay = particle.initialEnergy * 0.001 * 0.2 * velocityFactor;
+      const decay = particle.initialEnergy * 0.001 * 0.02 * velocityFactor;
       particle.energy = Math.max(0, particle.energy - decay);
       
       // Accumulate energy for bubble total
