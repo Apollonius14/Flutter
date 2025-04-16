@@ -506,7 +506,7 @@ Updates the energy of individual particles based on their vertical velocity
     particle?: Particle,
     size: number = CanvasController.PARTICLE_RADIUS * 10
   ): void {
-    // If we have a particle with energy data, use that to adjust opacity
+    // If we have a particle with energy data, use that to adjust opacity and size
     let finalOpacity = opacity * this.params.power * 0.5;
     let particleSize = size;
     
@@ -514,25 +514,55 @@ Updates the energy of individual particles based on their vertical velocity
       const energyRatio = particle.energy / particle.initialEnergy;
       
       if (particle.collided > 0) {
-        finalOpacity = energyRatio; 
+        // Collided particles are smaller and fade out more quickly
+        finalOpacity = energyRatio * 0.8;
+        // Add subtle pulsing effect to collided particles based on time
+        const pulseEffect = Math.sin(performance.now() * 0.008) * 0.1 + 1.0;
+        particleSize = size * pulseEffect * 0.9; 
       } else {
+        // Non-collided particles are brighter and slightly larger
         finalOpacity = energyRatio * 2.4;
-        particleSize = size * 2.0; 
+        particleSize = size * 2.2; 
+        // Add subtle size variation based on time to create a shimmering effect
+        const shimmering = (Math.sin(performance.now() * 0.003 + particle.index) * 0.08 + 1.0);
+        particleSize *= shimmering;
       }
     } else {
       finalOpacity = opacity * 0.5;
     }
   
+    // Draw particle with glow effect
+    // First, draw a larger, more transparent version for the glow
+    if (particle) {
+      ctx.beginPath();
+      const glowSize = particleSize * 1.8;
+      ctx.arc(position.x, position.y, glowSize, 0, Math.PI * 2);
+      
+      if (particle.collided > 0) {
+        // Magenta glow for collided particles
+        const glowOpacity = Math.min(finalOpacity * 0.25, 1.0);
+        ctx.fillStyle = `rgba(200, 50, 200, ${glowOpacity})`;
+      } else {
+        // Cyan glow for non-collided particles
+        const glowOpacity = Math.min(finalOpacity * 0.25, 1.0);
+        ctx.fillStyle = `rgba(0, 200, 255, ${glowOpacity})`;
+      }
+      ctx.fill();
+    }
+    
+    // Draw the main particle
     ctx.beginPath();
     ctx.arc(position.x, position.y, particleSize, 0, Math.PI * 2);
     
     // Use purple for particles that have collided, cyan for those that haven't
     if (particle && particle.collided > 0) {
-      const adjustedOpacity = Math.min(finalOpacity * 0.7, 1.0); // Calculate opacity, ensure it's <= 1.0
-      ctx.fillStyle = `rgba(255, 0, 255, ${adjustedOpacity})`;
+      const adjustedOpacity = Math.min(finalOpacity * 0.7, 1.0);
+      // More vibrant magenta for collided particles with subtle variation
+      ctx.fillStyle = `rgba(255, 30, 255, ${adjustedOpacity})`;
     } else {
-      const adjustedOpacity = Math.min(finalOpacity, 1.0); // Ensure opacity is <= a1.0
-      ctx.fillStyle = `rgba(5, 255, 245, ${adjustedOpacity})`;
+      const adjustedOpacity = Math.min(finalOpacity, 1.0);
+      // Brighter cyan with subtle variation for non-collided particles
+      ctx.fillStyle = `rgba(0, 255, 255, ${adjustedOpacity})`;
     }
     
     ctx.fill();
@@ -747,12 +777,24 @@ Updates the energy of individual particles based on their vertical velocity
             10    // Max thickness
           );
           
-          // Draw the curve
+          // Calculate the average energy ratio for this group
+          const avgEnergyRatio = particlesInCycle.reduce(
+            (sum, p) => sum + (p.energy / p.initialEnergy), 0
+          ) / particlesInCycle.length;
+          
+          // Adjust color based on energy - more vibrant for higher energy
+          const colorIntensity = Math.min(1.0, avgEnergyRatio * 1.5); // Boost intensity
+          const alpha = Math.min(1.0, 0.5 + avgEnergyRatio * 0.5); // Boost opacity
+          
+          // Draw the curve with enhanced visual style
           drawQuadraticBezierCurve(
             ctx,
             centroids,
-            { strokeStyle: "rgba(254, 0, 254, 1.0)", lineWidth }, // Brilliant cyan
-            0.3 // Influence factor (curve smoothness)
+            { 
+              strokeStyle: `rgba(0, ${Math.floor(200 + colorIntensity * 55)}, ${Math.floor(215 + colorIntensity * 40)}, ${alpha})`, 
+              lineWidth 
+            },
+            0.4 // Increased influence factor for smoother curves
           );
         }
       }
@@ -784,12 +826,24 @@ Updates the energy of individual particles based on their vertical velocity
             10    // Max thickness
           );
           
-          // Draw the curve with slightly higher influence factor for more variation
+          // Calculate average energy for this group
+          const avgEnergyRatio = particlesInCycle.reduce(
+            (sum, p) => sum + (p.energy / p.initialEnergy), 0
+          ) / particlesInCycle.length;
+          
+          // Use a magenta/purple hue for collided particles
+          const colorIntensity = Math.min(1.0, avgEnergyRatio * 1.5);
+          const alpha = Math.min(1.0, 0.4 + avgEnergyRatio * 0.6); // Slightly more transparent
+          
+          // Draw the curve with enhanced color
           drawQuadraticBezierCurve(
             ctx,
             centroids,
-            { strokeStyle: "rgba(255, 0, 255, 1.0)", lineWidth }, // Golden yellow
-            0.35 // Slightly higher influence factor
+            { 
+              strokeStyle: `rgba(${Math.floor(200 + colorIntensity * 55)}, 50, ${Math.floor(180 + colorIntensity * 75)}, ${alpha})`, 
+              lineWidth 
+            },
+            0.35 // Slightly less smooth than non-collided
           );
         }
       }
