@@ -87,6 +87,10 @@ export class CanvasController {
   private ovalBody: Matter.Composite | null = null;
   private segmentGlows: SegmentGlow[] = [];
   
+  // Temporal anti-aliasing (frame blending) variables
+  private prevFrameCanvas: HTMLCanvasElement | null = null;
+  private prevFrameCtx: CanvasRenderingContext2D | null = null;
+  
   // Templates for particle positions, velocities, and other properties
   
   private bubbleTemplates: {
@@ -105,11 +109,39 @@ export class CanvasController {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    
+    // Apply device pixel ratio for higher resolution rendering
+    const pixelRatio = window.devicePixelRatio || 1;
+    
+    // Set the canvas dimensions based on device pixel ratio
+    // Store the CSS dimensions
+    const displayWidth = canvas.clientWidth;
+    const displayHeight = canvas.clientHeight;
+    
+    // Set the internal canvas dimensions for high resolution
+    canvas.width = Math.floor(displayWidth * pixelRatio);
+    canvas.height = Math.floor(displayHeight * pixelRatio);
+    
+    // Update stored dimensions
     this.canvasWidth = canvas.width;
     this.canvasHeight = canvas.height;
+    
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
+    
+    // Scale the context based on the device pixel ratio
+    ctx.scale(pixelRatio, pixelRatio);
+    
+    // Initialize the previous frame canvas for temporal anti-aliasing
+    this.prevFrameCanvas = document.createElement('canvas');
+    this.prevFrameCanvas.width = canvas.width;
+    this.prevFrameCanvas.height = canvas.height;
+    this.prevFrameCtx = this.prevFrameCanvas.getContext('2d', { alpha: false });
+    if (this.prevFrameCtx) {
+      this.prevFrameCtx.scale(pixelRatio, pixelRatio);
+    }
+    
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
       positionIterations: 5,
@@ -127,7 +159,7 @@ export class CanvasController {
       showSmooth: false 
     };
 
-    this.activationLineX = canvas.width * CanvasController.ACTIVATION_LINE_POSITION;
+    this.activationLineX = displayWidth * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
 
     // 1. Initialize vertical positions for bubbles
