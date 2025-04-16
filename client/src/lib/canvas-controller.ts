@@ -44,8 +44,8 @@ export class CanvasController {
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
   private static readonly PARTICLES_PER_RING: number = 70;
-  private static readonly PARTICLE_RADIUS: number = 2.0;
-  private static readonly FIXED_BUBBLE_RADIUS: number = 4.0; 
+  private static readonly PARTICLE_RADIUS: number = 0.5;
+  private static readonly FIXED_BUBBLE_RADIUS: number = 3.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
     const particleAngles: number[] = [];
     const particleCount = CanvasController.PARTICLES_PER_RING;
@@ -110,37 +110,20 @@ export class CanvasController {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     
-    // Apply device pixel ratio for higher resolution rendering
-    const pixelRatio = window.devicePixelRatio || 1;
-    
-    // Set the canvas dimensions based on device pixel ratio
-    // Store the CSS dimensions
-    const displayWidth = canvas.clientWidth;
-    const displayHeight = canvas.clientHeight;
-    
-    // Set the internal canvas dimensions for high resolution
-    canvas.width = Math.floor(displayWidth * pixelRatio);
-    canvas.height = Math.floor(displayHeight * pixelRatio);
-    
-    // Update stored dimensions
+    // Get original canvas dimensions
     this.canvasWidth = canvas.width;
     this.canvasHeight = canvas.height;
     
+    // Get the rendering context
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Could not get canvas context");
     this.ctx = ctx;
-    
-    // Scale the context based on the device pixel ratio
-    ctx.scale(pixelRatio, pixelRatio);
     
     // Initialize the previous frame canvas for temporal anti-aliasing
     this.prevFrameCanvas = document.createElement('canvas');
     this.prevFrameCanvas.width = canvas.width;
     this.prevFrameCanvas.height = canvas.height;
     this.prevFrameCtx = this.prevFrameCanvas.getContext('2d', { alpha: false });
-    if (this.prevFrameCtx) {
-      this.prevFrameCtx.scale(pixelRatio, pixelRatio);
-    }
     
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0 },
@@ -159,7 +142,7 @@ export class CanvasController {
       showSmooth: false 
     };
 
-    this.activationLineX = displayWidth * CanvasController.ACTIVATION_LINE_POSITION;
+    this.activationLineX = this.canvasWidth * CanvasController.ACTIVATION_LINE_POSITION;
     this.canvas.style.backgroundColor = '#1a1a1a';
 
     // 1. Initialize vertical positions for bubbles
@@ -504,7 +487,7 @@ Updates the energy of individual particles based on their vertical velocity
     position: Point2D,
     opacity: number,
     particle?: Particle,
-    size: number = CanvasController.PARTICLE_RADIUS * 10
+    size: number = CanvasController.PARTICLE_RADIUS * 6
   ): void {
     // If we have a particle with energy data, use that to adjust opacity and size
     let finalOpacity = opacity * this.params.power * 0.5;
