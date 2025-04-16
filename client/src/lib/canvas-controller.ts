@@ -837,7 +837,9 @@ Updates the energy of individual particles based on their vertical velocity
               strokeStyle: `rgba(0, ${Math.floor(200 + colorIntensity * 55)}, ${Math.floor(215 + colorIntensity * 40)}, ${alpha})`, 
               lineWidth 
             },
-            0.4 // Increased influence factor for smoother curves
+            0.4, // Increased influence factor for smoother curves
+            0.08, // Max segment distance as fraction of canvas width
+            this.canvasWidth // Pass actual canvas width
           );
           
           // Add wake effect for newer cycles (outer glow)
@@ -850,7 +852,9 @@ Updates the energy of individual particles based on their vertical velocity
                 strokeStyle: `rgba(0, ${Math.floor(200 + colorIntensity * 55)}, ${Math.floor(215 + colorIntensity * 40)}, ${alpha * 0.3})`, 
                 lineWidth: lineWidth * 2.0
               },
-              0.4
+              0.4,
+              0.08, // Max segment distance as fraction of canvas width
+              this.canvasWidth // Pass actual canvas width
             );
           }
         }
@@ -916,7 +920,9 @@ Updates the energy of individual particles based on their vertical velocity
               strokeStyle: `rgba(${redAmount}, 50, ${blueAmount}, ${alpha})`, 
               lineWidth 
             },
-            0.35 // Slightly less smooth than non-collided
+            0.35, // Slightly less smooth than non-collided
+            0.08, // Max segment distance as fraction of canvas width
+            this.canvasWidth // Pass actual canvas width
           );
           
           // Add wake effect for newer cycles (outer glow)
@@ -929,7 +935,9 @@ Updates the energy of individual particles based on their vertical velocity
                 strokeStyle: `rgba(${redAmount}, 50, ${blueAmount}, ${alpha * 0.3})`, 
                 lineWidth: lineWidth * 1.8
               },
-              0.35
+              0.35,
+              0.08, // Max segment distance as fraction of canvas width
+              this.canvasWidth // Pass actual canvas width
             );
           }
         }
