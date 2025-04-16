@@ -39,11 +39,11 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.15;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 4;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.2;  
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 3;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 70;
+  private static readonly PARTICLES_PER_RING: number = 80;
   private static readonly PARTICLE_RADIUS: number = 0.5;
   private static readonly FIXED_BUBBLE_RADIUS: number = 3.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -285,8 +285,8 @@ export class CanvasController {
         const offsetY = Math.sin(angle) * bubbleRadius;
         
         // Calculate initial velocity
-        const baseSpeed = 16;
-        const velocityX = Math.cos(angle) * baseSpeed * 1.3;
+        const baseSpeed = 8;
+        const velocityX = Math.cos(angle) * baseSpeed * 1.2;
         const velocityY = Math.sin(angle) * baseSpeed * 0.9;
         
         // Store this particle's template
@@ -458,7 +458,7 @@ Updates the energy of individual particles based on their vertical velocity
       const verticalVelocity = Math.abs(body.velocity.y);
       
       // Calculate decay factor - higher vertical velocity means faster decay
-      const velocityFactor = 0.4 + (verticalVelocity * 3.5);
+      const velocityFactor = 0.2 + (verticalVelocity * 5);
       
       // Apply time-based decay multiplied by the velocity factor
       const decay = particle.initialEnergy * 0.001 * 0.02 * velocityFactor;
@@ -639,10 +639,24 @@ Updates the energy of individual particles based on their vertical velocity
     // Group particles by cycleNumber
     const cycleGroups = groupParticles(allParticles, p => p.cycleNumber);
     
-    // Render each cycle's particles
-    for (const [, particles] of Array.from(cycleGroups.entries())) {
+    // Render each cycle's particles with different opacities based on age
+    const cycleEntries = Array.from(cycleGroups.entries())
+      .sort((a, b) => a[0] - b[0]); // Sort by cycle number (oldest first)
+    
+    // Render each cycle's particles with different styling
+    for (let i = 0; i < cycleEntries.length; i++) {
+      const [cycleNumber, particles] = cycleEntries[i];
+      
+      // Calculate relative age for styling (0 = oldest, 1 = newest)
+      const relativeAge = i / (cycleEntries.length - 1 || 1);
+      
       // Group by groupId (bubble)
       const bubbleGroups = groupParticles(particles, p => p.groupId);
+      
+      // Calculate line width and opacity based on age
+      // Newer waves are brighter and thicker
+      const ageOpacityFactor = 0.3 + relativeAge * 0.7; // 0.3 to 1.0
+      const ageWidthFactor = 0.4 + relativeAge * 0.6; // 0.4 to 1.0
       
       // Render each bubble's particles as a wave
       for (const [, bubbleParticles] of Array.from(bubbleGroups.entries())) {
@@ -653,10 +667,20 @@ Updates the energy of individual particles based on their vertical velocity
         const collidedParticles = bubbleParticles.filter(p => p.collided > 0);
         const nonCollidedParticles = bubbleParticles.filter(p => p.collided === 0);
         
-        // Draw non-collided (cyan) wave lines first
+        // Draw non-collided (cyan) wave lines first with wake effect
         if (nonCollidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(5, 255, 245, 0.6)"; // Light cyan
-          ctx.lineWidth = 7.5;
+          // Adjust opacity based on age and energy
+          const avgEnergyRatio = nonCollidedParticles.reduce(
+            (sum, p) => sum + (p.energy / p.initialEnergy), 0
+          ) / nonCollidedParticles.length;
+          
+          const finalOpacity = Math.min(0.8, avgEnergyRatio * ageOpacityFactor);
+          const lineWidth = 7.5 * ageWidthFactor;
+          
+          // Enhanced cyan color with slight blue tint
+          const blueAmount = Math.floor(220 + relativeAge * 35);
+          ctx.strokeStyle = `rgba(5, ${blueAmount}, 245, ${finalOpacity})`;
+          ctx.lineWidth = lineWidth;
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -674,12 +698,29 @@ Updates the energy of individual particles based on their vertical velocity
           }
           
           ctx.stroke();
+          
+          // Add a glowing outer line for wake effect on newer waves
+          if (relativeAge > 0.7) {
+            ctx.strokeStyle = `rgba(5, ${blueAmount}, 245, ${finalOpacity * 0.3})`;
+            ctx.lineWidth = lineWidth * 1.8;
+            ctx.stroke();
+          }
         }
         
-        // Draw collided (yellow) wave lines
+        // Draw collided (magenta) wave lines with enhanced wake effect
         if (collidedParticles.length >= 2) {
-          ctx.strokeStyle = "rgba(255, 0, 255, 0.45)"; 
-          ctx.lineWidth = 6
+          // Adjust opacity based on age and energy
+          const avgEnergyRatio = collidedParticles.reduce(
+            (sum, p) => sum + (p.energy / p.initialEnergy), 0
+          ) / collidedParticles.length;
+          
+          const finalOpacity = Math.min(0.7, avgEnergyRatio * ageOpacityFactor);
+          const lineWidth = 6 * ageWidthFactor;
+          
+          // Enhanced magenta color
+          const redAmount = Math.floor(200 + relativeAge * 55);
+          ctx.strokeStyle = `rgba(${redAmount}, 0, 255, ${finalOpacity})`;
+          ctx.lineWidth = lineWidth;
           ctx.beginPath();
           
           let prev: Particle | null = null;
@@ -696,6 +737,13 @@ Updates the energy of individual particles based on their vertical velocity
           }
           
           ctx.stroke();
+          
+          // Add a glowing outer line for wake effect on newer waves
+          if (relativeAge > 0.6) {
+            ctx.strokeStyle = `rgba(${redAmount}, 0, 255, ${finalOpacity * 0.25})`;
+            ctx.lineWidth = lineWidth * 2.0;
+            ctx.stroke();
+          }
         }
       }
     }
@@ -734,8 +782,18 @@ Updates the energy of individual particles based on their vertical velocity
     const nonCollidedByCycle = groupParticles(nonCollidedParticles, p => p.cycleNumber);
     const collidedByCycle = groupParticles(collidedParticles, p => p.cycleNumber);
     
+    // Sort the cycles by cycle number (oldest first)
+    const nonCollidedCycleEntries = Array.from(nonCollidedByCycle.entries())
+      .sort((a, b) => a[0] - b[0]);
+    
     // Draw smooth curves for non-collided particles, grouped by cycle
-    for (const [, particlesInCycle] of Array.from(nonCollidedByCycle.entries())) {
+    // with age-based styling for wake effects
+    for (let i = 0; i < nonCollidedCycleEntries.length; i++) {
+      const [cycleNumber, particlesInCycle] = nonCollidedCycleEntries[i];
+      
+      // Calculate relative age for styling (0 = oldest, 1 = newest)
+      const relativeAge = i / (nonCollidedCycleEntries.length - 1 || 1);
+      
       if (particlesInCycle.length > 5) { // Need enough particles for meaningful curve
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
@@ -753,11 +811,13 @@ Updates the energy of individual particles based on their vertical velocity
         
         // Draw bezier curve through centroids if we have enough points
         if (centroids.length >= 6) {
-          // Calculate line width based on particle count
+          // Calculate line width based on particle count and age
+          // Newer waves are thicker
+          const ageWidthFactor = 0.5 + relativeAge * 0.5; // 0.5 to 1.0
           const lineWidth = calculateLineThickness(
             particlesInCycle.length,
-            3.5,  // Base thickness
-            10    // Max thickness
+            3.5 * ageWidthFactor,  // Base thickness with age factor
+            10 * ageWidthFactor    // Max thickness with age factor
           );
           
           // Calculate the average energy ratio for this group
@@ -765,9 +825,9 @@ Updates the energy of individual particles based on their vertical velocity
             (sum, p) => sum + (p.energy / p.initialEnergy), 0
           ) / particlesInCycle.length;
           
-          // Adjust color based on energy - more vibrant for higher energy
-          const colorIntensity = Math.min(1.0, avgEnergyRatio * 1.5); // Boost intensity
-          const alpha = Math.min(1.0, 0.5 + avgEnergyRatio * 0.5); // Boost opacity
+          // Adjust color based on energy and age - more vibrant for higher energy and newer waves
+          const colorIntensity = Math.min(1.0, avgEnergyRatio * 1.5 * (0.7 + relativeAge * 0.3)); // Boost intensity
+          const alpha = Math.min(1.0, (0.4 + relativeAge * 0.6) * (0.5 + avgEnergyRatio * 0.5)); // Age and energy affected opacity
           
           // Draw the curve with enhanced visual style
           drawQuadraticBezierCurve(
@@ -779,12 +839,36 @@ Updates the energy of individual particles based on their vertical velocity
             },
             0.4 // Increased influence factor for smoother curves
           );
+          
+          // Add wake effect for newer cycles (outer glow)
+          if (relativeAge > 0.7) {
+            // Draw a thicker, more transparent version behind for wake effect
+            drawQuadraticBezierCurve(
+              ctx,
+              centroids,
+              { 
+                strokeStyle: `rgba(0, ${Math.floor(200 + colorIntensity * 55)}, ${Math.floor(215 + colorIntensity * 40)}, ${alpha * 0.3})`, 
+                lineWidth: lineWidth * 2.0
+              },
+              0.4
+            );
+          }
         }
       }
     }
     
+    // Sort the cycles by cycle number (oldest first)
+    const collidedCycleEntries = Array.from(collidedByCycle.entries())
+      .sort((a, b) => a[0] - b[0]);
+    
     // Draw smooth curves for collided particles, grouped by cycle
-    for (const [, particlesInCycle] of Array.from(collidedByCycle.entries())) {
+    // with age-based styling for wake effects
+    for (let i = 0; i < collidedCycleEntries.length; i++) {
+      const [cycleNumber, particlesInCycle] = collidedCycleEntries[i];
+      
+      // Calculate relative age for styling (0 = oldest, 1 = newest)
+      const relativeAge = i / (collidedCycleEntries.length - 1 || 1);
+      
       if (particlesInCycle.length > 5) {
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
@@ -801,12 +885,14 @@ Updates the energy of individual particles based on their vertical velocity
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 8) {
-          // Calculate line width based on particle count
+        if (centroids.length >= 6) {
+          // Calculate line width based on particle count and age
+          // Newer waves are thicker
+          const ageWidthFactor = 0.5 + relativeAge * 0.5; // 0.5 to 1.0
           const lineWidth = calculateLineThickness(
             particlesInCycle.length,
-            2.0,  // Base thickness
-            10    // Max thickness
+            2.0 * ageWidthFactor,  // Base thickness with age factor
+            8.0 * ageWidthFactor   // Max thickness with age factor
           );
           
           // Calculate average energy for this group
@@ -814,20 +900,38 @@ Updates the energy of individual particles based on their vertical velocity
             (sum, p) => sum + (p.energy / p.initialEnergy), 0
           ) / particlesInCycle.length;
           
+          // Adjust color based on energy and age
+          const colorIntensity = Math.min(1.0, avgEnergyRatio * 1.5 * (0.7 + relativeAge * 0.3));
+          const alpha = Math.min(1.0, (0.3 + relativeAge * 0.7) * (0.4 + avgEnergyRatio * 0.6));
+          
           // Use a magenta/purple hue for collided particles
-          const colorIntensity = Math.min(1.0, avgEnergyRatio * 1.5);
-          const alpha = Math.min(1.0, 0.4 + avgEnergyRatio * 0.6); // Slightly more transparent
+          const redAmount = Math.floor(200 + colorIntensity * 55);
+          const blueAmount = Math.floor(180 + colorIntensity * 75);
           
           // Draw the curve with enhanced color
           drawQuadraticBezierCurve(
             ctx,
             centroids,
             { 
-              strokeStyle: `rgba(${Math.floor(200 + colorIntensity * 55)}, 50, ${Math.floor(180 + colorIntensity * 75)}, ${alpha})`, 
+              strokeStyle: `rgba(${redAmount}, 50, ${blueAmount}, ${alpha})`, 
               lineWidth 
             },
             0.35 // Slightly less smooth than non-collided
           );
+          
+          // Add wake effect for newer cycles (outer glow)
+          if (relativeAge > 0.6) {
+            // Draw a thicker, more transparent version behind for wake effect
+            drawQuadraticBezierCurve(
+              ctx,
+              centroids,
+              { 
+                strokeStyle: `rgba(${redAmount}, 50, ${blueAmount}, ${alpha * 0.3})`, 
+                lineWidth: lineWidth * 1.8
+              },
+              0.35
+            );
+          }
         }
       }
     }
@@ -1041,10 +1145,10 @@ Updates the energy of individual particles based on their vertical velocity
     ctx.fillStyle = "#1a1a1a";
     ctx.fillRect(0, 0, width, height);
     
-    // Blend in the previous frame for temporal anti-aliasing
+    // Enhanced temporal blending with multi-frame persistence
     if (this.prevFrameCtx && this.prevFrameCanvas) {
-      // Apply the previous frame with reduced opacity for motion blur effect
-      ctx.globalAlpha = 0.30; // Adjust for more/less motion blur (lower = more trails)
+      // Apply the previous frame with higher opacity for stronger wake/trail effect
+      ctx.globalAlpha = 0.60; // Higher alpha creates more visible trails (0.6 vs 0.3)
       ctx.drawImage(this.prevFrameCanvas, 0, 0);
       ctx.globalAlpha = 1.0; // Reset alpha
     }
