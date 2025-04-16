@@ -81,7 +81,8 @@ export function getParticleDirectionAngle(particle: Particle, bucketSize: number
 }
 
 /**
- * Renders a quadratic Bezier curve through a series of points
+ * Renders a enhanced Bezier curve through a series of points with adaptive tension
+ * and improved smoothing for more fluid appearance.
  * @param ctx Canvas rendering context
  * @param centroids Array of points to draw curve through
  * @param style Object containing strokeStyle and lineWidth
@@ -93,63 +94,116 @@ export function drawQuadraticBezierCurve(
   style: { strokeStyle: string; lineWidth: number },
   influenceFactor: number = 0.3
 ): void {
+  // Need at least 3 points to draw a curve
   if (centroids.length < 3) return;
   
   ctx.beginPath();
   ctx.strokeStyle = style.strokeStyle;
   ctx.lineWidth = style.lineWidth;
   
+  // Apply anti-aliasing for smoother lines
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  // Enable shadow for a subtle glow effect
+  ctx.shadowColor = style.strokeStyle;
+  ctx.shadowBlur = style.lineWidth * 0.7;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  
+  // Start at the first point
   const startPoint = centroids[0];
   ctx.moveTo(startPoint.x, startPoint.y);
   
-  // Draw curve segments
+  // Calculate segment lengths to adapt control point influence
+  const segmentLengths: number[] = [];
+  for (let i = 0; i < centroids.length - 1; i++) {
+    const current = centroids[i];
+    const next = centroids[i + 1];
+    const dx = next.x - current.x;
+    const dy = next.y - current.y;
+    segmentLengths.push(Math.sqrt(dx * dx + dy * dy));
+  }
+  
+  // Calculate the average segment length for normalization
+  const avgLength = segmentLengths.reduce((sum, len) => sum + len, 0) / segmentLengths.length;
+  
+  // Draw curve segments with adaptive tension based on segment length
   for (let i = 1; i < centroids.length - 2; i++) {
     const c1 = centroids[i];
     const c2 = centroids[i + 1];
     
-    // Use the midpoint between current and next as the bezier end
+    // Calculate segment-specific influence factor (shorter segments = less influence)
+    const segmentLength = segmentLengths[i];
+    const adaptiveFactor = influenceFactor * Math.min(1.2, segmentLength / avgLength);
+    
+    // Use the midpoint between current and next point as the bezier end point
     const endX = (c1.x + c2.x) / 2;
     const endY = (c1.y + c2.y) / 2;
     
-    // Apply linear blending constraint to control point
+    // Calculate the previous endpoint for control point calculation
     const prevX = i === 1 ? startPoint.x : (centroids[i-1].x + c1.x) / 2;
     const prevY = i === 1 ? startPoint.y : (centroids[i-1].y + c1.y) / 2;
     
-    // Calculate the midpoint of the line segment (reference line)
-    const midX = (prevX + endX) / 2;
-    const midY = (prevY + endY) / 2;
+    // Calculate the angle of the segment for directional bias
+    const segmentAngle = Math.atan2(endY - prevY, endX - prevX);
     
-    // Apply linear blending constraint - limit control point deviation
-    const controlX = midX + influenceFactor * (c1.x - midX);
-    const controlY = midY + influenceFactor * (c1.y - midY);
+    // Apply directional bias to favor horizontal flow (reduces vertical oscillation)
+    const horizontalBias = 0.2;
+    const xBias = Math.cos(segmentAngle) * horizontalBias;
+    const yBias = Math.sin(segmentAngle) * horizontalBias;
+    
+    // Calculate the reference midpoint with directional bias
+    const midX = (prevX + endX) / 2 + xBias;
+    const midY = (prevY + endY) / 2 + yBias;
+    
+    // Apply adaptive influence factor to control point calculation
+    const controlX = midX + adaptiveFactor * (c1.x - midX);
+    const controlY = midY + adaptiveFactor * (c1.y - midY);
     
     // Draw the curve segment
     ctx.quadraticCurveTo(controlX, controlY, endX, endY);
   }
   
-  // Add the final segment if we have enough points
+  // Add the final segment with special handling for end conditions
   if (centroids.length >= 3) {
     const last = centroids.length - 1;
     const secondLast = centroids.length - 2;
+    const thirdLast = centroids.length - 3;
     
-    // Apply same constraint to final segment
-    const prevEndX = (centroids[secondLast-1].x + centroids[secondLast].x) / 2;
-    const prevEndY = (centroids[secondLast-1].y + centroids[secondLast].y) / 2;
+    // Previous endpoints and segment length
+    const prevEndX = (centroids[thirdLast].x + centroids[secondLast].x) / 2;
+    const prevEndY = (centroids[thirdLast].y + centroids[secondLast].y) / 2;
     const lastX = centroids[last].x;
     const lastY = centroids[last].y;
     
-    // Reference midpoint
-    const midX = (prevEndX + lastX) / 2;
-    const midY = (prevEndY + lastY) / 2;
+    // Calculate final segment length and adaptive factor
+    const finalSegmentLength = segmentLengths[segmentLengths.length - 1];
+    const finalAdaptiveFactor = influenceFactor * Math.min(1.2, finalSegmentLength / avgLength);
     
-    // Constrained control point
-    const controlX = midX + influenceFactor * (centroids[secondLast].x - midX);
-    const controlY = midY + influenceFactor * (centroids[secondLast].y - midY);
+    // Calculate segment angle for directional bias
+    const finalAngle = Math.atan2(lastY - prevEndY, lastX - prevEndX);
+    const finalXBias = Math.cos(finalAngle) * 0.2;
+    const finalYBias = Math.sin(finalAngle) * 0.2;
     
+    // Calculate the midpoint with directional bias
+    const midX = (prevEndX + lastX) / 2 + finalXBias;
+    const midY = (prevEndY + lastY) / 2 + finalYBias;
+    
+    // Apply adaptive influence to final control point
+    const controlX = midX + finalAdaptiveFactor * (centroids[secondLast].x - midX);
+    const controlY = midY + finalAdaptiveFactor * (centroids[secondLast].y - midY);
+    
+    // Draw the final curve segment
     ctx.quadraticCurveTo(controlX, controlY, lastX, lastY);
   }
   
+  // Apply stroke with high-quality rendering
   ctx.stroke();
+  
+  // Reset shadow settings
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
 }
 
 /**

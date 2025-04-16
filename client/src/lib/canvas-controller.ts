@@ -702,7 +702,9 @@ Updates the energy of individual particles based on their vertical velocity
     nonCollidedParticles: Particle[],
     collidedParticles: Particle[]
   ): void {
-    const ANGLE_BUCKETS = 72; // Number of angle buckets (5 degrees each)
+    // Increase the number of buckets for finer-grained angle grouping
+    // More buckets = more detail in the waves, but requires more particles
+    const ANGLE_BUCKETS = 90; // Number of angle buckets (4 degrees each)
     
     // Helper function to group particles by direction angle with cycle-specific buckets
     const groupParticlesByDirection = (particles: Particle[]) => {
@@ -990,12 +992,25 @@ Updates the energy of individual particles based on their vertical velocity
   private drawFrame(progress: number) {
     const { width, height } = this.canvas;
     const ctx = this.ctx;
-  
-    // Apply stronger motion blur effect instead of completely clearing the canvas
-    // Set a semi-transparent black rectangle over the previous frame
-    // Lower alpha = more motion blur (longer trails)
-    ctx.fillStyle = "rgba(26, 26, 26, 0.35)"; // Dark background with alpha for more pronounced motion blur
+    
+    // Save the current canvas to the previous frame buffer for temporal anti-aliasing
+    if (this.prevFrameCtx && this.prevFrameCanvas) {
+      // First, copy current main canvas to our buffer
+      this.prevFrameCtx.clearRect(0, 0, width, height);
+      this.prevFrameCtx.drawImage(this.canvas, 0, 0);
+    }
+    
+    // Clear canvas completely for a fresh frame
+    ctx.fillStyle = "#1a1a1a";
     ctx.fillRect(0, 0, width, height);
+    
+    // Blend in the previous frame for temporal anti-aliasing
+    if (this.prevFrameCtx && this.prevFrameCanvas) {
+      // Apply the previous frame with reduced opacity for motion blur effect
+      ctx.globalAlpha = 0.30; // Adjust for more/less motion blur (lower = more trails)
+      ctx.drawImage(this.prevFrameCanvas, 0, 0);
+      ctx.globalAlpha = 1.0; // Reset alpha
+    }
     
     // Update glow data for oval segments (data management only)
     this.renderOvalGlow(ctx, performance.now());
