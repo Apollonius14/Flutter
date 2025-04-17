@@ -39,11 +39,11 @@ interface SegmentGlow {
 
 export class CanvasController {
   // Constants
-  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.08;  
-  private static readonly PARTICLE_LIFETIME_CYCLES: number = 7;
+  private static readonly CYCLE_PERIOD_MS: number = 6667 * 0.1;  
+  private static readonly PARTICLE_LIFETIME_CYCLES: number = 9;
   private static readonly PHYSICS_TIMESTEP_MS: number = 10; 
   private static readonly ACTIVATION_LINE_POSITION: number = 0.3; 
-  private static readonly PARTICLES_PER_RING: number = 35;
+  private static readonly PARTICLES_PER_RING: number = 31;
   private static readonly PARTICLE_RADIUS: number = 0.5;
   private static readonly FIXED_BUBBLE_RADIUS: number = 3.0; 
   private static readonly PARTICLE_ANGLES: number[] = (() => {
@@ -728,7 +728,7 @@ Updates the energy of individual particles based on their vertical velocity
           for (const particle of collidedParticles) {
             if (prev) {
               const dx = Math.abs(particle.body.position.x - prev.body.position.x);
-              if (dx < 5) { // Threshold to avoid connecting distant particles
+              if (dx < 8) { // Threshold to avoid connecting distant particles
                 ctx.moveTo(prev.body.position.x, prev.body.position.y);
                 ctx.lineTo(particle.body.position.x, particle.body.position.y);
               }
@@ -765,7 +765,7 @@ Updates the energy of individual particles based on their vertical velocity
   ): void {
     // Increase the number of buckets for finer-grained angle grouping
     // More buckets = more detail in the waves, but requires more particles
-    const ANGLE_BUCKETS = 90; // Number of angle buckets (4 degrees each)
+    const ANGLE_BUCKETS = 60; // Number of angle buckets (6 degrees each)
     
     // Helper function to group particles by direction angle with cycle-specific buckets
     const groupParticlesByDirection = (particles: Particle[]) => {
@@ -794,7 +794,7 @@ Updates the energy of individual particles based on their vertical velocity
       // Calculate relative age for styling (0 = oldest, 1 = newest)
       const relativeAge = i / (nonCollidedCycleEntries.length - 1 || 1);
       
-      if (particlesInCycle.length > 5) { // Need enough particles for meaningful curve
+      if (particlesInCycle.length > 8) { // Need enough particles for meaningful curve
         const buckets = groupParticlesByDirection(particlesInCycle);
         const centroids: Point2D[] = [];
         
@@ -805,12 +805,12 @@ Updates the energy of individual particles based on their vertical velocity
             centroid: calculateCentroid(particles),
             count: particles.length
           }))
-          .filter(item => item.count >= 2) // Only use buckets with multiple particles
+          .filter(item => item.count >= 12) // Only use buckets with multiple particles
           .sort((a, b) => a.angleBucket - b.angleBucket) // Sort by angle bucket first
           .forEach(item => centroids.push(item.centroid));
         
         // Draw bezier curve through centroids if we have enough points
-        if (centroids.length >= 6) {
+        if (centroids.length >= 4) {
           // Calculate line width based on particle count and age
           // Newer waves are thicker
           const ageWidthFactor = 0.5 + relativeAge * 0.5; // 0.5 to 1.0
@@ -837,7 +837,7 @@ Updates the energy of individual particles based on their vertical velocity
               strokeStyle: `rgba(0, ${Math.floor(200 + colorIntensity * 55)}, ${Math.floor(215 + colorIntensity * 40)}, ${alpha})`, 
               lineWidth 
             },
-            0.4, // Increased influence factor for smoother curves
+            0.6, // Increased influence factor for smoother curves
             0.08, // Max segment distance as fraction of canvas width
             this.canvasWidth // Pass actual canvas width
           );
